@@ -329,7 +329,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         n = self.n_agents
         p = self.n_pois
         off = 0
-        self.sl_terrain_alt = slice(off, off + c * f)
+        self.sl_terrain_altitude= slice(off, off + c * f)
         off += c * f
         self.sl_global_unsaved_pois = slice(off, off + f)
         off += f
@@ -360,7 +360,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         self.sl_poi_saved = slice(off, off + p)
 
     def _extract_local_obs(self, state_row: np.ndarray) -> dict[str, np.ndarray]:
-        terrain_alt = state_row[self.sl_terrain_alt].reshape(
+        terrain_altitude= state_row[self.sl_terrain_alt].reshape(
             self.terrain_channels, self.map_size, self.map_size
         )
         local_poi = state_row[self.sl_local_poi_layers].reshape(
@@ -399,7 +399,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         return {"spatial": spatial, "internal": internal}
 
     def _extract_global_state(self, state_row: np.ndarray) -> dict[str, np.ndarray]:
-        terrain_alt = state_row[self.sl_terrain_alt].reshape(
+        terrain_altitude= state_row[self.sl_terrain_alt].reshape(
             self.terrain_channels, self.map_size, self.map_size
         )
         unsaved = state_row[self.sl_global_unsaved_pois].reshape(self.map_size, self.map_size)

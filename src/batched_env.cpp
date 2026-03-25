@@ -34,7 +34,7 @@ constexpr std::array<int, MOVE_ACTION_COUNT> MOVE_DX = {0, 0, 0, -1, 1, -1, 1, -
 
 struct GameStateView
 {
-    float *terrain_alt;
+    float *terrain_altitude;
     float *global_unsaved_pois;
     float *global_obs_mask;
     float *global_agent_layers;
@@ -216,7 +216,7 @@ public:
     void bind_state(GameStateView &s, int env_idx)
     {
         float *ptr = data.data() + static_cast<size_t>(env_idx) * env_stride;
-        s.terrain_alt = ptr;
+        s.terrain_altitude = ptr;
         ptr += terrain_channels * FLAT_MAP_SIZE;
         s.global_unsaved_pois = ptr;
         ptr += FLAT_MAP_SIZE;
@@ -252,7 +252,7 @@ public:
         std::memset(data.data() + static_cast<size_t>(e) * env_stride, 0, env_stride * sizeof(float));
 
         const float *terrain_src = terrain_templates.data() + static_cast<size_t>(e) * terrain_channels * FLAT_MAP_SIZE;
-        std::memcpy(s.terrain_alt, terrain_src, static_cast<size_t>(terrain_channels) * FLAT_MAP_SIZE * sizeof(float));
+        std::memcpy(s.terrain_altitude, terrain_src, static_cast<size_t>(terrain_channels) * FLAT_MAP_SIZE * sizeof(float));
 
         for (int i = 0; i < N_AGENTS; ++i)
         {
@@ -418,7 +418,7 @@ private:
     {
         const int idx = y * MAP_SIZE + x;
         const int altitude_channel = terrain_channels - 1;
-        return s.terrain_alt[altitude_channel * FLAT_MAP_SIZE + idx];
+        return s.terrain_altitude[altitude_channel * FLAT_MAP_SIZE + idx];
     }
 
     int terrain_id_at(int env_idx, int y, int x) const

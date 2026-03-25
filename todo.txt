@@ -1,42 +1,37 @@
 ### Request for Coding Agent
 
 **System Context & Objective:**
-You are an expert C++ and Python developer specializing in Multi-Agent Reinforcement Learning (MARL) environments. We are refactoring an existing high-performance, OpenMP-accelerated grid-world environment (currently in `craptop/src/batched_env.cpp` and `craptop/hide_and_seek_engine/env_wrapper.py`) into a Heterogeneous Search and Rescue (SAR) Simulator. 
+You are an expert C++ and Python developer specializing in Multi-Agent Reinforcement Learning (MARL) environments. We are augmenting an existing high-performance, OpenMP-accelerated grid-world environment (currently in `craptop/src/batched_env.cpp` and `craptop/hide_and_seek_engine/env_wrapper.py`) as a Heterogeneous Search and Rescue (SAR) Simulator. 
 
 The environment must strictly adhere to the PettingZoo API, support Hybrid Action Spaces, and be optimized for Centralized Training with Decentralized Execution (CTDE). The state and observation spaces must be structured as spatial tensors ($C \times H \times W$) to support CNN feature extractors.
 
 **Core Mechanics to Implement:**
-1.  **Heterogeneity:** Agents have unique parameters (flying, aqueous, altitude limits) and terrain-specific speed multipliers.
-2.  **Stuck & Rescue:** Agents that enter impassable terrain (or run out of battery) have their movespeed set to 0 and require a capable teammate to overlap their position to "rescue" them.
-3.  **Radio Communication:** Agents use a discrete action space to broadcast their location, status, and known Person of Interest (POI) locations, which updates the local observation tensors of teammates.
-4.  **CTDE Architecture:** * `observation_space` (Actor): Local view + expected/communicated POI locations + expected teammates.
-    * `state_space` (Critic): Global truth map + all true POI locations + all true agent locations.
+1.  **Verify Game Mechanics:** `test_level/tiles.json` includes new properties 'supports_x' where 'x' is in `[flying, walking, aquatic]` and blocking determines if the agent is blocked from entering the tile (therefore not stuck e.g. a wall) or allowed onto the tile (getting stuck e.g. water). These properties need to be verified for consistency throughout the codebase.
+2.  **Level Rendering:** Each agent and tile have defined colors and positions in the state and observation space. The environment should be able to render from the global observation or any individual agent observation to verify operation.
+3.  **Env Test Suite:** `env_spec.py` Needs to sucessfully load the attributes saved in test_level, perform unit and integration tests, and measure the frames per second for different numbers of parallel environments.
+4.  **Human Data Recorder:** `human_runner.py` should run the test level with a single env where one of the agents is chosen at random to be controlled by 'WASD' and 1,2,3 radio controls. The state, action, reward, next state tuples need to be saved under `./saved_human_behavior/`
+5.  **Write README.md** The environment behavior and basic usage in global and local mode including the observation and action space should be recorded in `README.md` for end user documentation. 
 
 ---
 
 ### Implementation Task-List
 
-#### Phase 1: Python Configuration & Dense Tensor Construction (`env_wrapper.py`)
-- [ ] **Ticket 1.1: Implement JSON Loaders.** Write parsing logic to ingest `tiles.json`, `agents.json`, and `survivors.json`. Map categorical strings (e.g., terrain types, agent classes) to integer IDs.
-- [ ] **Ticket 1.2: Map Tensor Construction.** Read the environment PNG map. Using the RGB values and `tiles.json`, construct a dense 3D NumPy array of shape $(n_{\text{tiles}} + 1) \times H \times W$, where channels $0$ to $n_{\text{tiles}}-1$ are one-hot encoded terrain types, and the final channel is the normalized altitude float.
-- [ ] **Ticket 1.3: Flatten Agent/POI Parameters.** Convert the dynamic JSON parameters for agents and POIs into contiguous 1D/2D NumPy arrays (e.g., bitmasks for aqueous/flying, flat arrays for speed multipliers) to pass into the C++ constructor.
+#### Phase 1: Verify Game Mechanics (`env_wrapper.py`,`test_level/tiles.json`,`batched_env.cpp`)
+- [ ] **Ticket 1.1: Implement `supports_x` tile properties.** Import supports_walking/flying/aquatic properly and adjust movement logic to allow any agent to pass that has at least one of the modes of transportation supported by a tile. 
+- [ ] **Ticket 1.2: Implement tile blocking property.** Import the tile blocking property to decide if a tile lets an agent enter and get stuck if they do not posses the correct transport mode, or if the tile acts as a wall keeping the agent out and unstuck. 
 
-#### Phase 2: C++ Memory Allocation & State Layout (`batched_env.cpp`)
-- [ ] **Ticket 2.1: Restructure Global State Memory.** Modify the environment `stride` calculation. Replace the old float-based `Expected/Actual Danger` maps with the new $(n_{\text{tiles}} + 1) \times H \times W$ terrain and altitude block.
-- [ ] **Ticket 2.2: Implement the CTDE Spatial Tensor Tiers.** Allocate memory for the remaining channels: `Unsaved POIs`, `Observation Mask (Fog of War)`, and `Agent Locations`. Crucially, allocate *two* versions of the POI and Agent Location layers: one for the Global State (ground truth) and an array of individual layers for each agent's Local Observation (updated only via line-of-sight or radio).
-- [ ] **Ticket 2.3: Expand Internal State Vectors.** Allocate contiguous 1D memory blocks to track dynamic variables per agent: `Deployment Time Remaining`, `Is Stuck`, `View Range`, and `Battery`. Allocate blocks for POIs: `[y, x]`, `Is Found`, `Is Saved`.
+#### Phase 2: Level Rendering (`hide_and_seek_engine/env_wrapper.py`,`batched_env.cpp`)
+- [ ] **Ticket 2.1: Add Global Renderer.** Implement render() function in env_wrapper which draws each tile and agent according to their json color assignment in pygame. Globally undiscovered tiles should be rendered with their rgb values cut in half so that it is clear which areas have been explored. Saved survivors are colored full white.
+- [ ] **Ticket 2.2: Add Local Renderer.** Implement render_pov() function which renders from a single agent's local pov. Allies are rendered in their last known locations and updated when they update via the radio. Survivors are only rendered if this agent is aware of them and they are rendered in the last state this agent knows about. 
+- [ ] **Ticket 2.3: Add Radio Output.** Add radio_render() in batched_env.cpp which calles `std::cout<<` with any radio communications that frame. 
 
-#### Phase 3: Engine Logic & Physics (`step` function in C++)
-- [ ] **Ticket 3.1: Terrain-Aware Movement.** Update the translation logic. Before an agent moves, lookup the target tile's Terrain ID and Altitude. Apply the agent's specific terrain speed multiplier. Enforce movement restrictions based on the agent's aqueous/flying bitmasks and altitude limits.
-- [ ] **Ticket 3.2: Dynamic Line-of-Sight.** Replace the static $7 \times 7$ view box. Calculate the agent's current view radius dynamically by multiplying their base view parameter by the altitude of their current tile. Update the local observation mask accordingly.
-- [ ] **Ticket 3.3: Stuck & Rescue Triggers.** If an agent attempts an illegal move or battery hits 0, flag `Is Stuck = 1`. Add a loop checking distances between active agents and stuck agents; if an active, capable agent overlaps a stuck agent, reset the stuck flag.
-- [ ] **Ticket 3.4: POI Interaction.** Implement random walk for POIs. Check for overlap between agents and POIs. If overlapping, check if the agent's type matches the POI's `allowed_savers` bitmask. If it matches, flag as `Is Saved`; otherwise, flag as `Is Found`.
+#### Phase 3: Env Test Suite (env_spec.py)
+- [ ] **Ticket 3.1: Run in Global mode.** Check that env runs for 10k steps headless without crashing and time the steps with different parallel env numbers. steps=step() calls * num_envs
+- [ ] **Ticket 3.2: Run in Local mode.** Same as global but local
+- [ ] **Ticket 3.3: Run with Renderer.** Run one episode with the renderer taking the perspective of each agent, starting with the global pov. 
 
-#### Phase 4: Hybrid Actions, Radio, & Masking
-- [ ] **Ticket 4.1: Hybrid Action Parsing.** Update the C++ `step` signature to accept a hybrid tensor: `[continuous_dy, continuous_dx, discrete_radio_action]`.
-- [ ] **Ticket 4.2: Radio Buffer Execution.** Implement the discrete radio logic. If `radio_action == broadcast`, copy the broadcasting agent's known POI coordinates and own position from their local memory into the local observation memory blocks of all other agents.
-- [ ] **Ticket 4.3: Action Masking Export.** Create a C++ method bound to Python that returns a boolean mask for the action space, strictly zeroing out discrete movement vectors that would force an agent into an impassable tile (preventing early-training suicide).
+#### Phase 4: Human Data Recorder
+- [ ] **Ticket 4.1: Record Human Actions to Hard Drive** Run loop on single env with pygame keyboard input controling one agent per episode. The env needs to render from the controlled agent's pov and the sarsa tuples as a numpy array for later behavior cloning. After each episode, let the user write the filename to save tensors in a folder. (example filename '1' would save '1/rewards.npy','1/states.npy','1/obs.npy',...)
 
-#### Phase 5: Python API Finalization (`env_wrapper.py`)
-- [ ] **Ticket 5.1: PettingZoo Dictionary Spaces.** Update the Gym/PettingZoo wrapper to return a dictionary for `observation_space` (containing the local $C \times H \times W$ spatial tensor and the 1D internal state vector) and a corresponding dictionary for `state_space` (the global ground-truth tensor and concatenated internal states).
-- [ ] **Ticket 5.2: Reward Function Alignment.** Update the Python-side or C++ side reward calculation to issue a dense reward for uncovering new tiles (mask $0 \to 1$), a sparse reward for `Is Found` state changes, and a large terminal reward for `Is Saved` state changes. Ensure the reward is distributed cooperatively (shared reward) or shaped per agent based on configuration.
+#### Phase 5: README.md
+- [ ] **Ticket 5.1: Document Env Operation and Usage.** Create and populate a README.md detailing observation spaces, env usage, action space, and the tiles/agents/survivors/level.png formats.

@@ -4,34 +4,39 @@
         "altitude": 0.1,
         "supports_walking": true,
         "supports_flying": true,
-        "supports_aquatic": false
+        "supports_aquatic": false,
+        "blocking": false
     },
     "water": {
         "rgb": [64, 164, 223],
         "altitude": 0.0,
         "supports_walking": false,
         "supports_flying": true,
-        "supports_aquatic": true
+        "supports_aquatic": true,
+        "blocking": false
     },
     "mountain": {
         "rgb": [120, 120, 120],
         "altitude": 0.5,
         "supports_walking": true,
         "supports_flying": true,
-        "supports_aquatic": false
+        "supports_aquatic": false,
+        "blocking": false
     },
     "peak": {
         "rgb": [200, 200, 200],
         "altitude": 0.9,
         "supports_walking": true,
         "supports_flying": false,
-        "supports_aquatic": false
+        "supports_aquatic": false,
+        "blocking": true
     },
     "forest": {
         "rgb": [34, 139, 34],
         "altitude": -0.4,
         "supports_walking": true,
         "supports_flying": true,
-        "supports_aquatic": false
+        "supports_aquatic": false,
+        "blocking": false
     }
 }
