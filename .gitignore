@@ -1,0 +1,10 @@
+.venv
+build
+hide_and_seek_engine.egg-info
+dist
+__pycache__
+*.so
+*.o
+*.pyc
+wheelhouse
+*.pyd

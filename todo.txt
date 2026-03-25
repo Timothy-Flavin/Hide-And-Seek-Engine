@@ -1,0 +1,42 @@
+### Request for Coding Agent
+
+**System Context & Objective:**
+You are an expert C++ and Python developer specializing in Multi-Agent Reinforcement Learning (MARL) environments. We are refactoring an existing high-performance, OpenMP-accelerated grid-world environment (currently in `craptop/src/batched_env.cpp` and `craptop/hide_and_seek_engine/env_wrapper.py`) into a Heterogeneous Search and Rescue (SAR) Simulator. 
+
+The environment must strictly adhere to the PettingZoo API, support Hybrid Action Spaces, and be optimized for Centralized Training with Decentralized Execution (CTDE). The state and observation spaces must be structured as spatial tensors ($C \times H \times W$) to support CNN feature extractors.
+
+**Core Mechanics to Implement:**
+1.  **Heterogeneity:** Agents have unique parameters (flying, aqueous, altitude limits) and terrain-specific speed multipliers.
+2.  **Stuck & Rescue:** Agents that enter impassable terrain (or run out of battery) have their movespeed set to 0 and require a capable teammate to overlap their position to "rescue" them.
+3.  **Radio Communication:** Agents use a discrete action space to broadcast their location, status, and known Person of Interest (POI) locations, which updates the local observation tensors of teammates.
+4.  **CTDE Architecture:** * `observation_space` (Actor): Local view + expected/communicated POI locations + expected teammates.
+    * `state_space` (Critic): Global truth map + all true POI locations + all true agent locations.
+
+---
+
+### Implementation Task-List
+
+#### Phase 1: Python Configuration & Dense Tensor Construction (`env_wrapper.py`)
+- [ ] **Ticket 1.1: Implement JSON Loaders.** Write parsing logic to ingest `tiles.json`, `agents.json`, and `survivors.json`. Map categorical strings (e.g., terrain types, agent classes) to integer IDs.
+- [ ] **Ticket 1.2: Map Tensor Construction.** Read the environment PNG map. Using the RGB values and `tiles.json`, construct a dense 3D NumPy array of shape $(n_{\text{tiles}} + 1) \times H \times W$, where channels $0$ to $n_{\text{tiles}}-1$ are one-hot encoded terrain types, and the final channel is the normalized altitude float.
+- [ ] **Ticket 1.3: Flatten Agent/POI Parameters.** Convert the dynamic JSON parameters for agents and POIs into contiguous 1D/2D NumPy arrays (e.g., bitmasks for aqueous/flying, flat arrays for speed multipliers) to pass into the C++ constructor.
+
+#### Phase 2: C++ Memory Allocation & State Layout (`batched_env.cpp`)
+- [ ] **Ticket 2.1: Restructure Global State Memory.** Modify the environment `stride` calculation. Replace the old float-based `Expected/Actual Danger` maps with the new $(n_{\text{tiles}} + 1) \times H \times W$ terrain and altitude block.
+- [ ] **Ticket 2.2: Implement the CTDE Spatial Tensor Tiers.** Allocate memory for the remaining channels: `Unsaved POIs`, `Observation Mask (Fog of War)`, and `Agent Locations`. Crucially, allocate *two* versions of the POI and Agent Location layers: one for the Global State (ground truth) and an array of individual layers for each agent's Local Observation (updated only via line-of-sight or radio).
+- [ ] **Ticket 2.3: Expand Internal State Vectors.** Allocate contiguous 1D memory blocks to track dynamic variables per agent: `Deployment Time Remaining`, `Is Stuck`, `View Range`, and `Battery`. Allocate blocks for POIs: `[y, x]`, `Is Found`, `Is Saved`.
+
+#### Phase 3: Engine Logic & Physics (`step` function in C++)
+- [ ] **Ticket 3.1: Terrain-Aware Movement.** Update the translation logic. Before an agent moves, lookup the target tile's Terrain ID and Altitude. Apply the agent's specific terrain speed multiplier. Enforce movement restrictions based on the agent's aqueous/flying bitmasks and altitude limits.
+- [ ] **Ticket 3.2: Dynamic Line-of-Sight.** Replace the static $7 \times 7$ view box. Calculate the agent's current view radius dynamically by multiplying their base view parameter by the altitude of their current tile. Update the local observation mask accordingly.
+- [ ] **Ticket 3.3: Stuck & Rescue Triggers.** If an agent attempts an illegal move or battery hits 0, flag `Is Stuck = 1`. Add a loop checking distances between active agents and stuck agents; if an active, capable agent overlaps a stuck agent, reset the stuck flag.
+- [ ] **Ticket 3.4: POI Interaction.** Implement random walk for POIs. Check for overlap between agents and POIs. If overlapping, check if the agent's type matches the POI's `allowed_savers` bitmask. If it matches, flag as `Is Saved`; otherwise, flag as `Is Found`.
+
+#### Phase 4: Hybrid Actions, Radio, & Masking
+- [ ] **Ticket 4.1: Hybrid Action Parsing.** Update the C++ `step` signature to accept a hybrid tensor: `[continuous_dy, continuous_dx, discrete_radio_action]`.
+- [ ] **Ticket 4.2: Radio Buffer Execution.** Implement the discrete radio logic. If `radio_action == broadcast`, copy the broadcasting agent's known POI coordinates and own position from their local memory into the local observation memory blocks of all other agents.
+- [ ] **Ticket 4.3: Action Masking Export.** Create a C++ method bound to Python that returns a boolean mask for the action space, strictly zeroing out discrete movement vectors that would force an agent into an impassable tile (preventing early-training suicide).
+
+#### Phase 5: Python API Finalization (`env_wrapper.py`)
+- [ ] **Ticket 5.1: PettingZoo Dictionary Spaces.** Update the Gym/PettingZoo wrapper to return a dictionary for `observation_space` (containing the local $C \times H \times W$ spatial tensor and the 1D internal state vector) and a corresponding dictionary for `state_space` (the global ground-truth tensor and concatenated internal states).
+- [ ] **Ticket 5.2: Reward Function Alignment.** Update the Python-side or C++ side reward calculation to issue a dense reward for uncovering new tiles (mask $0 \to 1$), a sparse reward for `Is Found` state changes, and a large terminal reward for `Is Saved` state changes. Ensure the reward is distributed cooperatively (shared reward) or shaped per agent based on configuration.
