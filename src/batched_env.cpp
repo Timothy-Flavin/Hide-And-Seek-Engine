@@ -7,7 +7,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -79,8 +81,11 @@ public:
     std::vector<float> poi_specs;
     std::vector<float> init_agent_positions;
     std::vector<float> init_poi_positions;
-    std::vector<int> tile_requires_aquatic;
-    std::vector<int> tile_requires_flying;
+    std::vector<int> tile_supports_walking;
+    std::vector<int> tile_supports_aquatic;
+    std::vector<int> tile_supports_flying;
+    std::vector<int> tile_blocking;
+    std::vector<std::string> radio_logs;
 
     BatchedEnvironment(
         int n_envs,
@@ -90,8 +95,10 @@ public:
         py::array_t<float, py::array::c_style | py::array::forcecast> poi_params,
         py::array_t<float, py::array::c_style | py::array::forcecast> initial_agent_pos,
         py::array_t<float, py::array::c_style | py::array::forcecast> initial_poi_pos,
-        py::array_t<int, py::array::c_style | py::array::forcecast> tile_req_aquatic,
-        py::array_t<int, py::array::c_style | py::array::forcecast> tile_req_flying,
+        py::array_t<int, py::array::c_style | py::array::forcecast> tile_sup_walking,
+        py::array_t<int, py::array::c_style | py::array::forcecast> tile_sup_aquatic,
+        py::array_t<int, py::array::c_style | py::array::forcecast> tile_sup_flying,
+        py::array_t<int, py::array::c_style | py::array::forcecast> tile_is_blocking,
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
         float reward_found_val = 2.0f,
@@ -118,8 +125,8 @@ public:
         if (ap.shape(0) != N_AGENTS)
             throw std::invalid_argument("agent_params must have shape [N_AGENTS, spec_width]");
         agent_spec_width = static_cast<int>(ap.shape(1));
-        if (agent_spec_width < 9 + n_tiles)
-            throw std::invalid_argument("agent spec width too small: expected >= 9 + n_tiles");
+        if (agent_spec_width < 10 + n_tiles)
+            throw std::invalid_argument("agent spec width too small: expected >= 10 + n_tiles");
 
         auto pp = poi_params.unchecked<2>();
         n_pois = static_cast<int>(pp.shape(0));
@@ -135,10 +142,13 @@ public:
         if (ipp.shape(0) != num_envs || ipp.shape(1) != n_pois || ipp.shape(2) != 2)
             throw std::invalid_argument("initial_poi_pos must have shape [num_envs, n_pois, 2]");
 
-        auto req_aq = tile_req_aquatic.unchecked<1>();
-        auto req_fl = tile_req_flying.unchecked<1>();
-        if (req_aq.shape(0) != n_tiles || req_fl.shape(0) != n_tiles)
-            throw std::invalid_argument("tile requirement arrays must have shape [n_tiles]");
+        auto sup_walk = tile_sup_walking.unchecked<1>();
+        auto sup_aq = tile_sup_aquatic.unchecked<1>();
+        auto sup_fl = tile_sup_flying.unchecked<1>();
+        auto is_block = tile_is_blocking.unchecked<1>();
+        if (sup_walk.shape(0) != n_tiles || sup_aq.shape(0) != n_tiles ||
+            sup_fl.shape(0) != n_tiles || is_block.shape(0) != n_tiles)
+            throw std::invalid_argument("tile support/blocking arrays must have shape [n_tiles]");
 
         const size_t terrain_count = static_cast<size_t>(num_envs) * terrain_channels * FLAT_MAP_SIZE;
         terrain_templates.resize(terrain_count);
@@ -178,12 +188,16 @@ public:
         if (n_pois > 0)
             std::memcpy(init_poi_positions.data(), initial_poi_pos.data(), init_poi_positions.size() * sizeof(float));
 
-        tile_requires_aquatic.resize(n_tiles);
-        tile_requires_flying.resize(n_tiles);
+        tile_supports_walking.resize(n_tiles);
+        tile_supports_aquatic.resize(n_tiles);
+        tile_supports_flying.resize(n_tiles);
+        tile_blocking.resize(n_tiles);
         for (int t = 0; t < n_tiles; ++t)
         {
-            tile_requires_aquatic[t] = req_aq(t);
-            tile_requires_flying[t] = req_fl(t);
+            tile_supports_walking[t] = sup_walk(t);
+            tile_supports_aquatic[t] = sup_aq(t);
+            tile_supports_flying[t] = sup_fl(t);
+            tile_blocking[t] = is_block(t);
         }
 
         env_stride =
@@ -207,6 +221,7 @@ public:
         rngs.resize(num_envs);
         env_terminated.assign(num_envs, false);
         undiscovered_remaining.assign(num_envs, FLAT_MAP_SIZE);
+        radio_logs.assign(num_envs, std::string());
         for (int i = 0; i < num_envs; ++i)
             rngs[i].seed(seed + i);
 
@@ -259,10 +274,10 @@ public:
             const size_t base = static_cast<size_t>(e) * N_AGENTS * 2 + i * 2;
             s.agent_positions[i * 2] = std::clamp(init_agent_positions[base], 0.0f, MAP_MAX);
             s.agent_positions[i * 2 + 1] = std::clamp(init_agent_positions[base + 1], 0.0f, MAP_MAX);
-            s.agent_deployment_remaining[i] = std::max(0.0f, agent_spec(i, 7));
+            s.agent_deployment_remaining[i] = std::max(0.0f, agent_spec(i, 8));
             s.agent_stuck[i] = 0.0f;
-            s.agent_view_range[i] = std::max(1.0f, agent_spec(i, 5));
-            s.agent_battery[i] = std::max(1.0f, agent_spec(i, 6));
+            s.agent_view_range[i] = std::max(1.0f, agent_spec(i, 6));
+            s.agent_battery[i] = std::max(1.0f, agent_spec(i, 7));
         }
 
         for (int p = 0; p < n_pois; ++p)
@@ -337,7 +352,7 @@ public:
 
             std::array<float, N_AGENTS> new_tile_credit{};
             const int new_tiles = update_local_observations(s, e, &new_tile_credit);
-            execute_radio(s, radio_actions);
+            radio_logs[e] = execute_radio(s, radio_actions);
             rebuild_global_layers(s);
 
             if (cooperative_rewards)
@@ -403,6 +418,16 @@ public:
     int get_terrain_channels() const { return terrain_channels; }
     int get_num_pois() const { return n_pois; }
 
+    void radio_render() const
+    {
+        for (int e = 0; e < num_envs; ++e)
+        {
+            if (!radio_logs[e].empty())
+                std::cout << radio_logs[e];
+        }
+        std::cout.flush();
+    }
+
 private:
     float agent_spec(int agent_idx, int col) const
     {
@@ -427,30 +452,50 @@ private:
         return terrain_ids[static_cast<size_t>(env_idx) * FLAT_MAP_SIZE + idx];
     }
 
-    bool is_move_legal(const GameStateView &s, int env_idx, int agent_idx, int dy, int dx) const
+    enum class MoveEval
+    {
+        BLOCKED,
+        ALLOW,
+        ALLOW_AND_STUCK
+    };
+
+    MoveEval evaluate_move(const GameStateView &s, int env_idx, int agent_idx, int dy, int dx) const
     {
         const int cy = std::clamp(static_cast<int>(s.agent_positions[agent_idx * 2]), 0, MAP_SIZE - 1);
         const int cx = std::clamp(static_cast<int>(s.agent_positions[agent_idx * 2 + 1]), 0, MAP_SIZE - 1);
         const int ny = cy + dy;
         const int nx = cx + dx;
         if (ny < 0 || ny >= MAP_SIZE || nx < 0 || nx >= MAP_SIZE)
-            return false;
+            return MoveEval::BLOCKED;
 
         const int tile_id = terrain_id_at(env_idx, ny, nx);
         const bool can_fly = agent_spec(agent_idx, 0) > 0.5f;
         const bool can_aquatic = agent_spec(agent_idx, 1) > 0.5f;
-        if (tile_requires_flying[tile_id] > 0 && !can_fly)
-            return false;
-        if (tile_requires_aquatic[tile_id] > 0 && !can_aquatic)
-            return false;
+        const bool can_walk = agent_spec(agent_idx, 2) > 0.5f;
+
+        const bool tile_walk = tile_supports_walking[tile_id] > 0;
+        const bool tile_aq = tile_supports_aquatic[tile_id] > 0;
+        const bool tile_fl = tile_supports_flying[tile_id] > 0;
+        const bool has_supported_mode =
+            (tile_walk && can_walk) ||
+            (tile_aq && can_aquatic) ||
+            (tile_fl && can_fly);
 
         const float alt = altitude_at(s, ny, nx);
-        const float alt_min = agent_spec(agent_idx, 2);
-        const float alt_max = agent_spec(agent_idx, 3);
+        const float alt_min = agent_spec(agent_idx, 3);
+        const float alt_max = agent_spec(agent_idx, 4);
         if (alt < alt_min || alt > alt_max)
-            return false;
+            return MoveEval::BLOCKED;
 
-        return true;
+        if (has_supported_mode)
+            return MoveEval::ALLOW;
+
+        return tile_blocking[tile_id] > 0 ? MoveEval::BLOCKED : MoveEval::ALLOW_AND_STUCK;
+    }
+
+    bool is_move_legal(const GameStateView &s, int env_idx, int agent_idx, int dy, int dx) const
+    {
+        return evaluate_move(s, env_idx, agent_idx, dy, dx) != MoveEval::BLOCKED;
     }
 
     void process_agent_movement(
@@ -489,7 +534,7 @@ private:
                 radio = act_data[base + 2];
             }
 
-            radio_actions[i] = static_cast<int>(std::round(radio));
+            radio_actions[i] = std::clamp(static_cast<int>(std::round(radio)), 0, 3);
 
             const float len_sq = dy * dy + dx * dx;
             if (len_sq > 1e-8f)
@@ -506,15 +551,19 @@ private:
 
             if (!is_move_legal(s, env_idx, i, ny - cy, nx - cx))
             {
-                s.agent_stuck[i] = 1.0f;
                 continue;
             }
 
+            const MoveEval move_eval = evaluate_move(s, env_idx, i, ny - cy, nx - cx);
+
             const int tile_id = terrain_id_at(env_idx, ny, nx);
-            const float speed_multiplier = std::max(0.0f, agent_spec(i, 9 + tile_id));
-            const float speed = std::max(0.0f, agent_spec(i, 4) * speed_multiplier);
+            const float speed_multiplier = std::max(0.0f, agent_spec(i, 10 + tile_id));
+            const float speed = std::max(0.0f, agent_spec(i, 5) * speed_multiplier);
             s.agent_positions[i * 2] = std::clamp(s.agent_positions[i * 2] + dy * speed, 0.0f, MAP_MAX);
             s.agent_positions[i * 2 + 1] = std::clamp(s.agent_positions[i * 2 + 1] + dx * speed, 0.0f, MAP_MAX);
+
+            if (move_eval == MoveEval::ALLOW_AND_STUCK)
+                s.agent_stuck[i] = 1.0f;
 
             s.agent_battery[i] = std::max(0.0f, s.agent_battery[i] - 1.0f);
             if (s.agent_battery[i] <= 0.0f)
@@ -594,7 +643,7 @@ private:
                 if (ay != py || ax != px)
                     continue;
 
-                const int cls = static_cast<int>(agent_spec(i, 8));
+                const int cls = static_cast<int>(agent_spec(i, 9));
                 const bool can_save = (allowed_mask & (1 << cls)) != 0;
 
                 if (can_save)
@@ -626,7 +675,7 @@ private:
             const int ay = std::clamp(static_cast<int>(s.agent_positions[i * 2]), 0, MAP_SIZE - 1);
             const int ax = std::clamp(static_cast<int>(s.agent_positions[i * 2 + 1]), 0, MAP_SIZE - 1);
             const float alt = altitude_at(s, ay, ax);
-            const int vr = std::max(1, static_cast<int>(std::round(agent_spec(i, 5) * std::max(0.1f, alt))));
+            const int vr = std::max(1, static_cast<int>(std::round(agent_spec(i, 6) * std::max(0.1f, alt))));
             s.agent_view_range[i] = static_cast<float>(vr);
 
             const int ys = std::max(0, ay - vr);
@@ -665,6 +714,7 @@ private:
             }
 
             float *my_poi = s.local_poi_layers + i * FLAT_MAP_SIZE;
+            std::memset(my_poi, 0, FLAT_MAP_SIZE * sizeof(float));
             for (int p = 0; p < n_pois; ++p)
             {
                 if (s.poi_saved[p] > 0.5f)
@@ -679,12 +729,15 @@ private:
         return new_tiles;
     }
 
-    void execute_radio(GameStateView &s, const std::array<int, N_AGENTS> &radio_actions)
+    std::string execute_radio(GameStateView &s, const std::array<int, N_AGENTS> &radio_actions)
     {
+        std::ostringstream oss;
         for (int sender = 0; sender < N_AGENTS; ++sender)
         {
-            if (radio_actions[sender] != 1)
+            if (radio_actions[sender] == 0)
                 continue;
+
+            oss << "agent_" << sender << " radio(" << radio_actions[sender] << "): POI/ally update\n";
 
             const float *sender_poi = s.local_poi_layers + sender * FLAT_MAP_SIZE;
             const float *sender_agents = s.local_agent_layers + sender * (N_AGENTS * FLAT_MAP_SIZE);
@@ -717,6 +770,7 @@ private:
                 }
             }
         }
+        return oss.str();
     }
 
     void rebuild_global_layers(GameStateView &s)
@@ -764,6 +818,8 @@ PYBIND11_MODULE(_core, m)
                  py::array_t<float, py::array::c_style | py::array::forcecast>,
                  py::array_t<int, py::array::c_style | py::array::forcecast>,
                  py::array_t<int, py::array::c_style | py::array::forcecast>,
+                 py::array_t<int, py::array::c_style | py::array::forcecast>,
+                 py::array_t<int, py::array::c_style | py::array::forcecast>,
                  bool,
                  float,
                  float,
@@ -775,8 +831,10 @@ PYBIND11_MODULE(_core, m)
              py::arg("poi_params"),
              py::arg("initial_agent_pos"),
              py::arg("initial_poi_pos"),
-             py::arg("tile_req_aquatic"),
-             py::arg("tile_req_flying"),
+             py::arg("tile_sup_walking"),
+             py::arg("tile_sup_aquatic"),
+             py::arg("tile_sup_flying"),
+             py::arg("tile_is_blocking"),
              py::arg("cooperative_rewards") = true,
              py::arg("reward_new_tile") = 0.05f,
              py::arg("reward_found") = 2.0f,
@@ -791,5 +849,6 @@ PYBIND11_MODULE(_core, m)
         .def("get_flat_map_size", &BatchedEnvironment::get_flat_map_size)
         .def("get_terrain_channels", &BatchedEnvironment::get_terrain_channels)
         .def("get_num_pois", &BatchedEnvironment::get_num_pois)
+        .def("radio_render", &BatchedEnvironment::radio_render)
         .def_readonly("num_envs", &BatchedEnvironment::num_envs);
 }

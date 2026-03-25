@@ -12,6 +12,7 @@ from ._core_global import BatchedEnvironment as BatchedEnvironmentGlobal
 from .env_wrapper import (
     BatchedGridEnv,
     SARBatchedGridEnv,
+    SARGlobalModeEnv,
     SARParallelPettingZooEnv,
     build_terrain_tensor_from_png,
     load_sar_config,
