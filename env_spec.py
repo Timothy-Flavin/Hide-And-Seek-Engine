@@ -11,12 +11,18 @@ from hide_and_seek_engine.env_wrapper import (
 
 def _random_local_actions(num_envs: int, n_agents: int) -> np.ndarray:
     actions = np.zeros((num_envs, n_agents, 3), dtype=np.float32)
-    actions[:, :, :2] = np.random.uniform(-1.0, 1.0, size=(num_envs, n_agents, 2)).astype(np.float32)
-    actions[:, :, 2] = np.random.randint(0, 4, size=(num_envs, n_agents)).astype(np.float32)
+    actions[:, :, :2] = np.random.uniform(
+        -1.0, 1.0, size=(num_envs, n_agents, 2)
+    ).astype(np.float32)
+    actions[:, :, 2] = np.random.randint(0, 4, size=(num_envs, n_agents)).astype(
+        np.float32
+    )
     return actions
 
 
-def unit_schema_checks(tiles_json: str, agents_json: str, survivors_json: str, map_size: int = 32):
+def unit_schema_checks(
+    tiles_json: str, agents_json: str, survivors_json: str, map_size: int = 32
+):
     cfg = load_sar_config(
         tiles_json=tiles_json,
         agents_json=agents_json,
@@ -35,7 +41,9 @@ def unit_schema_checks(tiles_json: str, agents_json: str, survivors_json: str, m
     print("[unit] schema checks: PASS")
 
 
-def run_local_headless(num_envs: int, steps: int, assets: dict[str, str], seed: int = 42) -> float:
+def run_local_headless(
+    num_envs: int, steps: int, assets: dict[str, str], seed: int = 42
+) -> float:
     env = SARBatchedGridEnv(
         num_envs=num_envs,
         map_png=assets["map_png"],
@@ -60,7 +68,9 @@ def run_local_headless(num_envs: int, steps: int, assets: dict[str, str], seed: 
     env.close()
 
     fps = total_step_calls / max(dt, 1e-8)
-    print(f"[local] envs={num_envs:>3} steps={steps:>6} step_calls={total_step_calls:>8} fps={fps:,.1f}")
+    print(
+        f"[local] envs={num_envs:>3} steps={steps:>6} step_calls={total_step_calls:>8} fps={fps:,.1f}"
+    )
     return fps
 
 
@@ -100,10 +110,22 @@ def benchmark_suite(assets: dict[str, str], steps: int, env_counts: list[int]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SAR environment unit/integration/benchmark suite")
-    parser.add_argument("--steps", type=int, default=10_000, help="Headless benchmark steps")
-    parser.add_argument("--envs", type=int, nargs="*", default=[1, 2, 4, 8], help="Parallel env counts to test")
-    parser.add_argument("--skip-render", action="store_true", help="Skip renderer smoke test")
+    parser = argparse.ArgumentParser(
+        description="SAR environment unit/integration/benchmark suite"
+    )
+    parser.add_argument(
+        "--steps", type=int, default=10_000, help="Headless benchmark steps"
+    )
+    parser.add_argument(
+        "--envs",
+        type=int,
+        nargs="*",
+        default=[1, 2, 4, 8],
+        help="Parallel env counts to test",
+    )
+    parser.add_argument(
+        "--skip-render", action="store_true", help="Skip renderer smoke test"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--map-png", default="test_level/level.png")
     parser.add_argument("--tiles-json", default="test_level/tiles.json")

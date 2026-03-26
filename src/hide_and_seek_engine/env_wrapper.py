@@ -91,12 +91,16 @@ def _as_named_list(payload: Any, key_hint: str) -> list[dict[str, Any]]:
     raise ValueError(f"Could not find list payload for {key_hint}")
 
 
-def _normalize_start_coord(raw: list[float] | tuple[float, float], map_size: int) -> np.ndarray:
+def _normalize_start_coord(
+    raw: list[float] | tuple[float, float], map_size: int
+) -> np.ndarray:
     pos = np.asarray(raw, dtype=np.float32)
     if pos.shape != (2,):
         return np.asarray([map_size // 2, map_size // 2], dtype=np.float32)
     if float(np.max(np.abs(pos))) <= 1.0:
-        return np.clip(pos * (map_size - 1), 0.0, float(map_size - 1)).astype(np.float32)
+        return np.clip(pos * (map_size - 1), 0.0, float(map_size - 1)).astype(
+            np.float32
+        )
     return np.clip(pos, 0.0, float(map_size - 1)).astype(np.float32)
 
 
@@ -111,26 +115,50 @@ def load_sar_config(
     agents_payload = _as_named_list(_load_json(agents_json), "agents")
     survivors_payload = _as_named_list(_load_json(survivors_json), "survivors")
 
-    terrain_names = [str(t.get("name", f"tile_{i}")) for i, t in enumerate(tiles_payload)]
-    terrain_rgb = np.asarray([t.get("rgb", [0, 0, 0]) for t in tiles_payload], dtype=np.int32)
-    terrain_altitudes = np.asarray([float(t.get("altitude", 0.5)) for t in tiles_payload], dtype=np.float32)
+    terrain_names = [
+        str(t.get("name", f"tile_{i}")) for i, t in enumerate(tiles_payload)
+    ]
+    terrain_rgb = np.asarray(
+        [t.get("rgb", [0, 0, 0]) for t in tiles_payload], dtype=np.int32
+    )
+    terrain_altitudes = np.asarray(
+        [float(t.get("altitude", 0.5)) for t in tiles_payload], dtype=np.float32
+    )
 
     alt_min = float(np.min(terrain_altitudes)) if len(terrain_altitudes) else 0.0
     alt_max = float(np.max(terrain_altitudes)) if len(terrain_altitudes) else 1.0
     denom = alt_max - alt_min if abs(alt_max - alt_min) > 1e-8 else 1.0
     terrain_altitudes = (terrain_altitudes - alt_min) / denom
 
-    tile_supports_walking = np.asarray([int(bool(t.get("supports_walking", True))) for t in tiles_payload], dtype=np.int32)
-    tile_supports_aquatic = np.asarray([int(bool(t.get("supports_aquatic", False))) for t in tiles_payload], dtype=np.int32)
-    tile_supports_flying = np.asarray([int(bool(t.get("supports_flying", True))) for t in tiles_payload], dtype=np.int32)
-    tile_blocking = np.asarray([int(bool(t.get("blocking", False))) for t in tiles_payload], dtype=np.int32)
+    tile_supports_walking = np.asarray(
+        [int(bool(t.get("supports_walking", True))) for t in tiles_payload],
+        dtype=np.int32,
+    )
+    tile_supports_aquatic = np.asarray(
+        [int(bool(t.get("supports_aquatic", False))) for t in tiles_payload],
+        dtype=np.int32,
+    )
+    tile_supports_flying = np.asarray(
+        [int(bool(t.get("supports_flying", True))) for t in tiles_payload],
+        dtype=np.int32,
+    )
+    tile_blocking = np.asarray(
+        [int(bool(t.get("blocking", False))) for t in tiles_payload], dtype=np.int32
+    )
     tile_name_to_id = {name: i for i, name in enumerate(terrain_names)}
 
-    agent_names = [str(a.get("name", f"agent_{i}")) for i, a in enumerate(agents_payload)]
+    agent_names = [
+        str(a.get("name", f"agent_{i}")) for i, a in enumerate(agents_payload)
+    ]
     while len(agent_names) < 4:
         agent_names.append(f"agent_{len(agent_names)}")
 
-    agent_class_names = sorted({str(a.get("name", a.get("class", f"class_{i}"))) for i, a in enumerate(agents_payload)})
+    agent_class_names = sorted(
+        {
+            str(a.get("name", a.get("class", f"class_{i}")))
+            for i, a in enumerate(agents_payload)
+        }
+    )
     while len(agent_class_names) < 4:
         agent_class_names.append(f"class_{len(agent_class_names)}")
     agent_class_to_id = {name: idx for idx, name in enumerate(agent_class_names)}
@@ -178,7 +206,9 @@ def load_sar_config(
 
         agent_rgb[i] = np.asarray(a.get("rgb", [255, 0, 0]), dtype=np.int32)
 
-        pos = _normalize_start_coord(a.get("start", [map_size // 2, map_size // 2]), map_size)
+        pos = _normalize_start_coord(
+            a.get("start", [map_size // 2, map_size // 2]), map_size
+        )
         for e in range(num_envs):
             initial_agent_positions[e, i, :] = pos
 
@@ -192,13 +222,21 @@ def load_sar_config(
         agent_specs[i, 10:] = 1.0
         agent_rgb[i] = np.asarray([255, 0, 0], dtype=np.int32)
         for e in range(num_envs):
-            initial_agent_positions[e, i, :] = np.asarray([map_size // 2, map_size // 2], dtype=np.float32)
+            initial_agent_positions[e, i, :] = np.asarray(
+                [map_size // 2, map_size // 2], dtype=np.float32
+            )
 
-    survivor_names = [str(p.get("name", f"survivor_{i}")) for i, p in enumerate(survivors_payload)]
-    survivor_rgb = np.asarray([p.get("rgb", [255, 215, 0]) for p in survivors_payload], dtype=np.int32)
+    survivor_names = [
+        str(p.get("name", f"survivor_{i}")) for i, p in enumerate(survivors_payload)
+    ]
+    survivor_rgb = np.asarray(
+        [p.get("rgb", [255, 215, 0]) for p in survivors_payload], dtype=np.int32
+    )
 
     poi_specs = np.zeros((len(survivors_payload), 2), dtype=np.float32)
-    initial_poi_positions = np.zeros((num_envs, len(survivors_payload), 2), dtype=np.float32)
+    initial_poi_positions = np.zeros(
+        (num_envs, len(survivors_payload), 2), dtype=np.float32
+    )
     for p_idx, p in enumerate(survivors_payload):
         allowed = p.get("allowed_savers", [])
         mask = 0
@@ -210,7 +248,9 @@ def load_sar_config(
         poi_specs[p_idx, 0] = float(bool(p.get("moves", True)))
         poi_specs[p_idx, 1] = float(mask)
 
-        pos = _normalize_start_coord(p.get("start", [map_size // 2, map_size // 2]), map_size)
+        pos = _normalize_start_coord(
+            p.get("start", [map_size // 2, map_size // 2]), map_size
+        )
         for e in range(num_envs):
             initial_poi_positions[e, p_idx, :] = pos
 
@@ -242,7 +282,9 @@ def build_terrain_tensor_from_png(
     map_size: int = 32,
 ) -> np.ndarray:
     if not PIL_AVAILABLE:
-        raise ImportError("Pillow is required for PNG map loading. Install with `pip install Pillow`.")
+        raise ImportError(
+            "Pillow is required for PNG map loading. Install with `pip install Pillow`."
+        )
 
     img = Image.open(map_png_path).convert("RGB")
     if img.size != (map_size, map_size):
@@ -308,6 +350,12 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
 
         self._tile_id_grid = np.argmax(terrain_tensor[0, :-1], axis=0).astype(np.int32)
 
+        if _core_partial is None:
+            raise ImportError(
+                "Compiled extension `hide_and_seek_engine._core` is not available. "
+                "Build and install the package (see README)."
+            )
+
         self.env = _core_partial.BatchedEnvironment(
             self.num_envs,
             seed,
@@ -359,7 +407,13 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
                 "spatial": spaces.Box(
                     low=0.0,
                     high=1.0,
-                    shape=(self.num_envs, self.n_agents, local_channels, self.map_size, self.map_size),
+                    shape=(
+                        self.num_envs,
+                        self.n_agents,
+                        local_channels,
+                        self.map_size,
+                        self.map_size,
+                    ),
                     dtype=np.float32,
                 ),
                 "internal": spaces.Box(
@@ -412,9 +466,15 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
 
         self._pygame_screen = None
         self._pygame_tile_px = 20
-        self._last_known_agent = np.full((self.num_envs, self.n_agents, self.n_agents, 2), -1, dtype=np.int32)
-        self._known_survivor = np.zeros((self.num_envs, self.n_agents, self.n_pois), dtype=bool)
-        self._last_known_survivor = np.full((self.num_envs, self.n_agents, self.n_pois, 2), -1, dtype=np.int32)
+        self._last_known_agent = np.full(
+            (self.num_envs, self.n_agents, self.n_agents, 2), -1, dtype=np.int32
+        )
+        self._known_survivor = np.zeros(
+            (self.num_envs, self.n_agents, self.n_pois), dtype=bool
+        )
+        self._last_known_survivor = np.full(
+            (self.num_envs, self.n_agents, self.n_pois, 2), -1, dtype=np.int32
+        )
 
     def _build_offsets(self):
         f = self.flat_map_size
@@ -453,13 +513,26 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         self.sl_poi_saved = slice(off, off + p)
 
     def _extract_local_obs(self, state_row: np.ndarray) -> dict[str, np.ndarray]:
-        terrain_altitude = state_row[self.sl_terrain_altitude].reshape(self.terrain_channels, self.map_size, self.map_size)
-        local_poi = state_row[self.sl_local_poi_layers].reshape(self.n_agents, self.map_size, self.map_size)
-        local_obs = state_row[self.sl_local_obs_mask].reshape(self.n_agents, self.map_size, self.map_size)
-        local_agents = state_row[self.sl_local_agent_layers].reshape(self.n_agents, self.n_agents, self.map_size, self.map_size)
+        terrain_altitude = state_row[self.sl_terrain_altitude].reshape(
+            self.terrain_channels, self.map_size, self.map_size
+        )
+        local_poi = state_row[self.sl_local_poi_layers].reshape(
+            self.n_agents, self.map_size, self.map_size
+        )
+        local_obs = state_row[self.sl_local_obs_mask].reshape(
+            self.n_agents, self.map_size, self.map_size
+        )
+        local_agents = state_row[self.sl_local_agent_layers].reshape(
+            self.n_agents, self.n_agents, self.map_size, self.map_size
+        )
 
         spatial = np.zeros(
-            (self.n_agents, self.terrain_channels + 1 + 1 + self.n_agents, self.map_size, self.map_size),
+            (
+                self.n_agents,
+                self.terrain_channels + 1 + 1 + self.n_agents,
+                self.map_size,
+                self.map_size,
+            ),
             dtype=np.float32,
         )
         spatial[:, : self.terrain_channels] = terrain_altitude[None, :, :, :]
@@ -472,29 +545,58 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         stuck = state_row[self.sl_agent_stuck]
         view = state_row[self.sl_agent_view]
         battery = state_row[self.sl_agent_battery]
-        internal = np.stack([deploy, stuck, view, battery, pos[:, 0], pos[:, 1]], axis=-1).astype(np.float32)
+        internal = np.stack(
+            [deploy, stuck, view, battery, pos[:, 0], pos[:, 1]], axis=-1
+        ).astype(np.float32)
         return {"spatial": spatial, "internal": internal}
 
     def _extract_global_state(self, state_row: np.ndarray) -> dict[str, np.ndarray]:
-        terrain_altitude = state_row[self.sl_terrain_altitude].reshape(self.terrain_channels, self.map_size, self.map_size)
-        unsaved = state_row[self.sl_global_unsaved_pois].reshape(self.map_size, self.map_size)
+        terrain_altitude = state_row[self.sl_terrain_altitude].reshape(
+            self.terrain_channels, self.map_size, self.map_size
+        )
+        unsaved = state_row[self.sl_global_unsaved_pois].reshape(
+            self.map_size, self.map_size
+        )
         obs = state_row[self.sl_global_obs_mask].reshape(self.map_size, self.map_size)
-        global_agents = state_row[self.sl_global_agent_layers].reshape(self.n_agents, self.map_size, self.map_size)
-        spatial = np.concatenate([terrain_altitude, unsaved[None, :, :], obs[None, :, :], global_agents], axis=0).astype(np.float32)
+        global_agents = state_row[self.sl_global_agent_layers].reshape(
+            self.n_agents, self.map_size, self.map_size
+        )
+        spatial = np.concatenate(
+            [terrain_altitude, unsaved[None, :, :], obs[None, :, :], global_agents],
+            axis=0,
+        ).astype(np.float32)
 
         pos = state_row[self.sl_agent_positions].reshape(self.n_agents, 2)
         deploy = state_row[self.sl_agent_deploy]
         stuck = state_row[self.sl_agent_stuck]
         view = state_row[self.sl_agent_view]
         battery = state_row[self.sl_agent_battery]
-        poi_pos = state_row[self.sl_poi_positions].reshape(self.n_pois, 2) if self.n_pois else np.zeros((0, 2), dtype=np.float32)
-        poi_found = state_row[self.sl_poi_found] if self.n_pois else np.zeros((0,), dtype=np.float32)
-        poi_saved = state_row[self.sl_poi_saved] if self.n_pois else np.zeros((0,), dtype=np.float32)
+        poi_pos = (
+            state_row[self.sl_poi_positions].reshape(self.n_pois, 2)
+            if self.n_pois
+            else np.zeros((0, 2), dtype=np.float32)
+        )
+        poi_found = (
+            state_row[self.sl_poi_found]
+            if self.n_pois
+            else np.zeros((0,), dtype=np.float32)
+        )
+        poi_saved = (
+            state_row[self.sl_poi_saved]
+            if self.n_pois
+            else np.zeros((0,), dtype=np.float32)
+        )
 
-        agent_internal = np.stack([deploy, stuck, view, battery, pos[:, 0], pos[:, 1]], axis=-1).astype(np.float32)
+        agent_internal = np.stack(
+            [deploy, stuck, view, battery, pos[:, 0], pos[:, 1]], axis=-1
+        ).astype(np.float32)
         if self.n_pois:
-            poi_internal = np.concatenate([poi_pos, poi_found[:, None], poi_saved[:, None]], axis=1).astype(np.float32)
-            internal = np.concatenate([agent_internal.reshape(-1), poi_internal.reshape(-1)], axis=0)
+            poi_internal = np.concatenate(
+                [poi_pos, poi_found[:, None], poi_saved[:, None]], axis=1
+            ).astype(np.float32)
+            internal = np.concatenate(
+                [agent_internal.reshape(-1), poi_internal.reshape(-1)], axis=0
+            )
         else:
             internal = agent_internal.reshape(-1)
         return {"spatial": spatial, "internal": internal.astype(np.float32)}
@@ -544,7 +646,9 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             out = np.asarray(actions, dtype=np.float32)
 
         if out.shape != (self.num_envs, self.n_agents, 3):
-            raise ValueError(f"Expected action shape {(self.num_envs, self.n_agents, 3)} but got {out.shape}")
+            raise ValueError(
+                f"Expected action shape {(self.num_envs, self.n_agents, 3)} but got {out.shape}"
+            )
 
         out[:, :, :2] = np.clip(out[:, :, :2], -1.0, 1.0)
         out[:, :, 2] = np.clip(np.round(out[:, :, 2]), 0, 3)
@@ -565,9 +669,16 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         return obs, rewards, terminated, truncated, {}
 
     def state(self):
-        global_states = [self._extract_global_state(self.state_tensor[e].cpu().numpy()) for e in range(self.num_envs)]
-        spatial = torch.from_numpy(np.stack([g["spatial"] for g in global_states], axis=0))
-        internal = torch.from_numpy(np.stack([g["internal"] for g in global_states], axis=0))
+        global_states = [
+            self._extract_global_state(self.state_tensor[e].cpu().numpy())
+            for e in range(self.num_envs)
+        ]
+        spatial = torch.from_numpy(
+            np.stack([g["spatial"] for g in global_states], axis=0)
+        )
+        internal = torch.from_numpy(
+            np.stack([g["internal"] for g in global_states], axis=0)
+        )
         if self.device != "cpu":
             spatial = spatial.to(self.device)
             internal = internal.to(self.device)
@@ -581,12 +692,13 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
 
     def _ensure_pygame(self):
         if not PYGAME_AVAILABLE:
-            raise ImportError("pygame is required for rendering. Install with `pip install pygame`.")
+            raise ImportError(
+                "pygame is required for rendering. Install with `pip install pygame`."
+            )
         if self._pygame_screen is None:
             pygame.init()
             side = self.map_size * self._pygame_tile_px
             self._pygame_screen = pygame.display.set_mode((side, side))
-            pygame.display.set_caption("SAR Renderer")
 
     def _draw_grid(self, surface, base_colors: np.ndarray):
         tile = self._pygame_tile_px
@@ -607,8 +719,14 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
 
         global_obs = row[self.sl_global_obs_mask].reshape(self.map_size, self.map_size)
         agent_pos = row[self.sl_agent_positions].reshape(self.n_agents, 2)
-        poi_pos = row[self.sl_poi_positions].reshape(self.n_pois, 2) if self.n_pois else np.zeros((0, 2), dtype=np.float32)
-        poi_saved = row[self.sl_poi_saved] if self.n_pois else np.zeros((0,), dtype=np.float32)
+        poi_pos = (
+            row[self.sl_poi_positions].reshape(self.n_pois, 2)
+            if self.n_pois
+            else np.zeros((0, 2), dtype=np.float32)
+        )
+        poi_saved = (
+            row[self.sl_poi_saved] if self.n_pois else np.zeros((0,), dtype=np.float32)
+        )
 
         base_colors = self.config.terrain_rgb[self._tile_id_grid].astype(np.int32)
         dimmed = (base_colors // 2).astype(np.int32)
@@ -622,8 +740,17 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         for p in range(self.n_pois):
             py = int(np.clip(poi_pos[p, 0], 0, self.map_size - 1))
             px = int(np.clip(poi_pos[p, 1], 0, self.map_size - 1))
-            color = (255, 255, 255) if poi_saved[p] > 0.5 else tuple(int(c) for c in self.config.survivor_rgb[p])
-            pygame.draw.circle(self._pygame_screen, color, (px * tile + tile // 2, py * tile + tile // 2), max(2, tile // 3))
+            color = (
+                (255, 255, 255)
+                if poi_saved[p] > 0.5
+                else tuple(int(c) for c in self.config.survivor_rgb[p])
+            )
+            pygame.draw.circle(
+                self._pygame_screen,
+                color,
+                (px * tile + tile // 2, py * tile + tile // 2),
+                max(2, tile // 3),
+            )
 
         for a in range(self.n_agents):
             ay = int(np.clip(agent_pos[a, 0], 0, self.map_size - 1))
@@ -644,12 +771,24 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             raise ValueError(f"agent_idx must be in [0, {self.n_agents - 1}]")
 
         row = self._state_row(env_idx)
-        local_obs = row[self.sl_local_obs_mask].reshape(self.n_agents, self.map_size, self.map_size)[agent_idx]
-        local_agents = row[self.sl_local_agent_layers].reshape(self.n_agents, self.n_agents, self.map_size, self.map_size)[agent_idx]
-        local_poi = row[self.sl_local_poi_layers].reshape(self.n_agents, self.map_size, self.map_size)[agent_idx]
+        local_obs = row[self.sl_local_obs_mask].reshape(
+            self.n_agents, self.map_size, self.map_size
+        )[agent_idx]
+        local_agents = row[self.sl_local_agent_layers].reshape(
+            self.n_agents, self.n_agents, self.map_size, self.map_size
+        )[agent_idx]
+        local_poi = row[self.sl_local_poi_layers].reshape(
+            self.n_agents, self.map_size, self.map_size
+        )[agent_idx]
 
-        poi_pos = row[self.sl_poi_positions].reshape(self.n_pois, 2) if self.n_pois else np.zeros((0, 2), dtype=np.float32)
-        poi_saved = row[self.sl_poi_saved] if self.n_pois else np.zeros((0,), dtype=np.float32)
+        poi_pos = (
+            row[self.sl_poi_positions].reshape(self.n_pois, 2)
+            if self.n_pois
+            else np.zeros((0, 2), dtype=np.float32)
+        )
+        poi_saved = (
+            row[self.sl_poi_saved] if self.n_pois else np.zeros((0,), dtype=np.float32)
+        )
 
         base_colors = self.config.terrain_rgb[self._tile_id_grid].astype(np.int32)
         dimmed = (base_colors // 2).astype(np.int32)
@@ -666,7 +805,9 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             if len(ys) > 0:
                 oy = int(ys[0])
                 ox = int(xs[0])
-                self._last_known_agent[env_idx, agent_idx, other] = np.asarray([oy, ox], dtype=np.int32)
+                self._last_known_agent[env_idx, agent_idx, other] = np.asarray(
+                    [oy, ox], dtype=np.int32
+                )
 
             ky, kx = self._last_known_agent[env_idx, agent_idx, other]
             if ky >= 0 and kx >= 0:
@@ -674,7 +815,9 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
                 pygame.draw.rect(
                     self._pygame_screen,
                     color,
-                    pygame.Rect(int(kx) * tile + 2, int(ky) * tile + 2, tile - 4, tile - 4),
+                    pygame.Rect(
+                        int(kx) * tile + 2, int(ky) * tile + 2, tile - 4, tile - 4
+                    ),
                 )
 
         for p in range(self.n_pois):
@@ -682,7 +825,9 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             px = int(np.clip(poi_pos[p, 1], 0, self.map_size - 1))
             if local_poi[py, px] > 0.5:
                 self._known_survivor[env_idx, agent_idx, p] = True
-                self._last_known_survivor[env_idx, agent_idx, p] = np.asarray([py, px], dtype=np.int32)
+                self._last_known_survivor[env_idx, agent_idx, p] = np.asarray(
+                    [py, px], dtype=np.int32
+                )
 
             if not self._known_survivor[env_idx, agent_idx, p]:
                 continue
@@ -690,8 +835,17 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             ky, kx = self._last_known_survivor[env_idx, agent_idx, p]
             if ky < 0 or kx < 0:
                 continue
-            color = (255, 255, 255) if poi_saved[p] > 0.5 else tuple(int(c) for c in self.config.survivor_rgb[p])
-            pygame.draw.circle(self._pygame_screen, color, (int(kx) * tile + tile // 2, int(ky) * tile + tile // 2), max(2, tile // 3))
+            color = (
+                (255, 255, 255)
+                if poi_saved[p] > 0.5
+                else tuple(int(c) for c in self.config.survivor_rgb[p])
+            )
+            pygame.draw.circle(
+                self._pygame_screen,
+                color,
+                (int(kx) * tile + tile // 2, int(ky) * tile + tile // 2),
+                max(2, tile // 3),
+            )
 
         pygame.display.flip()
         return pygame.surfarray.array3d(self._pygame_screen).transpose(1, 0, 2)
@@ -708,7 +862,9 @@ class SARParallelPettingZooEnv(ParallelEnv):
 
     def __init__(self, **kwargs):
         if not PETTINGZOO_AVAILABLE:
-            raise ImportError("PettingZoo is required. Install with `pip install pettingzoo`.")
+            raise ImportError(
+                "PettingZoo is required. Install with `pip install pettingzoo`."
+            )
         self._batched = SARBatchedGridEnv(num_envs=1, **kwargs)
         self.possible_agents = [f"agent_{i}" for i in range(self._batched.n_agents)]
         self.agents = self.possible_agents[:]
@@ -726,7 +882,6 @@ class SARParallelPettingZooEnv(ParallelEnv):
                     low=-np.inf,
                     high=np.inf,
                     shape=(self._batched.actor_internal_dim,),
-                    dtype=np.float32,
                 ),
             }
         )
@@ -750,7 +905,10 @@ class SARParallelPettingZooEnv(ParallelEnv):
         spatial = obs["spatial"][0].cpu().numpy()
         internal = obs["internal"][0].cpu().numpy()
         self.agents = self.possible_agents[:]
-        observations = {agent: {"spatial": spatial[i], "internal": internal[i]} for i, agent in enumerate(self.agents)}
+        observations = {
+            agent: {"spatial": spatial[i], "internal": internal[i]}
+            for i, agent in enumerate(self.agents)
+        }
         infos = {agent: {} for agent in self.agents}
         return observations, infos
 
@@ -775,12 +933,22 @@ class SARParallelPettingZooEnv(ParallelEnv):
         spatial = obs["spatial"][0].cpu().numpy()
         internal = obs["internal"][0].cpu().numpy()
 
-        observations = {agent: {"spatial": spatial[i], "internal": internal[i]} for i, agent in enumerate(self.possible_agents)}
-        rewards_out = {agent: float(rewards[0, i].item()) for i, agent in enumerate(self.possible_agents)}
+        observations = {
+            agent: {"spatial": spatial[i], "internal": internal[i]}
+            for i, agent in enumerate(self.possible_agents)
+        }
+        rewards_out = {
+            agent: float(rewards[0, i].item())
+            for i, agent in enumerate(self.possible_agents)
+        }
         terminations = {agent: done for agent in self.possible_agents}
-        truncations = {agent: bool(truncated[0].item()) for agent in self.possible_agents}
+        truncations = {
+            agent: bool(truncated[0].item()) for agent in self.possible_agents
+        }
         infos = {
-            agent: {"action_mask": self._batched.get_action_mask()[0, i].astype(np.int8)}
+            agent: {
+                "action_mask": self._batched.get_action_mask()[0, i].astype(np.int8)
+            }
             for i, agent in enumerate(self.possible_agents)
         }
 
