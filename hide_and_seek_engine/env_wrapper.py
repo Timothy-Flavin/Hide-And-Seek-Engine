@@ -10,7 +10,6 @@ import torch
 from gymnasium import spaces
 
 from . import _core as _core_partial
-from . import _core_global
 
 try:
     import pygame
@@ -702,19 +701,6 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             pygame.display.quit()
             pygame.quit()
             self._pygame_screen = None
-
-
-class SARGlobalModeEnv:
-    def __init__(self, num_envs: int, seed: int = 42):
-        self.num_envs = int(num_envs)
-        self.n_agents = 4
-        self.core = _core_global.BatchedEnvironment(self.num_envs, seed)
-
-    def reset(self):
-        self.core.reset()
-
-    def step(self, actions: np.ndarray):
-        return self.core.step(actions)
 
 
 class SARParallelPettingZooEnv(ParallelEnv):

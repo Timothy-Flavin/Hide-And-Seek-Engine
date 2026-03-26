@@ -4,7 +4,7 @@ High-performance OpenMP + pybind11 grid-world simulator for heterogeneous Search
 - CTDE-ready tensors (`C x H x W`) for CNN extractors
 - Hybrid action space (`move` + `radio`)
 - PettingZoo parallel API adapter
-- Global and local/POV rendering utilities
+- Local/POV rendering utilities
 
 ## Install
 
@@ -80,14 +80,14 @@ state = env.state()  # global CTDE state
 
 ### Observation Space (Local Actor Input)
 `obs` is a dictionary:
-- `obs["spatial"]`: shape `[E, A, C_local, H, W]`
+- `obs["spatial"]`: shape `[Env, Agent, C_local, H, W]`
   - channels include terrain+altitude, local survivor layer, local obs mask, local agent layers
-- `obs["internal"]`: shape `[E, A, 6]`
+- `obs["internal"]`: shape `[Env, Agent, 6]`
   - `[deploy_remaining, stuck, view_range, battery, y, x]`
 
 ### State Space (Central Critic Input)
 `env.state()` returns:
-- `state["spatial"]`: shape `[E, C_global, H, W]`
+- `state["spatial"]`: shape `[Env, C_global, H, W]`
 - `state["internal"]`: flattened agent+survivor internal vectors
 
 ### Action Space (Hybrid)
@@ -134,17 +134,6 @@ actions = {
 }
 obs, rewards, terminations, truncations, infos = pz_env.step(actions)
 ```
-
-## Global-Mode Benchmark Core
-
-```python
-from hide_and_seek_engine.env_wrapper import SARGlobalModeEnv
-
-global_env = SARGlobalModeEnv(num_envs=16, seed=42)
-global_env.reset()
-```
-
-This mode uses the `_core_global` backend and flattened actions `[E, A*2]`.
 
 ## Test & Benchmark Suite
 

@@ -6,13 +6,9 @@
 from ._core import *
 from ._core import FeatureType, BatchedEnvironment
 
-# Global-communication mode (smaller state, no expected_obs / last_agent_locations)
-from ._core_global import BatchedEnvironment as BatchedEnvironmentGlobal
-
 from .env_wrapper import (
     BatchedGridEnv,
     SARBatchedGridEnv,
-    SARGlobalModeEnv,
     SARParallelPettingZooEnv,
     build_terrain_tensor_from_png,
     load_sar_config,

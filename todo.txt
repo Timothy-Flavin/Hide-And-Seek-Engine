@@ -35,3 +35,19 @@ The environment must strictly adhere to the PettingZoo API, support Hybrid Actio
 
 #### Phase 5: README.md
 - [ ] **Ticket 5.1: Document Env Operation and Usage.** Create and populate a README.md detailing observation spaces, env usage, action space, and the tiles/agents/survivors/level.png formats.
+
+python env_spec.py
+[unit] schema checks: PASS
+
+=== Local Mode Benchmarks ===
+[local] envs=  1 steps= 10000 step_calls=   10000 fps=2,199.7
+[local] envs=  2 steps= 10000 step_calls=   20000 fps=3,424.5
+[local] envs=  4 steps= 10000 step_calls=   40000 fps=3,885.2
+[local] envs=  8 steps= 10000 step_calls=   80000 fps=3,273.0
+
+=== Global Mode Benchmarks ===
+[global] envs=  1 steps= 10000 step_calls=   10000 fps=20,131.5
+[global] envs=  2 steps= 10000 step_calls=   20000 fps=39,449.0
+[global] envs=  4 steps= 10000 step_calls=   40000 fps=72,668.0
+[global] envs=  8 steps= 10000 step_calls=   80000 fps=126,576.2
+[render] global + per-agent POV renderer: PASS

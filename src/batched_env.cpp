@@ -516,23 +516,12 @@ private:
             if (s.agent_stuck[i] > 0.5f)
                 continue;
 
-            float dy;
-            float dx;
-            float radio;
-            if (action_ndim == 2)
-            {
-                const size_t base = static_cast<size_t>(env_idx) * (N_AGENTS * 3) + i * 3;
-                dy = act_data[base];
-                dx = act_data[base + 1];
-                radio = act_data[base + 2];
-            }
-            else
-            {
-                const size_t base = (static_cast<size_t>(env_idx) * N_AGENTS * 3) + i * 3;
-                dy = act_data[base];
-                dx = act_data[base + 1];
-                radio = act_data[base + 2];
-            }
+            const size_t base = action_ndim == 2 
+                ? static_cast<size_t>(env_idx) * (N_AGENTS * 3) + i * 3
+                : static_cast<size_t>(env_idx) * N_AGENTS * 3 + i * 3;
+            float dy = act_data[base];
+            float dx = act_data[base + 1];
+            const float radio = act_data[base + 2];
 
             radio_actions[i] = std::clamp(static_cast<int>(std::round(radio)), 0, 3);
 
@@ -549,12 +538,9 @@ private:
             const int ny = std::clamp(static_cast<int>(std::round(static_cast<float>(cy) + dy)), 0, MAP_SIZE - 1);
             const int nx = std::clamp(static_cast<int>(std::round(static_cast<float>(cx) + dx)), 0, MAP_SIZE - 1);
 
-            if (!is_move_legal(s, env_idx, i, ny - cy, nx - cx))
-            {
-                continue;
-            }
-
             const MoveEval move_eval = evaluate_move(s, env_idx, i, ny - cy, nx - cx);
+            if (move_eval == MoveEval::BLOCKED)
+                continue;
 
             const int tile_id = terrain_id_at(env_idx, ny, nx);
             const float speed_multiplier = std::max(0.0f, agent_spec(i, 10 + tile_id));
@@ -706,7 +692,6 @@ private:
             for (int j = 0; j < N_AGENTS; ++j)
             {
                 float *channel = my_local_agents + j * FLAT_MAP_SIZE;
-                std::memset(channel, 0, FLAT_MAP_SIZE * sizeof(float));
                 const int jy = std::clamp(static_cast<int>(s.agent_positions[j * 2]), 0, MAP_SIZE - 1);
                 const int jx = std::clamp(static_cast<int>(s.agent_positions[j * 2 + 1]), 0, MAP_SIZE - 1);
                 if (std::abs(jy - ay) <= vr && std::abs(jx - ax) <= vr)
@@ -714,7 +699,6 @@ private:
             }
 
             float *my_poi = s.local_poi_layers + i * FLAT_MAP_SIZE;
-            std::memset(my_poi, 0, FLAT_MAP_SIZE * sizeof(float));
             for (int p = 0; p < n_pois; ++p)
             {
                 if (s.poi_saved[p] > 0.5f)
