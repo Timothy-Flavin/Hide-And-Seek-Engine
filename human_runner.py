@@ -1,14 +1,19 @@
 import os
 import random
+import time
+import argparse  # Added for CLI args
 
 import numpy as np
+import imageio  # Added for GIF creation
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 
 try:
     import pygame
 except ImportError as exc:
-    raise ImportError("pygame is required for human_runner.py. Install with `pip install pygame`.") from exc
+    raise ImportError(
+        "pygame is required for human_runner.py. Install with `pip install pygame`."
+    ) from exc
 
 
 def _keyboard_action() -> np.ndarray:
@@ -36,66 +41,77 @@ def _keyboard_action() -> np.ndarray:
     return np.asarray([dy, dx, radio], dtype=np.float32)
 
 
-def _stack_dict_tensors(dct: dict[str, np.ndarray | list[np.ndarray]]) -> dict[str, np.ndarray]:
-    out = {}
-    for key, val in dct.items():
-        out[key] = np.stack(val, axis=0)
-    return out
-
-
-def run_episode(env: SARBatchedGridEnv, controlled_agent: int, max_steps: int = 2000) -> dict[str, np.ndarray]:
+def run_episode(
+    env: SARBatchedGridEnv,
+    controlled_agent: int,
+    max_steps: int = 2000,
+    record: bool = False,
+) -> tuple[dict[str, np.ndarray], list[np.ndarray]]:
     obs, _ = env.reset()
     done = False
 
-    states_spatial: list[np.ndarray] = []
-    states_internal: list[np.ndarray] = []
-    obs_spatial: list[np.ndarray] = []
-    obs_internal: list[np.ndarray] = []
-    actions: list[np.ndarray] = []
-    rewards: list[np.ndarray] = []
-    next_states_spatial: list[np.ndarray] = []
-    next_states_internal: list[np.ndarray] = []
-    next_obs_spatial: list[np.ndarray] = []
-    next_obs_internal: list[np.ndarray] = []
+    states_spatial, states_internal = [], []
+    obs_spatial, obs_internal = [], []
+    actions, rewards = [], []
+    next_states_spatial, next_states_internal = [], []
+    next_obs_spatial, next_obs_internal = [], []
+
+    frames = []  # To store GIF frames
 
     step = 0
     while not done and step < max_steps:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return {}
+                return {}, []
 
         action = np.zeros((1, env.n_agents, 3), dtype=np.float32)
         action[0, controlled_agent] = _keyboard_action()
 
         for a in range(env.n_agents):
-            if a == controlled_agent:
-                continue
-            action[0, a, :2] = np.random.uniform(-1.0, 1.0, size=(2,)).astype(np.float32)
-            action[0, a, 2] = float(np.random.randint(0, 4))
+            if a != controlled_agent:
+                action[0, a, :2] = np.random.uniform(-1.0, 1.0, size=(2,)).astype(
+                    np.float32
+                )
+                action[0, a, 2] = float(np.random.randint(0, 4))
 
         state = env.state()
         next_obs, reward, terminated, truncated, _ = env.step(action)
         next_state = env.state()
 
+        # Data collection
         states_spatial.append(state["spatial"][0].cpu().numpy())
         states_internal.append(state["internal"][0].cpu().numpy())
         obs_spatial.append(obs["spatial"][0, controlled_agent].cpu().numpy())
         obs_internal.append(obs["internal"][0, controlled_agent].cpu().numpy())
         actions.append(action[0, controlled_agent].copy())
-        rewards.append(np.asarray(reward[0, controlled_agent].cpu().numpy(), dtype=np.float32))
+        rewards.append(
+            np.asarray(reward[0, controlled_agent].cpu().numpy(), dtype=np.float32)
+        )
         next_states_spatial.append(next_state["spatial"][0].cpu().numpy())
         next_states_internal.append(next_state["internal"][0].cpu().numpy())
         next_obs_spatial.append(next_obs["spatial"][0, controlled_agent].cpu().numpy())
-        next_obs_internal.append(next_obs["internal"][0, controlled_agent].cpu().numpy())
+        next_obs_internal.append(
+            next_obs["internal"][0, controlled_agent].cpu().numpy()
+        )
 
         obs = next_obs
         done = bool(terminated[0].item() or truncated[0].item())
+
+        # Render
         env.render_pov(controlled_agent, env_idx=0)
         env.radio_render()
-        pygame.time.wait(33)
+
+        # Capture frame for GIF if recording is enabled
+        if record:
+            # Grab the pixels from the active pygame display
+            frame_data = pygame.surfarray.array3d(pygame.display.get_surface())
+            # Pygame uses (width, height, rgb), imageio needs (height, width, rgb)
+            frames.append(frame_data.swapaxes(0, 1))
+
+        pygame.time.wait(132)
         step += 1
 
-    return {
+    data = {
         "states_spatial": np.stack(states_spatial, axis=0),
         "states_internal": np.stack(states_internal, axis=0),
         "obs_spatial": np.stack(obs_spatial, axis=0),
@@ -107,15 +123,28 @@ def run_episode(env: SARBatchedGridEnv, controlled_agent: int, max_steps: int = 
         "next_obs_spatial": np.stack(next_obs_spatial, axis=0),
         "next_obs_internal": np.stack(next_obs_internal, axis=0),
     }
+    return data, frames
 
 
-def save_episode(data: dict[str, np.ndarray], folder: str):
+def save_episode(data: dict[str, np.ndarray], frames: list[np.ndarray], folder: str):
     os.makedirs(folder, exist_ok=True)
     for name, arr in data.items():
         np.save(os.path.join(folder, f"{name}.npy"), arr)
 
+    if frames:
+        gif_path = os.path.join(folder, "replay.gif")
+        print(f"Encoding GIF to {gif_path}...")
+        imageio.mimsave(gif_path, frames, fps=10)  # Adjust FPS to match your 132ms wait
+
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--record", action="store_true", help="Record a GIF of the episode"
+    )
+    args = parser.parse_args()
+
+    pygame.init()
     env = SARBatchedGridEnv(
         num_envs=1,
         map_png="test_level/level.png",
@@ -131,19 +160,25 @@ def main():
     try:
         episode_idx = 0
         while True:
-            controlled_agent = random.randrange(env.n_agents)
-            print(f"Starting episode {episode_idx} with controlled agent_{controlled_agent}")
-            data = run_episode(env, controlled_agent=controlled_agent)
+            controlled_agent = 0  # random.randrange(env.n_agents)
+            print(
+                f"Starting episode {episode_idx} with controlled agent_{controlled_agent}"
+            )
+
+            data, frames = run_episode(
+                env, controlled_agent=controlled_agent, record=args.record
+            )
+
             if not data:
                 break
 
-            user_name = input("Save episode name (blank to skip, e.g. 1): ").strip()
+            user_name = input("Save episode name (blank to skip): ").strip()
             if user_name:
                 out_dir = os.path.join("saved_human_behavior", user_name)
-                save_episode(data, out_dir)
-                print(f"Saved to {out_dir}")
+                save_episode(data, frames, out_dir)
+                print(f"Saved data and GIF to {out_dir}")
             else:
-                print("Skipped saving this episode")
+                print("Skipped saving")
 
             episode_idx += 1
     finally:

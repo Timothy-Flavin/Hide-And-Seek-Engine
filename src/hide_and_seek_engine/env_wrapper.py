@@ -799,15 +799,24 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
 
         tile = self._pygame_tile_px
 
+        agent_pos = row[self.sl_agent_positions].reshape(self.n_agents, 2)
+
         for other in range(self.n_agents):
-            channel = local_agents[other]
-            ys, xs = np.where(channel > 0.5)
-            if len(ys) > 0:
-                oy = int(ys[0])
-                ox = int(xs[0])
+            if other == agent_idx:
+                py = int(np.clip(agent_pos[other, 0], 0, self.map_size - 1))
+                px = int(np.clip(agent_pos[other, 1], 0, self.map_size - 1))
                 self._last_known_agent[env_idx, agent_idx, other] = np.asarray(
-                    [oy, ox], dtype=np.int32
+                    [py, px], dtype=np.int32
                 )
+            else:
+                channel = local_agents[other]
+                ys, xs = np.where(channel > 0.5)
+                if len(ys) > 0:
+                    oy = int(ys[0])
+                    ox = int(xs[0])
+                    self._last_known_agent[env_idx, agent_idx, other] = np.asarray(
+                        [oy, ox], dtype=np.int32
+                    )
 
             ky, kx = self._last_known_agent[env_idx, agent_idx, other]
             if ky >= 0 and kx >= 0:
