@@ -327,6 +327,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         reward_new_tile: float = 0.05,
         reward_found: float = 2.0,
         reward_saved: float = 20.0,
+        max_frames: int = 250,
     ):
         self.num_envs = int(num_envs)
         self.map_size = int(map_size)
@@ -372,6 +373,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             reward_new_tile,
             reward_found,
             reward_saved,
+            max_frames,
         )
 
         self.terrain_channels = int(self.env.get_terrain_channels())

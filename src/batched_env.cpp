@@ -69,10 +69,13 @@ public:
     float reward_found;
     float reward_saved;
 
+    int max_frames;
+
     std::vector<std::mt19937> rngs;
     std::vector<float> data;
     std::vector<bool> env_terminated;
     std::vector<int> undiscovered_remaining;
+    std::vector<int> current_frames;
 
     std::vector<float> terrain_templates;
     std::vector<int> terrain_ids;
@@ -102,13 +105,15 @@ public:
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
         float reward_found_val = 2.0f,
-        float reward_saved_val = 20.0f)
+        float reward_saved_val = 20.0f,
+        int max_frames_val = 250)
         : num_envs(n_envs),
           seed(sim_seed),
           cooperative_rewards(coop_rewards),
           reward_new_tile(reward_new_tile_val),
           reward_found(reward_found_val),
-          reward_saved(reward_saved_val)
+          reward_saved(reward_saved_val),
+          max_frames(max_frames_val)
     {
         if (num_envs <= 0)
             throw std::invalid_argument("n_envs must be > 0");
@@ -221,6 +226,7 @@ public:
         rngs.resize(num_envs);
         env_terminated.assign(num_envs, false);
         undiscovered_remaining.assign(num_envs, FLAT_MAP_SIZE);
+        current_frames.assign(num_envs, 0);
         radio_logs.assign(num_envs, std::string());
         for (int i = 0; i < num_envs; ++i)
             rngs[i].seed(seed + i);
@@ -291,6 +297,7 @@ public:
 
         rebuild_global_layers(s);
         undiscovered_remaining[e] = FLAT_MAP_SIZE;
+        current_frames[e] = 0;
         update_local_observations(s, e, nullptr);
     }
 
@@ -370,9 +377,11 @@ public:
                     rewards(e, i) += new_tile_credit[i] * reward_new_tile;
             }
 
+            current_frames[e]++;
             const bool all_saved = all_pois_saved(s);
-            terminated(e) = all_saved;
-            env_terminated[e] = all_saved;
+            const bool timeout = current_frames[e] >= max_frames;
+            terminated(e) = all_saved || timeout;
+            env_terminated[e] = terminated(e);
         }
 
         return {rewards_array, terminated_array};
@@ -807,7 +816,8 @@ PYBIND11_MODULE(_core, m)
                  bool,
                  float,
                  float,
-                 float>(),
+                 float,
+                 int>(),
              py::arg("n_envs"),
              py::arg("seed"),
              py::arg("terrain_tensor"),
@@ -822,7 +832,8 @@ PYBIND11_MODULE(_core, m)
              py::arg("cooperative_rewards") = true,
              py::arg("reward_new_tile") = 0.05f,
              py::arg("reward_found") = 2.0f,
-             py::arg("reward_saved") = 20.0f)
+             py::arg("reward_saved") = 20.0f,
+             py::arg("max_frames") = 250)
         .def("reset", &BatchedEnvironment::reset)
         .def("reset_single", &BatchedEnvironment::reset_single, py::arg("env_idx"))
         .def("step", &BatchedEnvironment::step, py::arg("actions"))

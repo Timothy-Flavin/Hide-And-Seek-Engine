@@ -4,4 +4,4 @@ This file is intentionally minimal to avoid import-time side-effects.
 """
 
 __all__ = []
-__version__ = "0.2.6"
+__version__ = "0.2.8"
