@@ -56,10 +56,12 @@ def run_local_headless(
     env.reset()
 
     t0 = time.perf_counter()
+    obs = np.zeros(1)
     total_step_calls = 0
-    for _ in range(steps):
+
+    for _ in range(steps // num_envs):
         actions = _random_local_actions(num_envs, env.n_agents)
-        _, _, terminated, _, _ = env.step(actions)
+        obs, _, terminated, _, _ = env.step(actions)
         total_step_calls += num_envs
         term_np = terminated.cpu().numpy()
         for e in np.where(term_np)[0]:
@@ -68,8 +70,9 @@ def run_local_headless(
     env.close()
 
     fps = total_step_calls / max(dt, 1e-8)
+    print(f"[obs shape]: {obs['spatial'].shape}")
     print(
-        f"[local] envs={num_envs:>3} steps={steps:>6} step_calls={total_step_calls:>8} fps={fps:,.1f}"
+        f"[local] envs={num_envs:>3} steps={steps//num_envs:>6} step_calls={total_step_calls:>8} fps={fps:,.1f}"
     )
     return fps
 

@@ -15,7 +15,7 @@ else:
 
 ext_modules = [
     Pybind11Extension(
-        "hide_and_seek_engine._core",
+        "hide_and_seek_engine.cpp_engine",
         ["src/batched_env.cpp"],
         extra_compile_args=c_args,
         extra_link_args=l_args,

@@ -14,6 +14,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <cstdint>
+#inlcude "env_state.h"
 
 #include <omp.h>
 
@@ -27,67 +29,31 @@ typedef ptrdiff_t ssize_t;
 
 namespace py = pybind11;
 
-namespace
-{
-constexpr int MOVE_ACTION_COUNT = 9;
-constexpr std::array<int, MOVE_ACTION_COUNT> MOVE_DY = {0, -1, 1, 0, 0, -1, -1, 1, 1};
-constexpr std::array<int, MOVE_ACTION_COUNT> MOVE_DX = {0, 0, 0, -1, 1, -1, 1, -1, 1};
-}
-
-struct GameStateView
-{
-    float *terrain_altitude;
-    float *global_unsaved_pois;
-    float *global_obs_mask;
-    float *global_agent_layers;
-    float *local_poi_layers;
-    float *local_agent_layers;
-    float *local_obs_mask;
-    float *agent_positions;
-    float *agent_deployment_remaining;
-    float *agent_stuck;
-    float *agent_view_range;
-    float *agent_battery;
-    float *poi_positions;
-    float *poi_found;
-    float *poi_saved;
-};
-
 class BatchedEnvironment
 {
+private:
+    std::unique_ptr<EnvironmentArena> arena;
+
 public:
-    int num_envs;
+    // Hyper Parameters sent from python
     int seed;
     int n_tiles;
-    int terrain_channels;
     int n_pois;
-    int agent_spec_width;
-    int poi_spec_width;
-    int env_stride;
     bool cooperative_rewards;
     float reward_new_tile;
     float reward_found;
     float reward_saved;
-
     int max_frames;
+    int num_envs;
+    int map_size;
 
+    // Internal data for resetting the environment managing randomness
+    // and rendering the radio
     std::vector<std::mt19937> rngs;
-    std::vector<float> data;
     std::vector<bool> env_terminated;
-    std::vector<int> undiscovered_remaining;
     std::vector<int> current_frames;
-
-    std::vector<float> terrain_templates;
-    std::vector<int> terrain_ids;
-
-    std::vector<float> agent_specs;
-    std::vector<float> poi_specs;
     std::vector<float> init_agent_positions;
     std::vector<float> init_poi_positions;
-    std::vector<int> tile_supports_walking;
-    std::vector<int> tile_supports_aquatic;
-    std::vector<int> tile_supports_flying;
-    std::vector<int> tile_blocking;
     std::vector<std::string> radio_logs;
 
     BatchedEnvironment(
@@ -525,9 +491,9 @@ private:
             if (s.agent_stuck[i] > 0.5f)
                 continue;
 
-            const size_t base = action_ndim == 2 
-                ? static_cast<size_t>(env_idx) * (N_AGENTS * 3) + i * 3
-                : static_cast<size_t>(env_idx) * N_AGENTS * 3 + i * 3;
+            const size_t base = action_ndim == 2
+                                    ? static_cast<size_t>(env_idx) * (N_AGENTS * 3) + i * 3
+                                    : static_cast<size_t>(env_idx) * N_AGENTS * 3 + i * 3;
             float dy = act_data[base];
             float dx = act_data[base + 1];
             const float radio = act_data[base + 2];
@@ -796,7 +762,7 @@ private:
     }
 };
 
-PYBIND11_MODULE(_core, m)
+PYBIND11_MODULE(cpp_engine, m)
 {
     REGISTER_FEATURE_TYPE_ENUM(m);
 
