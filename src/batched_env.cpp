@@ -33,12 +33,32 @@ class BatchedEnvironment
 {
 private:
     std::unique_ptr<EnvironmentArena> arena;
+    float *torch_tensor_base = nullptr;
+    float *torch_state_tensor_base = nullptr;
+
+    // Stride helper objects (conditionally instantiated)
+    std::unique_ptr<DecentralizedPartialObsStrides> decentral_obs_strides;
+    std::unique_ptr<CentralizedPartialObsStrides> central_obs_strides;
+    std::unique_ptr<CentralizedStateStrides> central_state_strides;
+
+    // Persisted map configuration for reset_env
+    int width;
+    int height;
+    std::vector<bool> supports_walking;
+    std::vector<bool> supports_aquatic;
+    std::vector<bool> supports_flying;
+    std::vector<bool> is_blocking;
+    std::vector<int> type_map;
+    std::vector<float> altitude_map;
+    std::vector<float> agent_speed_map;
+    std::vector<bool> saveable_map;
 
 public:
     // Hyper Parameters sent from python
     int seed;
     int n_tiles;
     int n_pois;
+    int n_agents;
     bool cooperative_rewards;
     float reward_new_tile;
     float reward_found;
@@ -46,7 +66,7 @@ public:
     int max_frames;
     int num_envs;
     int map_size;
-
+    bool return_obs = False;
     // Internal data for resetting the environment managing randomness
     // and rendering the radio
     std::vector<std::mt19937> rngs;
@@ -59,15 +79,22 @@ public:
     BatchedEnvironment(
         int n_envs,
         int sim_seed,
-        py::array_t<float, py::array::c_style | py::array::forcecast> terrain_tensor,
-        py::array_t<float, py::array::c_style | py::array::forcecast> agent_params,
-        py::array_t<float, py::array::c_style | py::array::forcecast> poi_params,
-        py::array_t<float, py::array::c_style | py::array::forcecast> initial_agent_pos,
-        py::array_t<float, py::array::c_style | py::array::forcecast> initial_poi_pos,
-        py::array_t<int, py::array::c_style | py::array::forcecast> tile_sup_walking,
-        py::array_t<int, py::array::c_style | py::array::forcecast> tile_sup_aquatic,
-        py::array_t<int, py::array::c_style | py::array::forcecast> tile_sup_flying,
-        py::array_t<int, py::array::c_style | py::array::forcecast> tile_is_blocking,
+        int w,
+        int h,
+        std::vector<bool> supports_walk,
+        std::vector<bool> supports_aqua,
+        std::vector<bool> supports_fly,
+        std::vector<bool> is_block,
+        std::vector<int> t_map,               // width*height int for tile types
+        std::vector<float> alt_map,           // width*height altitudes
+        std::vector<float> a_speed_map,       // n_agents * n_tile_types speed of each agent on each tile
+        std::vector<bool> save_map,           // n_poi * n_agents can this poi be saved by this agent
+        std::vector<float> initial_agent_pos, // n_agent * 2 x y start locs
+        std::vector<float> initial_poi_pos,   // n_poi * 2 x y start locs
+        uintptr_t tensor_ptr,                 // PyTorch pinned tensor pointer mapped via data_ptr() (Observations)
+        std::string mode = "decentralized",   // "centralized" or "decentralized"
+        bool requires_state = false,          // Should we allocate the true state tensor?
+        uintptr_t state_tensor_ptr = 0,       // PyTorch pinned tensor pointer mapped via data_ptr() (Global State)
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
         float reward_found_val = 2.0f,
@@ -75,196 +102,134 @@ public:
         int max_frames_val = 250)
         : num_envs(n_envs),
           seed(sim_seed),
+          width(w),
+          height(h),
+          supports_walking(std::move(supports_walk)),
+          supports_aquatic(std::move(supports_aqua)),
+          supports_flying(std::move(supports_fly)),
+          is_blocking(std::move(is_block)),
+          type_map(std::move(t_map)),
+          altitude_map(std::move(alt_map)),
+          agent_speed_map(std::move(a_speed_map)),
+          saveable_map(std::move(save_map)),
+          init_agent_positions(std::move(initial_agent_pos)),
+          init_poi_positions(std::move(initial_poi_pos)),
           cooperative_rewards(coop_rewards),
           reward_new_tile(reward_new_tile_val),
           reward_found(reward_found_val),
           reward_saved(reward_saved_val),
-          max_frames(max_frames_val)
+          max_frames(max_frames_val),
+          map_size(w * h)
     {
-        if (num_envs <= 0)
-            throw std::invalid_argument("n_envs must be > 0");
+        // 1. Dynamic bounds tracking
+        n_tiles = supports_walking.size();
+        n_agents = init_agent_positions.size() / 2;
+        n_pois = init_poi_positions.size() / 2;
 
-        auto tt = terrain_tensor.unchecked<4>();
-        if (tt.shape(0) != num_envs || tt.shape(2) != MAP_SIZE || tt.shape(3) != MAP_SIZE)
-            throw std::invalid_argument("terrain_tensor must have shape [num_envs, C, MAP_SIZE, MAP_SIZE]");
-        terrain_channels = static_cast<int>(tt.shape(1));
-        if (terrain_channels < 2)
-            throw std::invalid_argument("terrain_tensor requires at least 2 channels (terrain one-hot + altitude)");
-        n_tiles = terrain_channels - 1;
+        // 2. Setup internal simulation states
+        env_terminated.resize(num_envs, false);
+        current_frames.resize(num_envs, 0);
+        radio_logs.resize(num_envs, "");
 
-        auto ap = agent_params.unchecked<2>();
-        if (ap.shape(0) != N_AGENTS)
-            throw std::invalid_argument("agent_params must have shape [N_AGENTS, spec_width]");
-        agent_spec_width = static_cast<int>(ap.shape(1));
-        if (agent_spec_width < 10 + n_tiles)
-            throw std::invalid_argument("agent spec width too small: expected >= 10 + n_tiles");
+        torch_tensor_base = reinterpret_cast<float *>(tensor_ptr);
 
-        auto pp = poi_params.unchecked<2>();
-        n_pois = static_cast<int>(pp.shape(0));
-        poi_spec_width = static_cast<int>(pp.shape(1));
-        if (poi_spec_width < 2)
-            throw std::invalid_argument("poi_params must have at least 2 columns [can_move, allowed_savers_mask]");
-
-        auto iap = initial_agent_pos.unchecked<3>();
-        if (iap.shape(0) != num_envs || iap.shape(1) != N_AGENTS || iap.shape(2) != 2)
-            throw std::invalid_argument("initial_agent_pos must have shape [num_envs, N_AGENTS, 2]");
-
-        auto ipp = initial_poi_pos.unchecked<3>();
-        if (ipp.shape(0) != num_envs || ipp.shape(1) != n_pois || ipp.shape(2) != 2)
-            throw std::invalid_argument("initial_poi_pos must have shape [num_envs, n_pois, 2]");
-
-        auto sup_walk = tile_sup_walking.unchecked<1>();
-        auto sup_aq = tile_sup_aquatic.unchecked<1>();
-        auto sup_fl = tile_sup_flying.unchecked<1>();
-        auto is_block = tile_is_blocking.unchecked<1>();
-        if (sup_walk.shape(0) != n_tiles || sup_aq.shape(0) != n_tiles ||
-            sup_fl.shape(0) != n_tiles || is_block.shape(0) != n_tiles)
-            throw std::invalid_argument("tile support/blocking arrays must have shape [n_tiles]");
-
-        const size_t terrain_count = static_cast<size_t>(num_envs) * terrain_channels * FLAT_MAP_SIZE;
-        terrain_templates.resize(terrain_count);
-        std::memcpy(terrain_templates.data(), terrain_tensor.data(), terrain_count * sizeof(float));
-
-        terrain_ids.resize(static_cast<size_t>(num_envs) * FLAT_MAP_SIZE, 0);
-        for (int e = 0; e < num_envs; ++e)
+        std::mt19937 base_rng(seed);
+        for (int i = 0; i < num_envs; ++i)
         {
-            for (int idx = 0; idx < FLAT_MAP_SIZE; ++idx)
+            rngs.push_back(std::mt19937(base_rng()));
+        }
+
+        // 3. Allocate cache-aligned contiguous block memory
+        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles);
+
+        // 4. Bind the required tensor stride objects based on configuration
+        bind_state(mode, requires_state, state_tensor_ptr);
+
+        // 5. Fill the initial game state structure
+        for (int env_idx = 0; env_idx < num_envs; ++env_idx)
+        {
+            reset_env(env_idx);
+        }
+    }
+
+    void bind_state(const std::string &mode, bool requires_state, uintptr_t state_tensor_ptr)
+    {
+        if (mode == "centralized")
+        {
+            central_obs_strides = std::make_unique<CentralizedPartialObsStrides>(width, height, n_tiles, n_agents);
+        }
+        else // default to decentralized
+        {
+            decentral_obs_strides = std::make_unique<DecentralizedPartialObsStrides>(width, height, n_tiles, n_agents);
+        }
+
+        if (requires_state)
+        {
+            central_state_strides = std::make_unique<CentralizedStateStrides>(width, height, n_tiles, n_agents);
+            torch_state_tensor_base = reinterpret_cast<float *>(state_tensor_ptr);
+        }
+    }
+
+    void reset_env(int env_idx)
+    {
+        EnvStateView view = arena->get_env_view(env_idx);
+
+        // A. Env Counters
+        *view.current_frame = 0;
+        *view.undiscovered_remaining = map_size;
+
+        // B. Tiles
+        for (int i = 0; i < map_size; ++i)
+        {
+            view.grid[i].flags = 0; // zero out completely
+            view.grid[i].altitude = altitude_map[i];
+
+            int t_type = type_map[i];
+            view.grid[i].set_type(t_type);
+            view.grid[i].set_walkable(supports_walking[t_type]);
+            view.grid[i].set_aquatic(supports_aquatic[t_type]);
+            view.grid[i].set_flyable(supports_flying[t_type]);
+            view.grid[i].set_blocking(is_blocking[t_type]);
+        }
+
+        // C. Agents
+        for (int a = 0; a < n_agents; ++a)
+        {
+            view.agents[a].y = init_agent_positions[a * 2];
+            view.agents[a].x = init_agent_positions[a * 2 + 1];
+            view.agents[a].battery = 100.0f;
+            view.agents[a].view_range = 5.0f;
+            view.agents[a].deployment_remaining = 0.0f;
+            view.agents[a].type = a;
+            view.agents[a].stuck = 0;
+
+            // Load specialized speeds
+            for (int t = 0; t < n_tiles; ++t)
             {
-                int best_tile = 0;
-                float best_v = tt(e, 0, idx / MAP_SIZE, idx % MAP_SIZE);
-                for (int t = 1; t < n_tiles; ++t)
-                {
-                    const float v = tt(e, t, idx / MAP_SIZE, idx % MAP_SIZE);
-                    if (v > best_v)
-                    {
-                        best_v = v;
-                        best_tile = t;
-                    }
-                }
-                terrain_ids[static_cast<size_t>(e) * FLAT_MAP_SIZE + idx] = best_tile;
+                view.agent_speeds[a * n_tiles + t] = agent_speed_map[a * n_tiles + t];
             }
         }
 
-        agent_specs.resize(static_cast<size_t>(N_AGENTS) * agent_spec_width);
-        std::memcpy(agent_specs.data(), agent_params.data(), agent_specs.size() * sizeof(float));
-
-        poi_specs.resize(static_cast<size_t>(n_pois) * poi_spec_width);
-        if (n_pois > 0)
-            std::memcpy(poi_specs.data(), poi_params.data(), poi_specs.size() * sizeof(float));
-
-        init_agent_positions.resize(static_cast<size_t>(num_envs) * N_AGENTS * 2);
-        std::memcpy(init_agent_positions.data(), initial_agent_pos.data(), init_agent_positions.size() * sizeof(float));
-
-        init_poi_positions.resize(static_cast<size_t>(num_envs) * n_pois * 2);
-        if (n_pois > 0)
-            std::memcpy(init_poi_positions.data(), initial_poi_pos.data(), init_poi_positions.size() * sizeof(float));
-
-        tile_supports_walking.resize(n_tiles);
-        tile_supports_aquatic.resize(n_tiles);
-        tile_supports_flying.resize(n_tiles);
-        tile_blocking.resize(n_tiles);
-        for (int t = 0; t < n_tiles; ++t)
-        {
-            tile_supports_walking[t] = sup_walk(t);
-            tile_supports_aquatic[t] = sup_aq(t);
-            tile_supports_flying[t] = sup_fl(t);
-            tile_blocking[t] = is_block(t);
-        }
-
-        env_stride =
-            terrain_channels * FLAT_MAP_SIZE +
-            FLAT_MAP_SIZE +
-            FLAT_MAP_SIZE +
-            (N_AGENTS * FLAT_MAP_SIZE) +
-            (N_AGENTS * FLAT_MAP_SIZE) +
-            (N_AGENTS * N_AGENTS * FLAT_MAP_SIZE) +
-            (N_AGENTS * FLAT_MAP_SIZE) +
-            (N_AGENTS * 2) +
-            N_AGENTS +
-            N_AGENTS +
-            N_AGENTS +
-            N_AGENTS +
-            (n_pois * 2) +
-            n_pois +
-            n_pois;
-
-        data.resize(static_cast<size_t>(num_envs) * env_stride, 0.0f);
-        rngs.resize(num_envs);
-        env_terminated.assign(num_envs, false);
-        undiscovered_remaining.assign(num_envs, FLAT_MAP_SIZE);
-        current_frames.assign(num_envs, 0);
-        radio_logs.assign(num_envs, std::string());
-        for (int i = 0; i < num_envs; ++i)
-            rngs[i].seed(seed + i);
-
-        reset();
-    }
-
-    void bind_state(GameStateView &s, int env_idx)
-    {
-        float *ptr = data.data() + static_cast<size_t>(env_idx) * env_stride;
-        s.terrain_altitude = ptr;
-        ptr += terrain_channels * FLAT_MAP_SIZE;
-        s.global_unsaved_pois = ptr;
-        ptr += FLAT_MAP_SIZE;
-        s.global_obs_mask = ptr;
-        ptr += FLAT_MAP_SIZE;
-        s.global_agent_layers = ptr;
-        ptr += N_AGENTS * FLAT_MAP_SIZE;
-        s.local_poi_layers = ptr;
-        ptr += N_AGENTS * FLAT_MAP_SIZE;
-        s.local_agent_layers = ptr;
-        ptr += N_AGENTS * N_AGENTS * FLAT_MAP_SIZE;
-        s.local_obs_mask = ptr;
-        ptr += N_AGENTS * FLAT_MAP_SIZE;
-        s.agent_positions = ptr;
-        ptr += N_AGENTS * 2;
-        s.agent_deployment_remaining = ptr;
-        ptr += N_AGENTS;
-        s.agent_stuck = ptr;
-        ptr += N_AGENTS;
-        s.agent_view_range = ptr;
-        ptr += N_AGENTS;
-        s.agent_battery = ptr;
-        ptr += N_AGENTS;
-        s.poi_positions = ptr;
-        ptr += n_pois * 2;
-        s.poi_found = ptr;
-        ptr += n_pois;
-        s.poi_saved = ptr;
-    }
-
-    void reset_env(GameStateView &s, int e)
-    {
-        std::memset(data.data() + static_cast<size_t>(e) * env_stride, 0, env_stride * sizeof(float));
-
-        const float *terrain_src = terrain_templates.data() + static_cast<size_t>(e) * terrain_channels * FLAT_MAP_SIZE;
-        std::memcpy(s.terrain_altitude, terrain_src, static_cast<size_t>(terrain_channels) * FLAT_MAP_SIZE * sizeof(float));
-
-        for (int i = 0; i < N_AGENTS; ++i)
-        {
-            const size_t base = static_cast<size_t>(e) * N_AGENTS * 2 + i * 2;
-            s.agent_positions[i * 2] = std::clamp(init_agent_positions[base], 0.0f, MAP_MAX);
-            s.agent_positions[i * 2 + 1] = std::clamp(init_agent_positions[base + 1], 0.0f, MAP_MAX);
-            s.agent_deployment_remaining[i] = std::max(0.0f, agent_spec(i, 8));
-            s.agent_stuck[i] = 0.0f;
-            s.agent_view_range[i] = std::max(1.0f, agent_spec(i, 6));
-            s.agent_battery[i] = std::max(1.0f, agent_spec(i, 7));
-        }
-
+        // D. Survivors (POIs)
         for (int p = 0; p < n_pois; ++p)
         {
-            const size_t base = static_cast<size_t>(e) * n_pois * 2 + p * 2;
-            s.poi_positions[p * 2] = std::clamp(init_poi_positions[base], 0.0f, MAP_MAX);
-            s.poi_positions[p * 2 + 1] = std::clamp(init_poi_positions[base + 1], 0.0f, MAP_MAX);
-            s.poi_found[p] = 0.0f;
-            s.poi_saved[p] = 0.0f;
-        }
+            view.pois[p].y = init_poi_positions[p * 2];
+            view.pois[p].x = init_poi_positions[p * 2 + 1];
+            view.pois[p].found = 0;
+            view.pois[p].saved = 0;
+            view.pois[p].moves = 0;
 
-        rebuild_global_layers(s);
-        undiscovered_remaining[e] = FLAT_MAP_SIZE;
-        current_frames[e] = 0;
-        update_local_observations(s, e, nullptr);
+            // Generate 1-hot bitmask integer evaluating the allowed savers array natively
+            uint32_t savable_mask = 0;
+            for (int a = 0; a < n_agents; ++a)
+            {
+                if (saveable_map[p * n_agents + a])
+                {
+                    savable_mask |= (1U << a);
+                }
+            }
+            view.pois[p].savable_by_mask = savable_mask;
+        }
     }
 
     void reset()
@@ -273,166 +238,89 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            GameStateView s;
-            bind_state(s, e);
-            reset_env(s, e);
+            reset_env(e);
         }
     }
 
-    void reset_single(int env_idx)
+    void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
-        if (env_idx < 0 || env_idx >= num_envs)
-            throw std::out_of_range("reset_single: env_idx out of range");
-        GameStateView s;
-        bind_state(s, env_idx);
-        reset_env(s, env_idx);
-        env_terminated[env_idx] = false;
-    }
-
-    std::pair<py::array_t<float>, py::array_t<bool>> step(py::array_t<float, py::array::c_style | py::array::forcecast> actions_array)
-    {
+        // action space is box2d[dx, dy], discrete(num radio choices)
         if (actions_array.ndim() != 2 && actions_array.ndim() != 3)
             throw std::invalid_argument("actions must have shape [E, A*3] or [E, A, 3]");
         if (actions_array.shape(0) != num_envs)
             throw std::invalid_argument("actions first dimension must match num_envs");
 
-        py::array_t<float> rewards_array({num_envs, N_AGENTS});
-        auto rewards = rewards_array.mutable_unchecked<2>();
-        py::array_t<bool> terminated_array({num_envs});
-        auto terminated = terminated_array.mutable_unchecked<1>();
-
         const float *act_data = actions_array.data();
+        const int *radio_act_data = radio_actions_array.data();
 
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
+
             for (int i = 0; i < N_AGENTS; ++i)
                 rewards(e, i) = 0.0f;
 
             if (env_terminated[e])
             {
-                terminated(e) = true;
-                continue;
+                reset_env(e); // for parallel env reset is automatic
             }
 
-            GameStateView s;
-            bind_state(s, e);
+            // figure out where an agent will end up this frame
+            // and set its current location and grid cell accordingly
+            process_agent_movement(e, act_data);
+            // Resolve tile discoveries and POI discoveries / rescues
+            resolve_local_interactions(e);
+            // Resolve or at least record which agents have shared
+            // their internal states with other agents
+            radio_logs[e] = execute_radio(s, radio_act_data);
 
-            std::array<int, N_AGENTS> radio_actions{};
-            process_agent_movement(s, e, act_data, actions_array.ndim(), rewards, radio_actions);
-            resolve_rescues(s);
-            const auto poi_events = update_pois_and_interactions(s, e);
-
-            std::array<float, N_AGENTS> new_tile_credit{};
-            const int new_tiles = update_local_observations(s, e, &new_tile_credit);
-            radio_logs[e] = execute_radio(s, radio_actions);
-            rebuild_global_layers(s);
-
-            if (cooperative_rewards)
-            {
-                const float total_reward =
-                    static_cast<float>(new_tiles) * reward_new_tile +
-                    static_cast<float>(poi_events.first) * reward_found +
-                    static_cast<float>(poi_events.second) * reward_saved;
-                for (int i = 0; i < N_AGENTS; ++i)
-                    rewards(e, i) += total_reward;
-            }
-            else
-            {
-                for (int i = 0; i < N_AGENTS; ++i)
-                    rewards(e, i) += new_tile_credit[i] * reward_new_tile;
-            }
-
-            current_frames[e]++;
             const bool all_saved = all_pois_saved(s);
             const bool timeout = current_frames[e] >= max_frames;
             terminated(e) = all_saved || timeout;
             env_terminated[e] = terminated(e);
+
+            // If we are using this environment for machine learning
+            // then fill the torch buffer accordingly
+            if (return_obs)
+                fill_torch_state(e);
         }
 
-        return {rewards_array, terminated_array};
-    }
-
-    py::array_t<bool> get_action_mask() const
-    {
-        py::array_t<bool> mask({num_envs, N_AGENTS, MOVE_ACTION_COUNT});
-        auto m = mask.mutable_unchecked<3>();
-
-#pragma omp parallel for schedule(static)
-        for (int e = 0; e < num_envs; ++e)
-        {
-            GameStateView s;
-            const_cast<BatchedEnvironment *>(this)->bind_state(s, e);
-            for (int i = 0; i < N_AGENTS; ++i)
-            {
-                for (int a = 0; a < MOVE_ACTION_COUNT; ++a)
-                    m(e, i, a) = is_move_legal(s, e, i, MOVE_DY[a], MOVE_DX[a]);
-            }
-        }
-        return mask;
-    }
-
-    std::pair<size_t, size_t> get_memory_view()
-    {
-        return {reinterpret_cast<size_t>(data.data()), data.size() * sizeof(float)};
-    }
-
-    py::array_t<float> get_state()
-    {
-        py::capsule base(data.data(), [](void *) {});
-        return py::array_t<float>(
-            {static_cast<ssize_t>(num_envs), static_cast<ssize_t>(env_stride)},
-            {static_cast<ssize_t>(env_stride) * static_cast<ssize_t>(sizeof(float)),
-             static_cast<ssize_t>(sizeof(float))},
-            data.data(),
-            base);
-    }
-
-    int get_stride() const { return env_stride; }
-    int get_flat_map_size() const { return FLAT_MAP_SIZE; }
-    int get_terrain_channels() const { return terrain_channels; }
-    int get_num_pois() const { return n_pois; }
-
-    void radio_render() const
-    {
-        for (int e = 0; e < num_envs; ++e)
-        {
-            if (!radio_logs[e].empty())
-                std::cout << radio_logs[e];
-        }
-        std::cout.flush();
+        return {rewards, terminated, truncated};
     }
 
 private:
-    float agent_spec(int agent_idx, int col) const
+    void process_agent_movement(int e, float *act_data)
     {
-        return agent_specs[static_cast<size_t>(agent_idx) * agent_spec_width + col];
+        // for environment e:
+        // Takes agent proposed movement direction and if the
+        // vector magnitude is over 1.0 it gets reduced to 1.0.
+        // Move the agent by its' speed multiplied by the tile speed
+        // multiplier of the tile it is standing on and the desired
+        // dy,dx vector then handle collisions with blocking tiles
+        // by treating the agent as a point collider that needs to
+        // get "ejected" to the edge of the tile +0.001 it was trying to enter
+        // update the current_tile part of this agent's agent state
     }
-
-    float poi_spec(int poi_idx, int col) const
+    void resolve_local_interactions(int e)
     {
-        return poi_specs[static_cast<size_t>(poi_idx) * poi_spec_width + col];
+        // for environment e:
+        // Get agent view range from current tile and the tile agent view range
+        // For all the POIs, if they are near this agent they become found
+        // If this agent is in their rescue list they get rescued
+
+        // For all tiles within view range, set their obs for this agent to
+        // true and if the global observation is false then accumulate the
+        // reward accordingly. Likewise with the agent rescue rewards.
     }
-
-    float altitude_at(const GameStateView &s, int y, int x) const
+    execute_radio(int e, const int *radio_act_data)
     {
-        const int idx = y * MAP_SIZE + x;
-        const int altitude_channel = terrain_channels - 1;
-        return s.terrain_altitude[altitude_channel * FLAT_MAP_SIZE + idx];
+        // for environment e:
+        // If an agent chose radio action 0, it is messaging itself and
+        // nothing happens. If it choses another action it is messaging
+        // one of the other agents. It will share it's current information
+        // updating it's x y in the other agent's tensor observation for
+        // other
     }
-
-    int terrain_id_at(int env_idx, int y, int x) const
-    {
-        const int idx = y * MAP_SIZE + x;
-        return terrain_ids[static_cast<size_t>(env_idx) * FLAT_MAP_SIZE + idx];
-    }
-
-    enum class MoveEval
-    {
-        BLOCKED,
-        ALLOW,
-        ALLOW_AND_STUCK
-    };
 
     MoveEval evaluate_move(const GameStateView &s, int env_idx, int agent_idx, int dy, int dx) const
     {

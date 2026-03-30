@@ -5,9 +5,6 @@ from gymnasium import spaces
 from hide_and_seek_engine.sar_loader import (
     SARConfig,
     load_sar_config,
-    PIL_AVAILABLE,
-    PYGAME_AVAILABLE,
-    PETTINGZOO_AVAILABLE,
 )
 import importlib
 
@@ -26,10 +23,6 @@ def build_terrain_tensor_from_png(
     num_envs: int,
     map_size: int = 32,
 ) -> np.ndarray:
-    if not PIL_AVAILABLE:
-        raise ImportError(
-            "Pillow is required for PNG map loading. Install with `pip install Pillow`."
-        )
 
     img = Image.open(map_png_path).convert("RGB")
     if img.size != (map_size, map_size):
@@ -60,167 +53,57 @@ def build_terrain_tensor_from_png(
 class SARBatchedGridEnv(gym.vector.VectorEnv):
     def __init__(
         self,
-        num_envs: int,
-        map_png: str,
-        tiles_json: str,
-        agents_json: str,
-        survivors_json: str,
-        map_size: int = 32,
-        device: str = "cpu",
-        seed: int = 42,
-        cooperative_rewards: bool = True,
-        reward_new_tile: float = 0.05,
-        reward_found: float = 2.0,
-        reward_saved: float = 20.0,
-        max_frames: int = 250,
+        num_envs,
+        map_png,
+        tiles_json,
+        agents_json,
+        survivors_json,
+        mode="centralized",
     ):
-        self.num_envs = int(num_envs)
-        self.map_size = int(map_size)
-        self.device = device
-        self.n_agents = 4
-        self._map_png = map_png
+        self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
+        self.num_envs = num_envs
+        self.map_area = self.config.width * self.config.height
 
-        self.config = load_sar_config(
-            tiles_json=tiles_json,
-            agents_json=agents_json,
-            survivors_json=survivors_json,
-            num_envs=self.num_envs,
-            map_size=self.map_size,
-        )
-        terrain_tensor = build_terrain_tensor_from_png(
-            map_png_path=map_png,
-            config=self.config,
-            num_envs=self.num_envs,
-            map_size=self.map_size,
-        )
-
-        self._tile_id_grid = np.argmax(terrain_tensor[0, :-1], axis=0).astype(np.int32)
-
-        if cpp_engine is None:
-            raise ImportError(
-                "Compiled extension `hide_and_seek_engine.cpp_engine` is not available. "
-                "Build and install the package (see README)."
+        # 1. Determine Tensor Dimensions based on Observation Mode
+        if mode == "centralized":
+            # Channels: tiles + 1(altitude) + 1(POI) + 1(Observed) + agents
+            self.channels = self.config.n_tiles + 1 + 1 + 1 + self.config.n_agents
+        else:
+            # Decentralized channels logic based on DecentralizedPartialObsStrides
+            self.channels = (
+                self.config.n_tiles + 1 + 1 + 1 + 1 + (self.config.n_agents - 1)
             )
 
+        self.stride = self.channels * self.map_area
+        self.tensor_size = self.num_envs * self.stride
+
+        # 2. Allocate pinned PyTorch tensor
+        self.state_tensor = torch.zeros(
+            self.tensor_size, dtype=torch.float32, pin_memory=True
+        )
+
+        # 3. Instantiate C++ Engine
         self.env = cpp_engine.BatchedEnvironment(
             self.num_envs,
-            seed,
-            terrain_tensor,
-            self.config.agent_specs,
-            self.config.poi_specs,
-            self.config.initial_agent_positions,
-            self.config.initial_poi_positions,
-            self.config.tile_supports_walking,
-            self.config.tile_supports_aquatic,
-            self.config.tile_supports_flying,
-            self.config.tile_blocking,
-            cooperative_rewards,
-            reward_new_tile,
-            reward_found,
-            reward_saved,
-            max_frames,
-        )
-
-        self.terrain_channels = int(self.env.get_terrain_channels())
-        self.n_pois = int(self.env.get_num_pois())
-        self.stride = int(self.env.get_stride())
-        self.flat_map_size = int(self.env.get_flat_map_size())
-
-        self._build_offsets()
-
-        local_channels = self.terrain_channels + 1 + 1 + self.n_agents
-        global_channels = self.terrain_channels + 1 + 1 + self.n_agents
-        self.actor_internal_dim = 6
-        self.critic_internal_dim = self.n_agents * 6 + self.n_pois * 4
-
-        self.single_observation_space = spaces.Dict(
-            {
-                "spatial": spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(self.n_agents, local_channels, self.map_size, self.map_size),
-                    dtype=np.float32,
-                ),
-                "internal": spaces.Box(
-                    low=-np.inf,
-                    high=np.inf,
-                    shape=(self.n_agents, self.actor_internal_dim),
-                    dtype=np.float32,
-                ),
-            }
-        )
-        self.observation_space = spaces.Dict(
-            {
-                "spatial": spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(
-                        self.num_envs,
-                        self.n_agents,
-                        local_channels,
-                        self.map_size,
-                        self.map_size,
-                    ),
-                    dtype=np.float32,
-                ),
-                "internal": spaces.Box(
-                    low=-np.inf,
-                    high=np.inf,
-                    shape=(self.num_envs, self.n_agents, self.actor_internal_dim),
-                    dtype=np.float32,
-                ),
-            }
-        )
-
-        self.single_state_space = spaces.Dict(
-            {
-                "spatial": spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(global_channels, self.map_size, self.map_size),
-                    dtype=np.float32,
-                ),
-                "internal": spaces.Box(
-                    low=-np.inf,
-                    high=np.inf,
-                    shape=(self.critic_internal_dim,),
-                    dtype=np.float32,
-                ),
-            }
-        )
-
-        self.single_action_space = spaces.Dict(
-            {
-                "move": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
-                "radio": spaces.Discrete(4),
-            }
-        )
-        self.action_space = spaces.Box(
-            low=-1.0,
-            high=1.0,
-            shape=(self.num_envs, self.n_agents, 3),
-            dtype=np.float32,
-        )
-
-        super().__init__()
-
-        ptr, size_bytes = self.env.get_memory_view()
-        float_count = size_bytes // 4
-        ctypes_array = (ctypes.c_float * float_count).from_address(ptr)
-        np_array = np.ctypeslib.as_array(ctypes_array)
-        self._raw_tensor = torch.from_numpy(np_array)
-        self.state_tensor = self._raw_tensor.view(self.num_envs, self.stride)
-
-        self._pygame_screen = None
-        self._pygame_tile_px = 20
-        self._last_known_agent = np.full(
-            (self.num_envs, self.n_agents, self.n_agents, 2), -1, dtype=np.int32
-        )
-        self._known_survivor = np.zeros(
-            (self.num_envs, self.n_agents, self.n_pois), dtype=bool
-        )
-        self._last_known_survivor = np.full(
-            (self.num_envs, self.n_agents, self.n_pois, 2), -1, dtype=np.int32
+            42,  # Seed
+            self.config.width,
+            self.config.height,
+            self.config.supports_walking,
+            self.config.supports_aquatic,
+            self.config.supports_flying,
+            self.config.is_blocking,
+            self.config.type_map,
+            self.config.altitude_map,
+            self.config.agent_speed_map,
+            self.config.saveable_map,
+            self.config.initial_agent_pos,
+            self.config.initial_poi_pos,
+            self.state_tensor.data_ptr(),  # Pass raw memory address
+            True,  # Cooperative rewards
+            0.05,  # reward_new_tile
+            2.0,  # reward_found
+            20.0,  # reward_saved
+            250,  # max_frames
         )
 
     def _build_offsets(self):

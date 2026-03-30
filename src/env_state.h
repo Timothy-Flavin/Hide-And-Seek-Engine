@@ -158,7 +158,8 @@ struct alignas(16) AgentState
     float deployment_remaining;
     int type;
     uint8_t stuck;
-    // 3 bytes implicit padding
+    uint16_t current_tile;
+    // 1 bytes implicit padding
 };
 
 struct alignas(16) POIState
@@ -172,12 +173,36 @@ struct alignas(16) POIState
     // 1 byte implicit padding
 };
 
+// What Agent A knows about Agent B
+struct alignas(16) AgentKnowledge
+{
+    float x;
+    float y;
+    uint8_t has_contact; // 0 = never seen/heard from, 1 = valid known location
+    // 7 bytes implicit padding
+};
+
+// What Agent A knows about POI (Survivor) K
+struct alignas(16) POIKnowledge
+{
+    float x;
+    float y;
+    uint8_t knows_found;
+    uint8_t knows_saved;
+    // 6 bytes implicit padding
+};
+
 // 2. The View Struct: Maps to the contiguous flat memory
 struct EnvStateView
 {
     Tile *grid;
     AgentState *agents;
     POIState *pois;
+    // --- NEW BELIEF MATRICES ---
+    // Size: n_agents * n_agents. Index via [viewer_id * n_agents + target_id]
+    AgentKnowledge *agent_knowledge;
+    // Size: n_agents * n_pois. Index via [viewer_id * n_pois + poi_id]
+    POIKnowledge *poi_knowledge;
     float *agent_speeds; // Size: n_agents * n_tile_types
     int *current_frame;
     int *undiscovered_remaining;
@@ -205,12 +230,17 @@ public:
         size_t agent_bytes = n_agents * sizeof(AgentState);
         size_t poi_bytes = n_pois * sizeof(POIState);
         size_t speed_bytes = (n_agents * n_tile_types) * sizeof(float);
+
+        size_t agent_knowledge_bytes = (n_agents * n_agents) * sizeof(AgentKnowledge);
+        size_t poi_knowledge_bytes = (n_agents * n_pois) * sizeof(POIKnowledge);
+
         size_t counter_bytes = 2 * sizeof(int);
 
         // Sum the exact required bytes with zero arbitrary internal padding.
         // Because Tile (8), AgentState (28), POIState (16), float (4), and int (4)
         // are all naturally aligned to at least 4 bytes, they will pack perfectly safely.
-        size_t raw_stride = grid_bytes + agent_bytes + poi_bytes + speed_bytes + counter_bytes;
+        size_t raw_stride = grid_bytes + agent_bytes + poi_bytes + speed_bytes +
+                            agent_knowledge_bytes + poi_knowledge_bytes + counter_bytes;
 
         // Align ONLY the total environment boundary to a 64-byte Cache Line.
         // This prevents Thread A (Environment 0) and Thread B (Environment 1)
@@ -241,6 +271,12 @@ public:
 
         view.agent_speeds = reinterpret_cast<float *>(base + offset);
         offset += (n_agents * n_tile_types) * sizeof(float);
+
+        view.agent_knowledge = reinterpret_cast<AgentKnowledge *>(base + offset);
+        offset += (n_agents * n_agents) * sizeof(AgentKnowledge);
+
+        view.poi_knowledge = reinterpret_cast<POIKnowledge *>(base + offset);
+        offset += (n_agents * n_pois) * sizeof(POIKnowledge);
 
         view.current_frame = reinterpret_cast<int *>(base + offset);
         offset += sizeof(int);
