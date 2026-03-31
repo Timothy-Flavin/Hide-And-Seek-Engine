@@ -114,9 +114,9 @@ Per agent action:
       - `0` = no transmit
       - `1,2,3` = transmit channel (merged into shared local knowledge)
 
-Tensor shape for stepping batched env:
+Tensor shape for partial obs mode stepping batched env:
 
-  - `[num_envs, 4, 3]` (`dy`, `dx`, `radio_channel`)
+  - `[num_envs, n_agents, 3]` (`dy`, `dx`, `radio_channel`)
 
 ## Rendering
 

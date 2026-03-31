@@ -15,11 +15,9 @@
 #include <utility>
 #include <vector>
 #include <cstdint>
-#inlcude "env_state.h"
+#include "env_state.h"
 
 #include <omp.h>
-
-#include "gravity.h"
 
 #ifndef ssize_t
 #ifdef _WIN32
@@ -35,23 +33,289 @@ private:
     std::unique_ptr<EnvironmentArena> arena;
     float *torch_tensor_base = nullptr;
     float *torch_state_tensor_base = nullptr;
+    Mode mode;
 
     // Stride helper objects (conditionally instantiated)
     std::unique_ptr<DecentralizedPartialObsStrides> decentral_obs_strides;
     std::unique_ptr<CentralizedPartialObsStrides> central_obs_strides;
     std::unique_ptr<CentralizedStateStrides> central_state_strides;
 
-    // Persisted map configuration for reset_env
     int width;
     int height;
-    std::vector<bool> supports_walking;
-    std::vector<bool> supports_aquatic;
-    std::vector<bool> supports_flying;
-    std::vector<bool> is_blocking;
-    std::vector<int> type_map;
-    std::vector<float> altitude_map;
-    std::vector<float> agent_speed_map;
-    std::vector<bool> saveable_map;
+    std::vector<float> individual_rewards;
+    std::vector<float> reward;
+    std::vector<EnvStateView> env_views;
+
+    void process_agent_movement(int e, const float *act_data)
+    {
+        // for environment e:
+        // Takes agent proposed movement direction and if the
+        // vector magnitude is over 1.0 it gets reduced to 1.0.
+        // Move the agent by its' speed multiplied by the tile speed
+        // multiplier of the tile it is standing on and the desired
+        // dy,dx vector then handle collisions with blocking tiles
+        // by treating the agent as a point collider that needs to
+        // get "ejected" to the edge of the tile +0.001 it was trying to enter
+        // update the current_tile part of this agent's agent state
+        EnvStateView view = env_views[e];
+
+        for (int a = 0; a < n_agents; ++a)
+        {
+            // 1. Extract and clamp movement vector magnitude
+            float dy = act_data[e * n_agents * 2 + a * 2];
+            float dx = act_data[e * n_agents * 2 + a * 2 + 1];
+
+            float sqmag = dy * dy + dx * dx;
+            if (sqmag > 1.0f)
+            {
+                float invmag = 1.0f / std::sqrt(sqmag);
+                dy *= invmag;
+                dx *= invmag;
+            }
+
+            AgentState &agent = view.agents[a];
+
+            // Get current integer coordinates safely
+            int cy = std::max(0, std::min(height - 1, static_cast<int>(agent.y)));
+            int cx = std::max(0, std::min(width - 1, static_cast<int>(agent.x)));
+
+            uint32_t current_tile_type = view.grid[cy * width + cx].get_type();
+
+            // 2. Calculate requested destination
+            float speed = view.agent_speeds[a * n_tiles + current_tile_type];
+            float ny = agent.y + dy * speed;
+            float nx = agent.x + dx * speed;
+
+            // Constrain to map boundaries first
+            ny = std::max(0.0f, std::min(static_cast<float>(height) - 0.001f, ny));
+            nx = std::max(0.0f, std::min(static_cast<float>(width) - 0.001f, nx));
+
+            // 3. Collision detection against blocking tiles
+            int target_y = static_cast<int>(ny);
+            int target_x = static_cast<int>(nx);
+
+            Tile &target_tile = view.grid[target_y * width + target_x];
+
+            // If the target tile is blocking, eject the agent to the edge of the tile
+            if (target_tile.is_blocking())
+            {
+                // Simple axis-aligned ejection: determine which axis crossed the boundary
+                if (target_y != cy)
+                {
+                    ny = (dy > 0) ? target_y - 0.001f : target_y + 1.001f;
+                }
+                if (target_x != cx)
+                {
+                    nx = (dx > 0) ? target_x - 0.001f : target_x + 1.001f;
+                }
+            }
+
+            // 4. Update agent state
+            agent.y = ny;
+            agent.x = nx;
+
+            int final_y = static_cast<int>(ny);
+            int final_x = static_cast<int>(nx);
+            agent.current_tile = static_cast<uint16_t>(final_y * width + final_x);
+        }
+    }
+
+    void resolve_local_interactions(int e)
+    {
+        // for environment e:
+        // Get agent view range from current tile and the tile agent view range
+        // For all the POIs, if they are near this agent they become found
+        // If this agent is in their rescue list they get rescued
+        // global rescued state always set, local information set only if
+        // mode decentralized.
+
+        // For all tiles within view range, set their obs for this agent to
+        // true and if the global observation is false then accumulate the
+        // reward accordingly. Likewise with the agent rescue rewards.
+        EnvStateView view = env_views[e];
+        const float RESCUE_DIST_SQ = 1.0f * 1.0f; // Must be within 1 unit to rescue
+
+        for (int a = 0; a < n_agents; ++a)
+        {
+            AgentState &agent = view.agents[a];
+            float vr = agent.view_range;
+            float vr_sq = vr * vr;
+
+            // 1. Tile Discoveries
+            int min_y = std::max(0, static_cast<int>(agent.y - vr));
+            int max_y = std::min(height - 1, static_cast<int>(agent.y + vr));
+            int min_x = std::max(0, static_cast<int>(agent.x - vr));
+            int max_x = std::min(width - 1, static_cast<int>(agent.x + vr));
+
+            for (int y = min_y; y <= max_y; ++y)
+            {
+                for (int x = min_x; x <= max_x; ++x)
+                {
+                    float dist_sq = (agent.y - y) * (agent.y - y) + (agent.x - x) * (agent.x - x);
+                    if (dist_sq <= vr_sq)
+                    {
+                        int t_idx = y * width + x;
+                        Tile &t = view.grid[t_idx];
+
+                        // Global discovery reward
+                        if (!t.is_global_observed())
+                        {
+                            t.set_global_observed();
+                            (*view.undiscovered_remaining)--;
+                            // Add reward (assume 'rewards' is an accessible class member or passed ref)
+                            individual_rewards[e * n_agents + a] += reward_new_tile;
+                        }
+
+                        // Local observation tracking
+                        if (mode == Mode::DECENTRALIZED)
+                        {
+                            t.set_agent_seen(a);
+                        }
+                    }
+                }
+            }
+
+            // 2. POI (Survivor) Discoveries & Rescues
+            for (int p = 0; p < n_pois; ++p)
+            {
+                POIState &poi = view.pois[p];
+                if (poi.saved)
+                    continue; // Skip already saved
+
+                float dist_sq = (agent.y - poi.y) * (agent.y - poi.y) + (agent.x - poi.x) * (agent.x - poi.x);
+
+                // If POI is seen
+                if (dist_sq <= vr_sq)
+                {
+                    if (!poi.found)
+                    {
+                        poi.found = 1;
+                        individual_rewards[e * n_agents + a] += reward_found;
+                    }
+
+                    // Attempt Rescue
+                    if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
+                    {
+                        poi.saved = 1;
+                        individual_rewards[e * n_agents + a] += reward_saved;
+                    }
+
+                    // Update Local Beliefs
+                    if (mode == Mode::DECENTRALIZED)
+                    {
+                        POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
+                        pk.x = poi.x;
+                        pk.y = poi.y;
+                        pk.knows_found = poi.found;
+                        pk.knows_saved = poi.saved;
+                    }
+                }
+            }
+
+            // Maintain self-knowledge
+            if (mode == Mode::DECENTRALIZED)
+            {
+                AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a];
+                ak.x = agent.y; // Or agent.x depending on your layout (consistency is key)
+                ak.y = agent.x;
+                ak.has_contact = 1;
+            }
+        }
+    }
+
+    std::string execute_radio(int e, const int *radio_act_data)
+    {
+        // for environment e:
+        // If an agent chose radio action 0, it is messaging itself and
+        // nothing happens. If it choses another action it is messaging
+        // one of the other agents. It will share it's current information
+        // updating it's x y in the other agent's tensor observation
+        if (mode != Mode::DECENTRALIZED)
+            return ""; // No-op for global and no_obs modes
+
+        EnvStateView view = env_views[e];
+        std::string log = "";
+
+        for (int a = 0; a < n_agents; ++a)
+        {
+            int target_agent = radio_act_data[e * n_agents + a];
+
+            // Assume action maps directly to agent ID (0 = agent 0, 1 = agent 1...)
+            // If the environment defines a specific "0 = none, 1 = agent 0" shift, adjust target_agent accordingly.
+            if (target_agent == a || target_agent < 0 || target_agent >= n_agents)
+                continue;
+
+            // Agent 'a' sends info to 'target_agent'
+
+            // 1. Share 'a' location with 'target_agent'
+            AgentKnowledge &target_ak = view.agent_knowledge[target_agent * n_agents + a];
+            target_ak.x = view.agents[a].x;
+            target_ak.y = view.agents[a].y;
+            target_ak.has_contact = 1;
+
+            // 2. Share POI knowledge
+            for (int p = 0; p < n_pois; ++p)
+            {
+                POIKnowledge &sender_pk = view.poi_knowledge[a * n_pois + p];
+                POIKnowledge &receiver_pk = view.poi_knowledge[target_agent * n_pois + p];
+
+                // If sender knows more, update receiver
+                if (sender_pk.knows_found && !receiver_pk.knows_found)
+                {
+                    receiver_pk.x = sender_pk.x;
+                    receiver_pk.y = sender_pk.y;
+                    receiver_pk.knows_found = 1;
+                }
+                if (sender_pk.knows_saved)
+                {
+                    receiver_pk.knows_saved = 1;
+                }
+            }
+            // 3. Share Tile Knowledge (Merge maps)
+            for (int i = 0; i < map_size; ++i)
+            {
+                Tile &t = view.grid[i];
+                if (t.has_agent_seen(a))
+                {
+                    t.set_agent_seen(target_agent);
+                }
+            }
+            log += "Agent " + std::to_string(a) + " -> " + std::to_string(target_agent) + "; ";
+        }
+        return log;
+    }
+
+    void update_battery_and_counters(e)
+    {
+        EnvStateView view = env_views[e];
+        for (int a = 0; a < n_agents; ++a)
+        {
+            // If an agent is past it's battery capacity its' deployement ends
+            if (view.agents[a].deployement > 0.0)
+            {
+                view.agents[a].deployement -= delta_time;
+                if (view.agents[a].deployement < 0.0)
+                {
+                    --view.agents_left;
+                }
+            }
+        }
+        int poi_left = 0;
+        for (int p = 0; p < n_pois; ++p)
+        {
+            if (!view.pois[p].saved)
+                ++poi_left;
+        }
+        view.poi_left = poi_left;
+    }
+
+    void fill_torch_obs(e)
+    {
+    }
+
+    void fill_torch_state(e)
+    {
+    }
 
 public:
     // Hyper Parameters sent from python
@@ -63,6 +327,7 @@ public:
     float reward_new_tile;
     float reward_found;
     float reward_saved;
+    float delta_time = 1.0f;
     int max_frames;
     int num_envs;
     int map_size;
@@ -86,20 +351,18 @@ public:
         std::vector<bool> supports_fly,
         std::vector<bool> is_block,
         std::vector<int> t_map,               // width*height int for tile types
-        std::vector<float> alt_map,           // width*height altitudes
-        std::vector<float> a_speed_map,       // n_agents * n_tile_types speed of each agent on each tile
-        std::vector<bool> save_map,           // n_poi * n_agents can this poi be saved by this agent
+        std::vector<bool> saveable_rules,     // n_poi * n_agents can this poi be saved by this agent
         std::vector<float> initial_agent_pos, // n_agent * 2 x y start locs
         std::vector<float> initial_poi_pos,   // n_poi * 2 x y start locs
         uintptr_t tensor_ptr,                 // PyTorch pinned tensor pointer mapped via data_ptr() (Observations)
-        std::string mode = "decentralized",   // "centralized" or "decentralized"
         bool requires_state = false,          // Should we allocate the true state tensor?
         uintptr_t state_tensor_ptr = 0,       // PyTorch pinned tensor pointer mapped via data_ptr() (Global State)
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
         float reward_found_val = 2.0f,
         float reward_saved_val = 20.0f,
-        int max_frames_val = 250)
+        int max_frames_val = 250,
+        int mode_value = 0)
         : num_envs(n_envs),
           seed(sim_seed),
           width(w),
@@ -109,9 +372,7 @@ public:
           supports_flying(std::move(supports_fly)),
           is_blocking(std::move(is_block)),
           type_map(std::move(t_map)),
-          altitude_map(std::move(alt_map)),
-          agent_speed_map(std::move(a_speed_map)),
-          saveable_map(std::move(save_map)),
+          saveable_rules(std::move(save_map)),
           init_agent_positions(std::move(initial_agent_pos)),
           init_poi_positions(std::move(initial_poi_pos)),
           cooperative_rewards(coop_rewards),
@@ -119,8 +380,13 @@ public:
           reward_found(reward_found_val),
           reward_saved(reward_saved_val),
           max_frames(max_frames_val),
-          map_size(w * h)
+          map_size(w * h),
+          mode(static_cast<Mode>(mode_value)
     {
+        if (mode_value < 0 || mode_value > 2)
+        {
+            throw(std::invalid_argument("mode value < 0 or > 2 cannot be bound into Mode enum"));
+        }
         // 1. Dynamic bounds tracking
         n_tiles = supports_walking.size();
         n_agents = init_agent_positions.size() / 2;
@@ -140,10 +406,19 @@ public:
         }
 
         // 3. Allocate cache-aligned contiguous block memory
-        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles);
+        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles, mode);
 
         // 4. Bind the required tensor stride objects based on configuration
-        bind_state(mode, requires_state, state_tensor_ptr);
+        bind_state(mode, requires_state, state_tensor_ptr, tensor_ptr);
+
+        // 2. Pre-allocate the vector to prevent reallocations
+        env_views.reserve(num_envs);
+        // 3. Pre-cache all the views
+        for (int e = 0; e < num_envs; ++e)
+        {
+            // get_env_view returns by value, push_back copies that 48-byte struct into the vector safely
+            env_views.push_back(arena->get_env_view(e));
+        }
 
         // 5. Fill the initial game state structure
         for (int env_idx = 0; env_idx < num_envs; ++env_idx)
@@ -152,15 +427,17 @@ public:
         }
     }
 
-    void bind_state(const std::string &mode, bool requires_state, uintptr_t state_tensor_ptr)
+    void bind_state(const std::string &mode, bool requires_state, uintptr_t state_tensor_ptr, uintptr_t tensor_ptr)
     {
-        if (mode == "centralized")
+        if (mode == Mode::CENTRALIZED)
         {
             central_obs_strides = std::make_unique<CentralizedPartialObsStrides>(width, height, n_tiles, n_agents);
+            torch_spatial_tensor_base = reinterpret_cast<float *>(tensor_ptr)
         }
-        else // default to decentralized
+        else if (mode == Mode::DECENTRALIZED) // default to decentralized
         {
             decentral_obs_strides = std::make_unique<DecentralizedPartialObsStrides>(width, height, n_tiles, n_agents);
+            torch_spatial_tensor_base = reinterpret_cast<float *>(tensor_ptr)
         }
 
         if (requires_state)
@@ -172,7 +449,7 @@ public:
 
     void reset_env(int env_idx)
     {
-        EnvStateView view = arena->get_env_view(env_idx);
+        EnvStateView view = env_views[env_idx];
 
         // A. Env Counters
         *view.current_frame = 0;
@@ -199,14 +476,14 @@ public:
             view.agents[a].x = init_agent_positions[a * 2 + 1];
             view.agents[a].battery = 100.0f;
             view.agents[a].view_range = 5.0f;
-            view.agents[a].deployment_remaining = 0.0f;
+            view.agents[a].deployment_remaining = view.agents[a].battery;
             view.agents[a].type = a;
             view.agents[a].stuck = 0;
 
             // Load specialized speeds
             for (int t = 0; t < n_tiles; ++t)
             {
-                view.agent_speeds[a * n_tiles + t] = agent_speed_map[a * n_tiles + t];
+                view.agent_speeds[a * n_agents + t] = agent_speed_map[a * n_tiles + t];
             }
         }
 
@@ -230,11 +507,13 @@ public:
             }
             view.pois[p].savable_by_mask = savable_mask;
         }
+
+        view.poi_left = n_pois;
+        view.agents_left = n_agents;
     }
 
     void reset()
     {
-        env_terminated.assign(num_envs, false);
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
@@ -244,6 +523,8 @@ public:
 
     void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
+        reward = 0;
+        rewards.fill(0);
         // action space is box2d[dx, dy], discrete(num radio choices)
         if (actions_array.ndim() != 2 && actions_array.ndim() != 3)
             throw std::invalid_argument("actions must have shape [E, A*3] or [E, A, 3]");
@@ -272,381 +553,25 @@ public:
             resolve_local_interactions(e);
             // Resolve or at least record which agents have shared
             // their internal states with other agents
-            radio_logs[e] = execute_radio(s, radio_act_data);
+            radio_logs[e] = execute_radio(e, radio_act_data);
 
-            const bool all_saved = all_pois_saved(s);
+            update_battery_and_counters(e);
+
+            const bool all_saved = *(env_views[e].poi_left);
+            const bool all_out_of_battery = *(env_views[e].agents_left);
             const bool timeout = current_frames[e] >= max_frames;
-            terminated(e) = all_saved || timeout;
-            env_terminated[e] = terminated(e);
+            env_terminated[e] = all_saved || all_out_of_battery;
+            env_truncated[e] = timeout;
 
             // If we are using this environment for machine learning
-            // then fill the torch buffer accordingly
+            // then fill the torch buffers accordingly
             if (return_obs)
+                fill_torch_obs(e);
+            if (requires_state)
                 fill_torch_state(e);
         }
 
-        return {rewards, terminated, truncated};
-    }
-
-private:
-    void process_agent_movement(int e, float *act_data)
-    {
-        // for environment e:
-        // Takes agent proposed movement direction and if the
-        // vector magnitude is over 1.0 it gets reduced to 1.0.
-        // Move the agent by its' speed multiplied by the tile speed
-        // multiplier of the tile it is standing on and the desired
-        // dy,dx vector then handle collisions with blocking tiles
-        // by treating the agent as a point collider that needs to
-        // get "ejected" to the edge of the tile +0.001 it was trying to enter
-        // update the current_tile part of this agent's agent state
-    }
-    void resolve_local_interactions(int e)
-    {
-        // for environment e:
-        // Get agent view range from current tile and the tile agent view range
-        // For all the POIs, if they are near this agent they become found
-        // If this agent is in their rescue list they get rescued
-
-        // For all tiles within view range, set their obs for this agent to
-        // true and if the global observation is false then accumulate the
-        // reward accordingly. Likewise with the agent rescue rewards.
-    }
-    execute_radio(int e, const int *radio_act_data)
-    {
-        // for environment e:
-        // If an agent chose radio action 0, it is messaging itself and
-        // nothing happens. If it choses another action it is messaging
-        // one of the other agents. It will share it's current information
-        // updating it's x y in the other agent's tensor observation for
-        // other
-    }
-
-    MoveEval evaluate_move(const GameStateView &s, int env_idx, int agent_idx, int dy, int dx) const
-    {
-        const int cy = std::clamp(static_cast<int>(s.agent_positions[agent_idx * 2]), 0, MAP_SIZE - 1);
-        const int cx = std::clamp(static_cast<int>(s.agent_positions[agent_idx * 2 + 1]), 0, MAP_SIZE - 1);
-        const int ny = cy + dy;
-        const int nx = cx + dx;
-        if (ny < 0 || ny >= MAP_SIZE || nx < 0 || nx >= MAP_SIZE)
-            return MoveEval::BLOCKED;
-
-        const int tile_id = terrain_id_at(env_idx, ny, nx);
-        const bool can_fly = agent_spec(agent_idx, 0) > 0.5f;
-        const bool can_aquatic = agent_spec(agent_idx, 1) > 0.5f;
-        const bool can_walk = agent_spec(agent_idx, 2) > 0.5f;
-
-        const bool tile_walk = tile_supports_walking[tile_id] > 0;
-        const bool tile_aq = tile_supports_aquatic[tile_id] > 0;
-        const bool tile_fl = tile_supports_flying[tile_id] > 0;
-        const bool has_supported_mode =
-            (tile_walk && can_walk) ||
-            (tile_aq && can_aquatic) ||
-            (tile_fl && can_fly);
-
-        const float alt = altitude_at(s, ny, nx);
-        const float alt_min = agent_spec(agent_idx, 3);
-        const float alt_max = agent_spec(agent_idx, 4);
-        if (alt < alt_min || alt > alt_max)
-            return MoveEval::BLOCKED;
-
-        if (has_supported_mode)
-            return MoveEval::ALLOW;
-
-        return tile_blocking[tile_id] > 0 ? MoveEval::BLOCKED : MoveEval::ALLOW_AND_STUCK;
-    }
-
-    bool is_move_legal(const GameStateView &s, int env_idx, int agent_idx, int dy, int dx) const
-    {
-        return evaluate_move(s, env_idx, agent_idx, dy, dx) != MoveEval::BLOCKED;
-    }
-
-    void process_agent_movement(
-        GameStateView &s,
-        int env_idx,
-        const float *act_data,
-        int action_ndim,
-        py::detail::unchecked_mutable_reference<float, 2> &rewards,
-        std::array<int, N_AGENTS> &radio_actions)
-    {
-        for (int i = 0; i < N_AGENTS; ++i)
-        {
-            if (s.agent_deployment_remaining[i] > 0.0f)
-            {
-                s.agent_deployment_remaining[i] = std::max(0.0f, s.agent_deployment_remaining[i] - 1.0f);
-                continue;
-            }
-            if (s.agent_stuck[i] > 0.5f)
-                continue;
-
-            const size_t base = action_ndim == 2
-                                    ? static_cast<size_t>(env_idx) * (N_AGENTS * 3) + i * 3
-                                    : static_cast<size_t>(env_idx) * N_AGENTS * 3 + i * 3;
-            float dy = act_data[base];
-            float dx = act_data[base + 1];
-            const float radio = act_data[base + 2];
-
-            radio_actions[i] = std::clamp(static_cast<int>(std::round(radio)), 0, 3);
-
-            const float len_sq = dy * dy + dx * dx;
-            if (len_sq > 1e-8f)
-            {
-                const float inv_len = 1.0f / std::sqrt(len_sq);
-                dy *= inv_len;
-                dx *= inv_len;
-            }
-
-            const int cy = std::clamp(static_cast<int>(s.agent_positions[i * 2]), 0, MAP_SIZE - 1);
-            const int cx = std::clamp(static_cast<int>(s.agent_positions[i * 2 + 1]), 0, MAP_SIZE - 1);
-            const int ny = std::clamp(static_cast<int>(std::round(static_cast<float>(cy) + dy)), 0, MAP_SIZE - 1);
-            const int nx = std::clamp(static_cast<int>(std::round(static_cast<float>(cx) + dx)), 0, MAP_SIZE - 1);
-
-            const MoveEval move_eval = evaluate_move(s, env_idx, i, ny - cy, nx - cx);
-            if (move_eval == MoveEval::BLOCKED)
-                continue;
-
-            const int tile_id = terrain_id_at(env_idx, ny, nx);
-            const float speed_multiplier = std::max(0.0f, agent_spec(i, 10 + tile_id));
-            const float speed = std::max(0.0f, agent_spec(i, 5) * speed_multiplier);
-            s.agent_positions[i * 2] = std::clamp(s.agent_positions[i * 2] + dy * speed, 0.0f, MAP_MAX);
-            s.agent_positions[i * 2 + 1] = std::clamp(s.agent_positions[i * 2 + 1] + dx * speed, 0.0f, MAP_MAX);
-
-            if (move_eval == MoveEval::ALLOW_AND_STUCK)
-                s.agent_stuck[i] = 1.0f;
-
-            s.agent_battery[i] = std::max(0.0f, s.agent_battery[i] - 1.0f);
-            if (s.agent_battery[i] <= 0.0f)
-                s.agent_stuck[i] = 1.0f;
-
-            rewards(env_idx, i) += 0.0f;
-        }
-    }
-
-    void resolve_rescues(GameStateView &s)
-    {
-        for (int stuck_idx = 0; stuck_idx < N_AGENTS; ++stuck_idx)
-        {
-            if (s.agent_stuck[stuck_idx] < 0.5f)
-                continue;
-            const int sy = static_cast<int>(s.agent_positions[stuck_idx * 2]);
-            const int sx = static_cast<int>(s.agent_positions[stuck_idx * 2 + 1]);
-
-            for (int rescuer = 0; rescuer < N_AGENTS; ++rescuer)
-            {
-                if (rescuer == stuck_idx)
-                    continue;
-                if (s.agent_stuck[rescuer] > 0.5f || s.agent_battery[rescuer] <= 0.0f)
-                    continue;
-
-                const int ry = static_cast<int>(s.agent_positions[rescuer * 2]);
-                const int rx = static_cast<int>(s.agent_positions[rescuer * 2 + 1]);
-                if (ry == sy && rx == sx)
-                {
-                    s.agent_stuck[stuck_idx] = 0.0f;
-                    s.agent_battery[stuck_idx] = std::max(1.0f, agent_spec(stuck_idx, 6) * 0.25f);
-                    break;
-                }
-            }
-        }
-    }
-
-    std::pair<int, int> update_pois_and_interactions(GameStateView &s, int env_idx)
-    {
-        std::uniform_int_distribution<int> dir_dist(0, 4);
-        int newly_found = 0;
-        int newly_saved = 0;
-
-        for (int p = 0; p < n_pois; ++p)
-        {
-            if (s.poi_saved[p] > 0.5f)
-                continue;
-
-            if (poi_spec(p, 0) > 0.5f)
-            {
-                const int dir = dir_dist(rngs[env_idx]);
-                int dy = 0;
-                int dx = 0;
-                if (dir == 1)
-                    dy = -1;
-                else if (dir == 2)
-                    dy = 1;
-                else if (dir == 3)
-                    dx = -1;
-                else if (dir == 4)
-                    dx = 1;
-
-                const float py = s.poi_positions[p * 2];
-                const float px = s.poi_positions[p * 2 + 1];
-                s.poi_positions[p * 2] = std::clamp(py + static_cast<float>(dy), 0.0f, MAP_MAX);
-                s.poi_positions[p * 2 + 1] = std::clamp(px + static_cast<float>(dx), 0.0f, MAP_MAX);
-            }
-
-            const int py = static_cast<int>(s.poi_positions[p * 2]);
-            const int px = static_cast<int>(s.poi_positions[p * 2 + 1]);
-            const int allowed_mask = static_cast<int>(poi_spec(p, 1));
-
-            for (int i = 0; i < N_AGENTS; ++i)
-            {
-                const int ay = static_cast<int>(s.agent_positions[i * 2]);
-                const int ax = static_cast<int>(s.agent_positions[i * 2 + 1]);
-                if (ay != py || ax != px)
-                    continue;
-
-                const int cls = static_cast<int>(agent_spec(i, 9));
-                const bool can_save = (allowed_mask & (1 << cls)) != 0;
-
-                if (can_save)
-                {
-                    if (s.poi_saved[p] < 0.5f)
-                    {
-                        s.poi_saved[p] = 1.0f;
-                        newly_saved++;
-                    }
-                    s.poi_found[p] = 1.0f;
-                }
-                else if (s.poi_found[p] < 0.5f)
-                {
-                    s.poi_found[p] = 1.0f;
-                    newly_found++;
-                }
-            }
-        }
-
-        return {newly_found, newly_saved};
-    }
-
-    int update_local_observations(GameStateView &s, int env_idx, std::array<float, N_AGENTS> *new_tile_credit)
-    {
-        int new_tiles = 0;
-
-        for (int i = 0; i < N_AGENTS; ++i)
-        {
-            const int ay = std::clamp(static_cast<int>(s.agent_positions[i * 2]), 0, MAP_SIZE - 1);
-            const int ax = std::clamp(static_cast<int>(s.agent_positions[i * 2 + 1]), 0, MAP_SIZE - 1);
-            const float alt = altitude_at(s, ay, ax);
-            const int vr = std::max(1, static_cast<int>(std::round(agent_spec(i, 6) * std::max(0.1f, alt))));
-            s.agent_view_range[i] = static_cast<float>(vr);
-
-            const int ys = std::max(0, ay - vr);
-            const int ye = std::min(MAP_SIZE, ay + vr + 1);
-            const int xs = std::max(0, ax - vr);
-            const int xe = std::min(MAP_SIZE, ax + vr + 1);
-
-            float *local_mask = s.local_obs_mask + i * FLAT_MAP_SIZE;
-            for (int y = ys; y < ye; ++y)
-            {
-                const int row = y * MAP_SIZE;
-                for (int x = xs; x < xe; ++x)
-                {
-                    const int idx = row + x;
-                    local_mask[idx] = 1.0f;
-                    if (s.global_obs_mask[idx] < 0.5f)
-                    {
-                        s.global_obs_mask[idx] = 1.0f;
-                        undiscovered_remaining[env_idx]--;
-                        new_tiles++;
-                        if (new_tile_credit != nullptr)
-                            (*new_tile_credit)[i] += 1.0f;
-                    }
-                }
-            }
-
-            float *my_local_agents = s.local_agent_layers + i * (N_AGENTS * FLAT_MAP_SIZE);
-            for (int j = 0; j < N_AGENTS; ++j)
-            {
-                float *channel = my_local_agents + j * FLAT_MAP_SIZE;
-                const int jy = std::clamp(static_cast<int>(s.agent_positions[j * 2]), 0, MAP_SIZE - 1);
-                const int jx = std::clamp(static_cast<int>(s.agent_positions[j * 2 + 1]), 0, MAP_SIZE - 1);
-                if (std::abs(jy - ay) <= vr && std::abs(jx - ax) <= vr)
-                    channel[jy * MAP_SIZE + jx] = 1.0f;
-            }
-
-            float *my_poi = s.local_poi_layers + i * FLAT_MAP_SIZE;
-            for (int p = 0; p < n_pois; ++p)
-            {
-                if (s.poi_saved[p] > 0.5f)
-                    continue;
-                const int py = std::clamp(static_cast<int>(s.poi_positions[p * 2]), 0, MAP_SIZE - 1);
-                const int px = std::clamp(static_cast<int>(s.poi_positions[p * 2 + 1]), 0, MAP_SIZE - 1);
-                if (std::abs(py - ay) <= vr && std::abs(px - ax) <= vr)
-                    my_poi[py * MAP_SIZE + px] = 1.0f;
-            }
-        }
-
-        return new_tiles;
-    }
-
-    std::string execute_radio(GameStateView &s, const std::array<int, N_AGENTS> &radio_actions)
-    {
-        std::ostringstream oss;
-        for (int sender = 0; sender < N_AGENTS; ++sender)
-        {
-            if (radio_actions[sender] == 0)
-                continue;
-
-            oss << "agent_" << sender << " radio(" << radio_actions[sender] << "): POI/ally update\n";
-
-            const float *sender_poi = s.local_poi_layers + sender * FLAT_MAP_SIZE;
-            const float *sender_agents = s.local_agent_layers + sender * (N_AGENTS * FLAT_MAP_SIZE);
-
-            const int sy = std::clamp(static_cast<int>(s.agent_positions[sender * 2]), 0, MAP_SIZE - 1);
-            const int sx = std::clamp(static_cast<int>(s.agent_positions[sender * 2 + 1]), 0, MAP_SIZE - 1);
-            const int sidx = sy * MAP_SIZE + sx;
-
-            for (int recv = 0; recv < N_AGENTS; ++recv)
-            {
-                if (recv == sender)
-                    continue;
-
-                float *recv_poi = s.local_poi_layers + recv * FLAT_MAP_SIZE;
-                for (int idx = 0; idx < FLAT_MAP_SIZE; ++idx)
-                    if (sender_poi[idx] > 0.5f)
-                        recv_poi[idx] = 1.0f;
-
-                float *recv_sender_channel = s.local_agent_layers + recv * (N_AGENTS * FLAT_MAP_SIZE) + sender * FLAT_MAP_SIZE;
-                std::memset(recv_sender_channel, 0, FLAT_MAP_SIZE * sizeof(float));
-                recv_sender_channel[sidx] = 1.0f;
-
-                for (int j = 0; j < N_AGENTS; ++j)
-                {
-                    const float *src = sender_agents + j * FLAT_MAP_SIZE;
-                    float *dst = s.local_agent_layers + recv * (N_AGENTS * FLAT_MAP_SIZE) + j * FLAT_MAP_SIZE;
-                    for (int idx = 0; idx < FLAT_MAP_SIZE; ++idx)
-                        if (src[idx] > 0.5f)
-                            dst[idx] = 1.0f;
-                }
-            }
-        }
-        return oss.str();
-    }
-
-    void rebuild_global_layers(GameStateView &s)
-    {
-        std::memset(s.global_unsaved_pois, 0, FLAT_MAP_SIZE * sizeof(float));
-        for (int p = 0; p < n_pois; ++p)
-        {
-            if (s.poi_saved[p] > 0.5f)
-                continue;
-            const int py = std::clamp(static_cast<int>(s.poi_positions[p * 2]), 0, MAP_SIZE - 1);
-            const int px = std::clamp(static_cast<int>(s.poi_positions[p * 2 + 1]), 0, MAP_SIZE - 1);
-            s.global_unsaved_pois[py * MAP_SIZE + px] = 1.0f;
-        }
-
-        std::memset(s.global_agent_layers, 0, static_cast<size_t>(N_AGENTS) * FLAT_MAP_SIZE * sizeof(float));
-        for (int i = 0; i < N_AGENTS; ++i)
-        {
-            const int ay = std::clamp(static_cast<int>(s.agent_positions[i * 2]), 0, MAP_SIZE - 1);
-            const int ax = std::clamp(static_cast<int>(s.agent_positions[i * 2 + 1]), 0, MAP_SIZE - 1);
-            s.global_agent_layers[i * FLAT_MAP_SIZE + ay * MAP_SIZE + ax] = 1.0f;
-        }
-    }
-
-    bool all_pois_saved(const GameStateView &s) const
-    {
-        for (int p = 0; p < n_pois; ++p)
-            if (s.poi_saved[p] < 0.5f)
-                return false;
-        return true;
+        return {reward, individual_rewards, terminated, truncated};
     }
 };
 

@@ -195,17 +195,26 @@ struct alignas(16) POIKnowledge
 // 2. The View Struct: Maps to the contiguous flat memory
 struct EnvStateView
 {
-    Tile *grid;
+    Tile *grid; // spatial part of the observation
     AgentState *agents;
     POIState *pois;
     // --- NEW BELIEF MATRICES ---
     // Size: n_agents * n_agents. Index via [viewer_id * n_agents + target_id]
-    AgentKnowledge *agent_knowledge;
+    AgentKnowledge *agent_knowledge; // used to fill agent layer(s) of tensor
     // Size: n_agents * n_pois. Index via [viewer_id * n_pois + poi_id]
-    POIKnowledge *poi_knowledge;
-    float *agent_speeds; // Size: n_agents * n_tile_types
+    POIKnowledge *poi_knowledge; // used to fill poi layer of tensor
+    float *agent_speeds;         // Size: n_agents * n_tile_types
     int *current_frame;
     int *undiscovered_remaining;
+    int *poi_left;
+    int *agents_left;
+};
+
+enum Mode
+{
+    DECENTRALIZED,
+    CENTRALIZED,
+    NO_OBS
 };
 
 class EnvironmentArena
@@ -213,17 +222,19 @@ class EnvironmentArena
 public:
     std::vector<uint8_t> memory;
     size_t env_stride;
+    Mode mode;
 
     int n_agents;
     int n_pois;
     int n_tile_types;
     int map_area;
 
-    EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types)
+    EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types, Mode mode_value)
         : n_agents(num_agents),
           n_pois(num_pois),
           n_tile_types(num_tile_types),
-          map_area(w * h)
+          map_area(w * h),
+          mode(mode_value)
     {
         // Calculate the exact memory footprint of each component for a single environment
         size_t grid_bytes = map_area * sizeof(Tile);
@@ -231,10 +242,14 @@ public:
         size_t poi_bytes = n_pois * sizeof(POIState);
         size_t speed_bytes = (n_agents * n_tile_types) * sizeof(float);
 
-        size_t agent_knowledge_bytes = (n_agents * n_agents) * sizeof(AgentKnowledge);
-        size_t poi_knowledge_bytes = (n_agents * n_pois) * sizeof(POIKnowledge);
-
-        size_t counter_bytes = 2 * sizeof(int);
+        size_t agent_knowledge_bytes = 0;
+        size_t poi_knowledge_bytes = 0;
+        if (mode == Mode::CENTRALIZED)
+        {
+            size_t agent_knowledge_bytes = (n_agents * n_agents) * sizeof(AgentKnowledge);
+            size_t poi_knowledge_bytes = (n_agents * n_pois) * sizeof(POIKnowledge);
+        }
+        size_t counter_bytes = 4 * sizeof(int);
 
         // Sum the exact required bytes with zero arbitrary internal padding.
         // Because Tile (8), AgentState (28), POIState (16), float (4), and int (4)
@@ -272,17 +287,26 @@ public:
         view.agent_speeds = reinterpret_cast<float *>(base + offset);
         offset += (n_agents * n_tile_types) * sizeof(float);
 
-        view.agent_knowledge = reinterpret_cast<AgentKnowledge *>(base + offset);
-        offset += (n_agents * n_agents) * sizeof(AgentKnowledge);
-
-        view.poi_knowledge = reinterpret_cast<POIKnowledge *>(base + offset);
-        offset += (n_agents * n_pois) * sizeof(POIKnowledge);
+        if (mode == Mode::DECENTRALIZED)
+        {
+            view.agent_knowledge = reinterpret_cast<AgentKnowledge *>(base + offset);
+            offset += (n_agents * n_agents) * sizeof(AgentKnowledge);
+            view.poi_knowledge = reinterpret_cast<POIKnowledge *>(base + offset);
+            offset += (n_agents * n_pois) * sizeof(POIKnowledge);
+        }
+        else
+        {
+            view.agent_knowledge = nullptr;
+            view.poi_knowledge = nullptr;
+        }
 
         view.current_frame = reinterpret_cast<int *>(base + offset);
         offset += sizeof(int);
-
         view.undiscovered_remaining = reinterpret_cast<int *>(base + offset);
-
+        offset += sizeof(int);
+        view.poi_left = reinterpret_cast<int *>(base + offset);
+        offset += sizeof(int);
+        view.agents_left = reinterpret_cast<int *>(base + offset);
         return view;
     }
 };
