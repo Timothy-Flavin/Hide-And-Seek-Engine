@@ -59,6 +59,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         agents_json,
         survivors_json,
         mode="centralized",
+        combine_agent_layers=False,
     ):
         self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
         self.num_envs = num_envs
