@@ -230,7 +230,7 @@ private:
         // nothing happens. If it choses another action it is messaging
         // one of the other agents. It will share it's current information
         // updating it's x y in the other agent's tensor observation
-        if (mode != Mode::DECENTRALIZED)
+        if (mode != Mode::CENTRALIZED)
             return ""; // No-op for global and no_obs modes
 
         EnvStateView view = env_views[e];
