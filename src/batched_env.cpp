@@ -48,7 +48,7 @@ private:
     int height;
     bool requires_state;
     std::vector<float> individual_rewards;
-    std::vector<float> reward;
+    // std::vector<float> global_rewards;
     std::vector<EnvStateView> env_views;
     std::vector<int> type_map;
     std::vector<float> altitude_map;
@@ -298,18 +298,18 @@ private:
         return log;
     }
 
-    void update_battery_and_counters(e)
+    void update_battery_and_counters(int e)
     {
         EnvStateView view = env_views[e];
         for (int a = 0; a < n_agents; ++a)
         {
-            // If an agent is past it's battery capacity its' deployement ends
-            if (view.agents[a].deployement > 0.0)
+            // If an agent is past its battery capacity its deployment ends
+            if (view.agents[a].deployment_remaining > 0.0f)
             {
-                view.agents[a].deployement -= delta_time;
-                if (view.agents[a].deployement < 0.0)
+                view.agents[a].deployment_remaining -= delta_time;
+                if (view.agents[a].deployment_remaining < 0.0f)
                 {
-                    --view.agents_left;
+                    --(*view.agents_left);
                 }
             }
         }
@@ -317,13 +317,13 @@ private:
         for (int p = 0; p < n_pois; ++p)
         {
             if (!view.pois[p].saved)
-                ++poi_left;
+                poi_left;
         }
-        view.poi_left = poi_left;
+        *view.poi_left = poi_left;
     }
 
     // TODO: slowest possible implementation...
-    void fill_torch_obs(e)
+    void fill_torch_obs(int e)
     {
         if (!torch_obs_spatial_base || !torch_obs_internal_base)
             return;
@@ -444,7 +444,7 @@ private:
         }
     }
     // TODO: slowest possible implementation...
-    void fill_torch_state(e)
+    void fill_torch_state(int e)
     {
         if (!torch_state_spatial_base || !torch_state_internal_base)
             return;
@@ -566,7 +566,7 @@ public:
           supports_walking(std::move(supports_walk)), supports_aquatic(std::move(supports_aqua)),
           supports_flying(std::move(supports_fly)), is_blocking(std::move(is_block)),
           type_map(std::move(t_map)), altitude_map(std::move(alt_map)), agent_speed_map(std::move(speed_map)),
-          saveable_rules(std::move(save_rules)), init_agent_positions(std::move(initial_agent_pos)),
+          saveable_rules(std::move(saveable_rules)), init_agent_positions(std::move(initial_agent_pos)),
           init_poi_positions(std::move(initial_poi_pos)), requires_state(requires_state), cooperative_rewards(coop_rewards),
           reward_new_tile(reward_new_tile_val), reward_found(reward_found_val), reward_saved(reward_saved_val),
           max_frames(max_frames_val), map_size(w * h), mode(static_cast<Mode>(mode_value))
@@ -576,9 +576,9 @@ public:
             throw(std::invalid_argument("mode value < 0 or > 2 cannot be bound into Mode enum"));
         }
         // 1. Dynamic bounds tracking
-        n_tiles = supports_walking.size();
-        n_agents = init_agent_positions.size() / 2;
-        n_pois = init_poi_positions.size() / 2;
+        n_tiles = int(supports_walking.size());
+        n_agents = int(init_agent_positions.size() / 2);
+        n_pois = int(init_poi_positions.size() / 2);
 
         // 2. Setup internal simulation states
         env_terminated.resize(num_envs, false);
@@ -623,8 +623,10 @@ public:
         EnvStateView view = env_views[env_idx];
 
         // A. Env Counters
-        *view.current_frame = 0;
-        *view.undiscovered_remaining = map_size;
+        if (view.current_frame)
+            *view.current_frame = 0;
+        if (view.undiscovered_remaining)
+            *view.undiscovered_remaining = map_size;
 
         // B. Tiles
         for (int i = 0; i < map_size; ++i)
@@ -671,7 +673,7 @@ public:
             uint32_t savable_mask = 0;
             for (int a = 0; a < n_agents; ++a)
             {
-                if (saveable_map[p * n_agents + a])
+                if (saveable_rules.size() > size_t(p * n_agents + a) && saveable_rules[p * n_agents + a])
                 {
                     savable_mask |= (1U << a);
                 }
@@ -679,8 +681,8 @@ public:
             view.pois[p].savable_by_mask = savable_mask;
         }
 
-        view.poi_left = n_pois;
-        view.agents_left = n_agents;
+        *view.poi_left = n_pois;
+        *view.agents_left = n_agents;
     }
 
     void reset()
@@ -693,17 +695,16 @@ public:
     py::tuple step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
         // action space is box2d[dx, dy], discrete(num radio choices)
-        if (actions_array.ndim() != 1 || radio_actions_array != 1)
+        if ((move_actions_array.ndim() != 1) || (radio_actions_array.ndim() != 1))
             throw std::invalid_argument("actions must have shape [E*A*2] for movement and [E*A] for radio");
-        if (actions_array.shape(0) != num_envs || radio_actions_array.shape(0) != num_envs)
+        if ((move_actions_array.shape(0) != 2 * num_envs * n_agents) || (radio_actions_array.shape(0) != num_envs * n_agents))
             throw std::invalid_argument("actions first dimension must match num_envs");
 
-        const float *act_data = actions_array.data();
+        const float *act_data = move_actions_array.data();
         const int *radio_act_data = radio_actions_array.data();
 
-        // rewards are zero and then filled by the step logic
-        rewards.fill(0);
-        individual_rewards.fill(0);
+        std::fill(individual_rewards.begin(), individual_rewards.end(), 0.0f);
+        // std::fill(global_rewards.begin(), global_rewards.end(), 0.0f);
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
@@ -725,17 +726,17 @@ public:
             // If we are using this environment for machine learning
             // then fill the torch buffers accordingly
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
-                fill_torch_obs(env_idx);
-            if requires_state
-                fill_torch_state(env_idx);
+                fill_torch_obs(e);
+            if (requires_state)
+                fill_torch_state(e);
         }
 
         auto py_rewards = py::array_t<float>({num_envs, n_agents});
         auto py_terminated = py::array_t<bool>(num_envs);
         auto py_truncated = py::array_t<bool>(num_envs);
         std::copy(individual_rewards.begin(), individual_rewards.end(), py_rewards.mutable_data());
-        std::copy(terminated.begin(), terminated.end(), py_terminated.mutable_data());
-        std::copy(truncated.begin(), truncated.end(), py_truncated.mutable_data());
+        std::copy(env_terminated.begin(), env_terminated.end(), py_terminated.mutable_data());
+        std::copy(env_truncated.begin(), env_truncated.end(), py_truncated.mutable_data());
 
         return py::make_tuple(py_rewards, py_terminated, py_truncated);
     }
@@ -743,62 +744,61 @@ public:
 
 PYBIND11_MODULE(cpp_engine, m)
 {
-    REGISTER_FEATURE_TYPE_ENUM(m);
+    /* REGISTER_FEATURE_TYPE_ENUM(m); // Uncomment or define if needed */
 
     py::class_<BatchedEnvironment>(m, "BatchedEnvironment")
         .def(py::init<
-            int, // n_envs
-            int, // sim_seed
-            int, // width
-            int, // height
-            std::vector<bool>, // supports_walk
-            std::vector<bool>, // supports_aqua
-            std::vector<bool>, // supports_fly
-            std::vector<bool>, // is_block
-            std::vector<int>, // t_map
-            std::vector<float>, // alt_map
-            std::vector<float>, // speed_map
-            std::vector<bool>, // saveable_rules
-            std::vector<float>, // initial_agent_pos
-            std::vector<float>, // initial_poi_pos
-            uintptr_t, // obs_spatial_ptr
-            uintptr_t, // obs_internal_ptr
-            uintptr_t, // state_spatial_ptr
-            uintptr_t, // state_internal_ptr
-            bool, // requires_state
-            bool, // coop_rewards
-            float, // reward_new_tile_val
-            float, // reward_found_val
-            float, // reward_saved_val
-            int, // max_frames_val
-            int // mode_value
-        >(),
-            py::arg("n_envs"),
-            py::arg("sim_seed"),
-            py::arg("width"),
-            py::arg("height"),
-            py::arg("supports_walk"),
-            py::arg("supports_aqua"),
-            py::arg("supports_fly"),
-            py::arg("is_block"),
-            py::arg("t_map"),
-            py::arg("alt_map"),
-            py::arg("speed_map"),
-            py::arg("saveable_rules"),
-            py::arg("initial_agent_pos"),
-            py::arg("initial_poi_pos"),
-            py::arg("obs_spatial_ptr"),
-            py::arg("obs_internal_ptr"),
-            py::arg("state_spatial_ptr"),
-            py::arg("state_internal_ptr"),
-            py::arg("requires_state") = false,
-            py::arg("coop_rewards") = true,
-            py::arg("reward_new_tile_val") = 0.05f,
-            py::arg("reward_found_val") = 2.0f,
-            py::arg("reward_saved_val") = 20.0f,
-            py::arg("max_frames_val") = 250,
-            py::arg("mode_value") = 0
-        )
+                 int,                // n_envs
+                 int,                // sim_seed
+                 int,                // width
+                 int,                // height
+                 std::vector<bool>,  // supports_walk
+                 std::vector<bool>,  // supports_aqua
+                 std::vector<bool>,  // supports_fly
+                 std::vector<bool>,  // is_block
+                 std::vector<int>,   // t_map
+                 std::vector<float>, // alt_map
+                 std::vector<float>, // speed_map
+                 std::vector<bool>,  // saveable_rules
+                 std::vector<float>, // initial_agent_pos
+                 std::vector<float>, // initial_poi_pos
+                 uintptr_t,          // obs_spatial_ptr
+                 uintptr_t,          // obs_internal_ptr
+                 uintptr_t,          // state_spatial_ptr
+                 uintptr_t,          // state_internal_ptr
+                 bool,               // requires_state
+                 bool,               // coop_rewards
+                 float,              // reward_new_tile_val
+                 float,              // reward_found_val
+                 float,              // reward_saved_val
+                 int,                // max_frames_val
+                 int                 // mode_value
+                 >(),
+             py::arg("n_envs"),
+             py::arg("sim_seed"),
+             py::arg("width"),
+             py::arg("height"),
+             py::arg("supports_walk"),
+             py::arg("supports_aqua"),
+             py::arg("supports_fly"),
+             py::arg("is_block"),
+             py::arg("t_map"),
+             py::arg("alt_map"),
+             py::arg("speed_map"),
+             py::arg("saveable_rules"),
+             py::arg("initial_agent_pos"),
+             py::arg("initial_poi_pos"),
+             py::arg("obs_spatial_ptr"),
+             py::arg("obs_internal_ptr"),
+             py::arg("state_spatial_ptr"),
+             py::arg("state_internal_ptr"),
+             py::arg("requires_state") = false,
+             py::arg("coop_rewards") = true,
+             py::arg("reward_new_tile_val") = 0.05f,
+             py::arg("reward_found_val") = 2.0f,
+             py::arg("reward_saved_val") = 20.0f,
+             py::arg("max_frames_val") = 250,
+             py::arg("mode_value") = 0)
         .def("reset", &BatchedEnvironment::reset)
         .def("reset_env", &BatchedEnvironment::reset_env, py::arg("env_idx"))
         .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"))

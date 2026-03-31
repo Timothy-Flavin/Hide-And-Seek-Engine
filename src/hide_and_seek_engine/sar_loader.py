@@ -24,6 +24,10 @@ class SARConfig:
     initial_agent_pos: list[float]
     initial_poi_pos: list[float]
 
+    terrain_rgb: np.ndarray
+    agent_rgb: np.ndarray
+    survivor_rgb: np.ndarray
+
 
 def load_sar_config(
     tiles_json: str, agents_json: str, survivors_json: str, map_png: str
@@ -50,7 +54,7 @@ def load_sar_config(
     ]
     is_blocking = [bool(tiles_data[t].get("blocking", False)) for t in tile_names]
 
-    tile_colors = np.array([tiles_data[t]["rgb"] for t in tile_names])
+    tile_colors = np.array([tiles_data[t]["rgb"] for t in tile_names], dtype=np.int32)
     tile_altitudes = [float(tiles_data[t]["altitude"]) for t in tile_names]
 
     # 2. Image Map Parsing
@@ -73,6 +77,9 @@ def load_sar_config(
     n_agents = len(agent_names)
     agent_speed_map = []
     initial_agent_pos = []
+    agent_colors = np.array(
+        [agents_data[a].get("rgb", [255, 0, 0]) for a in agent_names], dtype=np.int32
+    )
 
     for a_name in agent_names:
         agent = agents_data[a_name]
@@ -91,6 +98,10 @@ def load_sar_config(
     n_pois = len(survivor_names)
     saveable_map = []
     initial_poi_pos = []
+    survivor_colors = np.array(
+        [survivors_data[s].get("rgb", [255, 255, 255]) for s in survivor_names],
+        dtype=np.int32,
+    )
 
     for s_name in survivor_names:
         survivor = survivors_data[s_name]
@@ -121,4 +132,7 @@ def load_sar_config(
         saveable_map=saveable_map,
         initial_agent_pos=initial_agent_pos,
         initial_poi_pos=initial_poi_pos,
+        terrain_rgb=tile_colors,
+        agent_rgb=agent_colors,
+        survivor_rgb=survivor_colors,
     )
