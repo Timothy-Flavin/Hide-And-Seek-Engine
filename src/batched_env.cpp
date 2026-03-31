@@ -747,48 +747,61 @@ PYBIND11_MODULE(cpp_engine, m)
 
     py::class_<BatchedEnvironment>(m, "BatchedEnvironment")
         .def(py::init<
-                 int,
-                 int,
-                 py::array_t<float, py::array::c_style | py::array::forcecast>,
-                 py::array_t<float, py::array::c_style | py::array::forcecast>,
-                 py::array_t<float, py::array::c_style | py::array::forcecast>,
-                 py::array_t<float, py::array::c_style | py::array::forcecast>,
-                 py::array_t<float, py::array::c_style | py::array::forcecast>,
-                 py::array_t<int, py::array::c_style | py::array::forcecast>,
-                 py::array_t<int, py::array::c_style | py::array::forcecast>,
-                 py::array_t<int, py::array::c_style | py::array::forcecast>,
-                 py::array_t<int, py::array::c_style | py::array::forcecast>,
-                 bool,
-                 float,
-                 float,
-                 float,
-                 int>(),
-             py::arg("n_envs"),
-             py::arg("seed"),
-             py::arg("terrain_tensor"),
-             py::arg("agent_params"),
-             py::arg("poi_params"),
-             py::arg("initial_agent_pos"),
-             py::arg("initial_poi_pos"),
-             py::arg("tile_sup_walking"),
-             py::arg("tile_sup_aquatic"),
-             py::arg("tile_sup_flying"),
-             py::arg("tile_is_blocking"),
-             py::arg("cooperative_rewards") = true,
-             py::arg("reward_new_tile") = 0.05f,
-             py::arg("reward_found") = 2.0f,
-             py::arg("reward_saved") = 20.0f,
-             py::arg("max_frames") = 250)
+            int, // n_envs
+            int, // sim_seed
+            int, // width
+            int, // height
+            std::vector<bool>, // supports_walk
+            std::vector<bool>, // supports_aqua
+            std::vector<bool>, // supports_fly
+            std::vector<bool>, // is_block
+            std::vector<int>, // t_map
+            std::vector<float>, // alt_map
+            std::vector<float>, // speed_map
+            std::vector<bool>, // saveable_rules
+            std::vector<float>, // initial_agent_pos
+            std::vector<float>, // initial_poi_pos
+            uintptr_t, // obs_spatial_ptr
+            uintptr_t, // obs_internal_ptr
+            uintptr_t, // state_spatial_ptr
+            uintptr_t, // state_internal_ptr
+            bool, // requires_state
+            bool, // coop_rewards
+            float, // reward_new_tile_val
+            float, // reward_found_val
+            float, // reward_saved_val
+            int, // max_frames_val
+            int // mode_value
+        >(),
+            py::arg("n_envs"),
+            py::arg("sim_seed"),
+            py::arg("width"),
+            py::arg("height"),
+            py::arg("supports_walk"),
+            py::arg("supports_aqua"),
+            py::arg("supports_fly"),
+            py::arg("is_block"),
+            py::arg("t_map"),
+            py::arg("alt_map"),
+            py::arg("speed_map"),
+            py::arg("saveable_rules"),
+            py::arg("initial_agent_pos"),
+            py::arg("initial_poi_pos"),
+            py::arg("obs_spatial_ptr"),
+            py::arg("obs_internal_ptr"),
+            py::arg("state_spatial_ptr"),
+            py::arg("state_internal_ptr"),
+            py::arg("requires_state") = false,
+            py::arg("coop_rewards") = true,
+            py::arg("reward_new_tile_val") = 0.05f,
+            py::arg("reward_found_val") = 2.0f,
+            py::arg("reward_saved_val") = 20.0f,
+            py::arg("max_frames_val") = 250,
+            py::arg("mode_value") = 0
+        )
         .def("reset", &BatchedEnvironment::reset)
-        .def("reset_single", &BatchedEnvironment::reset_single, py::arg("env_idx"))
-        .def("step", &BatchedEnvironment::step, py::arg("actions"))
-        .def("get_action_mask", &BatchedEnvironment::get_action_mask)
-        .def("get_memory_view", &BatchedEnvironment::get_memory_view)
-        .def("get_state", &BatchedEnvironment::get_state)
-        .def("get_stride", &BatchedEnvironment::get_stride)
-        .def("get_flat_map_size", &BatchedEnvironment::get_flat_map_size)
-        .def("get_terrain_channels", &BatchedEnvironment::get_terrain_channels)
-        .def("get_num_pois", &BatchedEnvironment::get_num_pois)
-        .def("radio_render", &BatchedEnvironment::radio_render)
-        .def_readonly("num_envs", &BatchedEnvironment::num_envs);
+        .def("reset_env", &BatchedEnvironment::reset_env, py::arg("env_idx"))
+        .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"))
+        // Add other methods as needed
+        ;
 }
