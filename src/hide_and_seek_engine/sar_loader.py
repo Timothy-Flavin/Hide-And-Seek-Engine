@@ -40,15 +40,18 @@ def load_sar_config(
     n_tiles = len(tile_names)
 
     supports_walking = [
-        tiles_data[t].get("supports_walking", False) for t in tile_names
+        bool(tiles_data[t].get("supports_walking", False)) for t in tile_names
     ]
     supports_aquatic = [
-        tiles_data[t].get("supports_aquatic", False) for t in tile_names
+        bool(tiles_data[t].get("supports_aquatic", False)) for t in tile_names
     ]
-    supports_flying = [tiles_data[t].get("supports_flying", False) for t in tile_names]
-    is_blocking = [tiles_data[t].get("blocking", False) for t in tile_names]
+    supports_flying = [
+        bool(tiles_data[t].get("supports_flying", False)) for t in tile_names
+    ]
+    is_blocking = [bool(tiles_data[t].get("blocking", False)) for t in tile_names]
+
     tile_colors = np.array([tiles_data[t]["rgb"] for t in tile_names])
-    tile_altitudes = [tiles_data[t]["altitude"] for t in tile_names]
+    tile_altitudes = [float(tiles_data[t]["altitude"]) for t in tile_names]
 
     # 2. Image Map Parsing
     img = Image.open(map_png).convert("RGB")
@@ -63,7 +66,7 @@ def load_sar_config(
         dist = np.sum((tile_colors - px) ** 2, axis=1)
         t_id = int(np.argmin(dist))
         type_map.append(t_id)
-        altitude_map.append(float(tile_altitudes[t_id]))
+        altitude_map.append(tile_altitudes[t_id])
 
     # 3. Agent Properties
     agent_names = list(agents_data.keys())
@@ -77,7 +80,7 @@ def load_sar_config(
         for t_name in tile_names:
             agent_speed_map.append(float(speeds.get(t_name, 1.0)))
 
-        # Denormalize starting coords
+        # Denormalize starting coords relative to height/width
         start = agent.get("start", [0.5, 0.5])
         initial_agent_pos.extend(
             [float(start[0] * (height - 1)), float(start[1] * (width - 1))]
@@ -92,8 +95,10 @@ def load_sar_config(
     for s_name in survivor_names:
         survivor = survivors_data[s_name]
         allowed = survivor.get("allowed_savers", [])
+
+        # Generates an array of booleans determining if each agent can save this POI
         for a_name in agent_names:
-            saveable_map.append(a_name in allowed)
+            saveable_map.append(bool(a_name in allowed))
 
         start = survivor.get("start", [0.5, 0.5])
         initial_poi_pos.extend(
