@@ -164,9 +164,10 @@ private:
 
             for (int y = min_y; y <= max_y; ++y)
             {
+                float ysq = (agent.y - y) * (agent.y - y);
                 for (int x = min_x; x <= max_x; ++x)
                 {
-                    float dist_sq = (agent.y - y) * (agent.y - y) + (agent.x - x) * (agent.x - x);
+                    float dist_sq = ysq + (agent.x - x) * (agent.x - x);
                     if (dist_sq <= vr_sq)
                     {
                         int t_idx = y * width + x;
@@ -292,13 +293,29 @@ private:
 
             // std::cout << "share tile knowledge " << e << "\n";
 
-            // 3. Share Tile Knowledge (Merge maps)
-            for (int i = 0; i < map_size; ++i)
+            // 3. Share Tile Knowledge (Merge maps) ONLY CURRENT VIEW
+            float vr = view.agents[a].view_range;
+            float vr_sq = vr * vr;
+            int min_y = std::max(0, static_cast<int>(view.agents[a].y - vr));
+            int max_y = std::min(height - 1, static_cast<int>(view.agents[a].y + vr));
+            int min_x = std::max(0, static_cast<int>(view.agents[a].x - vr));
+            int max_x = std::min(width - 1, static_cast<int>(view.agents[a].x + vr));
+
+            for (int y = min_y; y <= max_y; ++y)
             {
-                Tile &t = view.grid[i];
-                if (t.has_agent_seen(a))
+                float ysq = (view.agents[a].y - y) * (view.agents[a].y - y);
+                for (int x = min_x; x <= max_x; ++x)
                 {
-                    t.set_agent_seen(target_agent);
+                    float dist_sq = ysq + (view.agents[a].x - x) * (view.agents[a].x - x);
+                    if (dist_sq <= vr_sq)
+                    {
+                        int t_idx = y * width + x;
+                        Tile &t = view.grid[t_idx];
+                        if (t.has_agent_seen(a))
+                        {
+                            t.set_agent_seen(target_agent);
+                        }
+                    }
                 }
             }
 
@@ -353,13 +370,17 @@ private:
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
                 // Spatial MASKED
+                float* base_type = spat_base + decentral_obs_strides->TYLE_TYPE_START;
+                float* base_alt = spat_base + decentral_obs_strides->ALTITUDE_TYPE_START;
+                float* base_obs = spat_base + decentral_obs_strides->OBSERVED_START;
+
                 for (int i = 0; i < map_area; ++i)
                 {
                     if (view.grid[i].has_agent_seen(a))
                     {
-                        spat_base[decentral_obs_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_area + i] = 1.0f;
-                        spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + i] = view.grid[i].altitude;
-                        spat_base[decentral_obs_strides->OBSERVED_START + i] = 1.0f;
+                        base_type[view.grid[i].get_type() * map_area + i] = 1.0f;
+                        base_alt[i] = view.grid[i].altitude;
+                        base_obs[i] = 1.0f;
                     }
                 }
 
@@ -367,23 +388,28 @@ private:
                 for (int p = 0; p < n_pois; ++p)
                 {
                     POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
-                    
+
                     if (pk.last_y >= 0 && pk.last_x >= 0 && pk.last_y < height && pk.last_x < width)
                         spat_base[decentral_obs_strides->PIO_START + pk.last_y * width + pk.last_x] = 0.0f;
-                        
+
                     if (pk.knows_found && !pk.knows_saved)
                     {
                         int py = static_cast<int>(pk.y);
                         int px = static_cast<int>(pk.x);
-                        if (py >= 0 && py < height && px >= 0 && px < width) {
+                        if (py >= 0 && py < height && px >= 0 && px < width)
+                        {
                             spat_base[decentral_obs_strides->PIO_START + py * width + px] = 1.0f;
                             pk.last_y = py;
                             pk.last_x = px;
-                        } else {
+                        }
+                        else
+                        {
                             pk.last_y = -1;
                             pk.last_x = -1;
                         }
-                    } else {
+                    }
+                    else
+                    {
                         pk.last_y = -1;
                         pk.last_x = -1;
                     }
@@ -395,11 +421,14 @@ private:
 
                 int my_y = static_cast<int>(view.agents[a].y);
                 int my_x = static_cast<int>(view.agents[a].x);
-                if (my_y >= 0 && my_y < height && my_x >= 0 && my_x < width) {
+                if (my_y >= 0 && my_y < height && my_x >= 0 && my_x < width)
+                {
                     spat_base[decentral_obs_strides->MY_LOCATION_START + my_y * width + my_x] = 1.0f;
                     view.agents[a].last_y = my_y;
                     view.agents[a].last_x = my_x;
-                } else {
+                }
+                else
+                {
                     view.agents[a].last_y = -1;
                     view.agents[a].last_x = -1;
                 }
@@ -410,7 +439,7 @@ private:
                     if (a == a2)
                         continue;
                     AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a2];
-                    
+
                     if (ak.last_y >= 0 && ak.last_x >= 0 && ak.last_y < height && ak.last_x < width)
                         spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + ak.last_y * width + ak.last_x] = 0.0f;
 
@@ -418,15 +447,20 @@ private:
                     {
                         int oy = static_cast<int>(ak.y);
                         int ox = static_cast<int>(ak.x);
-                        if (oy >= 0 && oy < height && ox >= 0 && ox < width) {
+                        if (oy >= 0 && oy < height && ox >= 0 && ox < width)
+                        {
                             spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + oy * width + ox] = 1.0f;
                             ak.last_y = oy;
                             ak.last_x = ox;
-                        } else {
+                        }
+                        else
+                        {
                             ak.last_y = -1;
                             ak.last_x = -1;
                         }
-                    } else {
+                    }
+                    else
+                    {
                         ak.last_y = -1;
                         ak.last_x = -1;
                     }
@@ -448,13 +482,17 @@ private:
             float *spat_base = torch_obs_spatial_base + e * spatial_stride;
             float *int_base = torch_obs_internal_base + e * (n_agents * 6);
 
+            float *base_type = spat_base + central_obs_strides->TYLE_TYPE_START;
+            float *base_alt = spat_base + central_obs_strides->ALTITUDE_TYPE_START;
+            float *base_obs = spat_base + central_obs_strides->OBSERVED_START;
+
             for (int i = 0; i < map_area; ++i)
             {
                 if (view.grid[i].is_global_observed())
                 {
-                    spat_base[central_obs_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_area + i] = 1.0f;
-                    spat_base[central_obs_strides->ALTITUDE_TYPE_START + i] = view.grid[i].altitude;
-                    spat_base[central_obs_strides->OBSERVED_START + i] = 1.0f;
+                    base_type[view.grid[i].get_type() * map_area + i] = 1.0f;
+                    base_alt[i] = view.grid[i].altitude;
+                    base_obs[i] = 1.0f;
                 }
             }
 
@@ -462,20 +500,25 @@ private:
             {
                 if (view.pois[p].last_y >= 0 && view.pois[p].last_x >= 0 && view.pois[p].last_y < height && view.pois[p].last_x < width)
                     spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
-                    
+
                 if (view.pois[p].found && !view.pois[p].saved)
                 {
                     int py = static_cast<int>(view.pois[p].y);
                     int px = static_cast<int>(view.pois[p].x);
-                    if (py >= 0 && py < height && px >= 0 && px < width) {
+                    if (py >= 0 && py < height && px >= 0 && px < width)
+                    {
                         spat_base[central_obs_strides->PIO_START + py * width + px] = 1.0f;
                         view.pois[p].last_y = py;
                         view.pois[p].last_x = px;
-                    } else {
+                    }
+                    else
+                    {
                         view.pois[p].last_y = -1;
                         view.pois[p].last_x = -1;
                     }
-                } else {
+                }
+                else
+                {
                     view.pois[p].last_y = -1;
                     view.pois[p].last_x = -1;
                 }
@@ -485,14 +528,17 @@ private:
             {
                 if (view.agents[a].last_y >= 0 && view.agents[a].last_x >= 0 && view.agents[a].last_y < height && view.agents[a].last_x < width)
                     spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
-                    
+
                 int ay = static_cast<int>(view.agents[a].y);
                 int ax = static_cast<int>(view.agents[a].x);
-                if (ay >= 0 && ay < height && ax >= 0 && ax < width) {
+                if (ay >= 0 && ay < height && ax >= 0 && ax < width)
+                {
                     spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + ay * width + ax] = 1.0f;
                     view.agents[a].last_y = ay;
                     view.agents[a].last_x = ax;
-                } else {
+                }
+                else
+                {
                     view.agents[a].last_y = -1;
                     view.agents[a].last_x = -1;
                 }
@@ -522,8 +568,9 @@ private:
         // UNMASKED Terrain
         for (int i = 0; i < map_area; ++i)
         {
+            float altitude = view.grid[i].altitude;
             spat_base[central_state_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_area + i] = 1.0f;
-            spat_base[central_state_strides->ALTITUDE_TYPE_START + i] = view.grid[i].altitude;
+            spat_base[central_state_strides->ALTITUDE_TYPE_START + i] = altitude;
             if (view.grid[i].is_global_observed())
             {
                 spat_base[central_state_strides->OBSERVED_START + i] = 1.0f;
@@ -596,6 +643,7 @@ public:
     std::vector<float> init_agent_positions;
     std::vector<float> init_poi_positions;
     std::vector<std::string> radio_logs;
+    std::vector<Tile> pristine_grid;
 
     BatchedEnvironment(
         int n_envs,
@@ -677,6 +725,22 @@ public:
         env_views.reserve(num_envs);
         for (int e = 0; e < num_envs; ++e)
             env_views.push_back(arena->get_env_view(e));
+
+        // Create the base grid once to copy during resets
+        pristine_grid.resize(map_size);
+        for (int i = 0; i < map_size; ++i)
+        {
+            pristine_grid[i].flags = 0;
+            pristine_grid[i].altitude = altitude_map[i];
+
+            int t_type = type_map[i];
+            pristine_grid[i].set_type(t_type);
+            pristine_grid[i].set_walkable(supports_walking[t_type]);
+            pristine_grid[i].set_aquatic(supports_aquatic[t_type]);
+            pristine_grid[i].set_flyable(supports_flying[t_type]);
+            pristine_grid[i].set_blocking(is_blocking[t_type]);
+        }
+
         reset();
     }
 
@@ -691,18 +755,7 @@ public:
             *view.undiscovered_remaining = map_size;
 
         // B. Tiles
-        for (int i = 0; i < map_size; ++i)
-        {
-            view.grid[i].flags = 0; // zero out completely
-            view.grid[i].altitude = altitude_map[i];
-
-            int t_type = type_map[i];
-            view.grid[i].set_type(t_type);
-            view.grid[i].set_walkable(supports_walking[t_type]);
-            view.grid[i].set_aquatic(supports_aquatic[t_type]);
-            view.grid[i].set_flyable(supports_flying[t_type]);
-            view.grid[i].set_blocking(is_blocking[t_type]);
-        }
+        std::memcpy(view.grid, pristine_grid.data(), map_size * sizeof(Tile));
 
         // C. Agents
         for (int a = 0; a < n_agents; ++a)
@@ -753,21 +806,21 @@ public:
             for (int a = 0; a < n_agents; ++a)
             {
                 float *spat_base = torch_obs_spatial_base + env_idx * (n_agents * spatial_stride) + a * spatial_stride;
-                std::fill(spat_base, spat_base + spatial_stride, 0.0f);
+                std::memset(spat_base, 0, spatial_stride * sizeof(float));
             }
         }
         else if (mode == Mode::CENTRALIZED && torch_obs_spatial_base != nullptr)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
             float *spat_base = torch_obs_spatial_base + env_idx * spatial_stride;
-            std::fill(spat_base, spat_base + spatial_stride, 0.0f);
+            std::memset(spat_base, 0, spatial_stride * sizeof(float));
         }
-        
+
         if (requires_state && torch_state_spatial_base != nullptr)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
             float *spat_base = torch_state_spatial_base + env_idx * spatial_stride;
-            std::fill(spat_base, spat_base + spatial_stride, 0.0f);
+            std::memset(spat_base, 0, spatial_stride * sizeof(float));
         }
 
         for (int a = 0; a < n_agents; ++a)
@@ -815,6 +868,8 @@ public:
     inline static std::chrono::duration<double> t_post_processing{0};
     inline static std::chrono::duration<double> t_fill_torch_obs{0};
     inline static std::chrono::duration<double> t_fill_torch_state{0};
+    inline static std::chrono::duration<double> t_reset_time{0};
+    inline static std::chrono::duration<double> t_python_overhead{0};
     inline static std::chrono::duration<double> t_total{0};
 
     py::tuple step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
@@ -835,6 +890,7 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
+            auto t_reset_s = std::chrono::high_resolution_clock::now();
             if (env_terminated[e] || env_truncated[e])
                 reset_env(e);
 
@@ -878,6 +934,7 @@ public:
             // Accumulate timing for each segment (atomic add for thread safety)
 #pragma omp critical
             {
+                t_reset_time += (t1 - t_reset_s);
                 t_process_movement += (t2 - t1);
                 t_resolve_interactions += (t3 - t2);
                 t_radio_logs += (t4 - t3);
@@ -899,9 +956,10 @@ public:
 
         auto t_step_end = std::chrono::high_resolution_clock::now();
         t_total += (t_step_end - t_step_start);
+        t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        if (steps_taken % 5000 == 0)
+        if (steps_taken % 10000 == 0)
         {
             std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
             std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
@@ -911,6 +969,8 @@ public:
             std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
             std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
             std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
+            std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
+            std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
             std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
             std::cout << std::endl;
             // Optionally reset timers if you want per-interval stats
@@ -921,6 +981,8 @@ public:
             t_post_processing = std::chrono::duration<double>(0);
             t_fill_torch_obs = std::chrono::duration<double>(0);
             t_fill_torch_state = std::chrono::duration<double>(0);
+            t_reset_time = std::chrono::duration<double>(0);
+            t_python_overhead = std::chrono::duration<double>(0);
             t_total = std::chrono::duration<double>(0);
         }
         return py::make_tuple(py_rewards, py_terminated, py_truncated);

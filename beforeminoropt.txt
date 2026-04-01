@@ -1,0 +1,513 @@
+python .\env_spec.py
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.6)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[unit] schema checks: PASS
+
+=== Local Mode Benchmarks ===
+
+--- Testing Config: no_obs (Requires State: True) ---
+Making env
+Resetting env
+Stepping env
+[Timing after 5000 steps]
+  process_agent_movement: 0.0009444 s
+  resolve_local_interactions: 0.0137489 s
+  execute_radio: 0.0004832 s
+  update_battery_and_counters: 0.0004906 s
+  post_processing: 0.0004224 s
+  fill_torch_obs: 0.0002837 s
+  fill_torch_state: 0.0312175 s
+  reset_env: 0.0590299 s
+  python_overhead: 0.0158246 s
+  TOTAL step() time: 0.131599 s
+
+[Timing after 10000 steps]
+  process_agent_movement: 0.0009201 s
+  resolve_local_interactions: 0.0136603 s
+  execute_radio: 0.0004856 s
+  update_battery_and_counters: 0.0004811 s
+  post_processing: 0.0004143 s
+  fill_torch_obs: 0.0002754 s
+  fill_torch_state: 0.0305218 s
+  reset_env: 0.0600724 s
+  python_overhead: 0.0164222 s
+  TOTAL step() time: 0.13561 s
+
+[Timing after 15000 steps]
+  process_agent_movement: 0.0009444 s
+  resolve_local_interactions: 0.0140476 s
+  execute_radio: 0.0005141 s
+  update_battery_and_counters: 0.0004961 s
+  post_processing: 0.0004217 s
+  fill_torch_obs: 0.0002861 s
+  fill_torch_state: 0.0318132 s
+  reset_env: 0.0626778 s
+  python_overhead: 0.0164921 s
+  TOTAL step() time: 0.136427 s
+
+[Timing after 20000 steps]
+  process_agent_movement: 0.0009419 s
+  resolve_local_interactions: 0.0141082 s
+  execute_radio: 0.0004905 s
+  update_battery_and_counters: 0.0005102 s
+  post_processing: 0.0004259 s
+  fill_torch_obs: 0.0002905 s
+  fill_torch_state: 0.0320163 s
+  reset_env: 0.0630855 s
+  python_overhead: 0.0164794 s
+  TOTAL step() time: 0.138228 s
+
+[Timing after 25000 steps]
+  process_agent_movement: 0.0009406 s
+  resolve_local_interactions: 0.0136 s
+  execute_radio: 0.0004831 s
+  update_battery_and_counters: 0.0004953 s
+  post_processing: 0.0004154 s
+  fill_torch_obs: 0.0002832 s
+  fill_torch_state: 0.0305665 s
+  reset_env: 0.0603195 s
+  python_overhead: 0.0162952 s
+  TOTAL step() time: 0.131772 s
+
+[Timing after 30000 steps]
+  process_agent_movement: 0.0009477 s
+  resolve_local_interactions: 0.0142052 s
+  execute_radio: 0.0004889 s
+  update_battery_and_counters: 0.0005095 s
+  post_processing: 0.0004311 s
+  fill_torch_obs: 0.0002991 s
+  fill_torch_state: 0.0321327 s
+  reset_env: 0.0635715 s
+  python_overhead: 0.0164287 s
+  TOTAL step() time: 0.14012 s
+
+[Timing after 35000 steps]
+  process_agent_movement: 0.0010007 s
+  resolve_local_interactions: 0.0142205 s
+  execute_radio: 0.0004984 s
+  update_battery_and_counters: 0.0005152 s
+  post_processing: 0.0004282 s
+  fill_torch_obs: 0.0002898 s
+  fill_torch_state: 0.0325452 s
+  reset_env: 0.0641211 s
+  python_overhead: 0.0167239 s
+  TOTAL step() time: 0.141485 s
+
+[Timing after 40000 steps]
+  process_agent_movement: 0.0009736 s
+  resolve_local_interactions: 0.0141914 s
+  execute_radio: 0.0004878 s
+  update_battery_and_counters: 0.0004994 s
+  post_processing: 0.0004425 s
+  fill_torch_obs: 0.0002948 s
+  fill_torch_state: 0.0315016 s
+  reset_env: 0.0617826 s
+  python_overhead: 0.0169398 s
+  TOTAL step() time: 0.140143 s
+
+[Timing after 45000 steps]
+  process_agent_movement: 0.0009194 s
+  resolve_local_interactions: 0.0139987 s
+  execute_radio: 0.0004943 s
+  update_battery_and_counters: 0.0004804 s
+  post_processing: 0.0004402 s
+  fill_torch_obs: 0.0002864 s
+  fill_torch_state: 0.0312009 s
+  reset_env: 0.0620059 s
+  python_overhead: 0.0163743 s
+  TOTAL step() time: 0.218035 s
+
+[Timing after 50000 steps]
+  process_agent_movement: 0.0009811 s
+  resolve_local_interactions: 0.0141574 s
+  execute_radio: 0.0004968 s
+  update_battery_and_counters: 0.0004928 s
+  post_processing: 0.0004316 s
+  fill_torch_obs: 0.000287 s
+  fill_torch_state: 0.0322882 s
+  reset_env: 0.0636415 s
+  python_overhead: 0.0169954 s
+  TOTAL step() time: 0.230672 s
+
+[local] mode=no_obs        state=True  | envs=  1 steps= 50000 fps=6,692.4 | spatial_shape=torch.Size([1, 11, 32, 32])
+
+--- Testing Config: no_obs (Requires State: False) ---
+Making env
+Resetting env
+Stepping env
+[Timing after 5000 steps]
+  process_agent_movement: 0.0009776 s
+  resolve_local_interactions: 0.0137669 s
+  execute_radio: 0.0005127 s
+  update_battery_and_counters: 0.0005172 s
+  post_processing: 0.0004344 s
+  fill_torch_obs: 0.0002866 s
+  fill_torch_state: 0.0004328 s
+  reset_env: 0.0452261 s
+  python_overhead: 0.0152099 s
+  TOTAL step() time: 0.0882986 s
+
+[Timing after 10000 steps]
+  process_agent_movement: 0.0010004 s
+  resolve_local_interactions: 0.0142769 s
+  execute_radio: 0.000523 s
+  update_battery_and_counters: 0.0005256 s
+  post_processing: 0.0004248 s
+  fill_torch_obs: 0.0002839 s
+  fill_torch_state: 0.0004541 s
+  reset_env: 0.0496182 s
+  python_overhead: 0.0151943 s
+  TOTAL step() time: 0.0922793 s
+
+[Timing after 15000 steps]
+  process_agent_movement: 0.0010518 s
+  resolve_local_interactions: 0.01462 s
+  execute_radio: 0.0005186 s
+  update_battery_and_counters: 0.0005642 s
+  post_processing: 0.0004328 s
+  fill_torch_obs: 0.0002881 s
+  fill_torch_state: 0.0004586 s
+  reset_env: 0.050633 s
+  python_overhead: 0.0155094 s
+  TOTAL step() time: 0.0934627 s
+
+[Timing after 20000 steps]
+  process_agent_movement: 0.0009589 s
+  resolve_local_interactions: 0.0135952 s
+  execute_radio: 0.0005027 s
+  update_battery_and_counters: 0.0004968 s
+  post_processing: 0.0004147 s
+  fill_torch_obs: 0.0002821 s
+  fill_torch_state: 0.0004519 s
+  reset_env: 0.0469141 s
+  python_overhead: 0.0151264 s
+  TOTAL step() time: 0.0882115 s
+
+[Timing after 25000 steps]
+  process_agent_movement: 0.0010009 s
+  resolve_local_interactions: 0.0140176 s
+  execute_radio: 0.0005328 s
+  update_battery_and_counters: 0.0005368 s
+  post_processing: 0.0004465 s
+  fill_torch_obs: 0.0002902 s
+  fill_torch_state: 0.0004418 s
+  reset_env: 0.0495098 s
+  python_overhead: 0.0153047 s
+  TOTAL step() time: 0.0954747 s
+
+[Timing after 30000 steps]
+  process_agent_movement: 0.0009904 s
+  resolve_local_interactions: 0.0142923 s
+  execute_radio: 0.0005144 s
+  update_battery_and_counters: 0.0005184 s
+  post_processing: 0.0004349 s
+  fill_torch_obs: 0.0002904 s
+  fill_torch_state: 0.0004366 s
+  reset_env: 0.0498378 s
+  python_overhead: 0.0155012 s
+  TOTAL step() time: 0.0934325 s
+
+[Timing after 35000 steps]
+  process_agent_movement: 0.0009891 s
+  resolve_local_interactions: 0.0138121 s
+  execute_radio: 0.0005006 s
+  update_battery_and_counters: 0.0005148 s
+  post_processing: 0.0004273 s
+  fill_torch_obs: 0.0002773 s
+  fill_torch_state: 0.0004337 s
+  reset_env: 0.047485 s
+  python_overhead: 0.015077 s
+  TOTAL step() time: 0.0897787 s
+
+[Timing after 40000 steps]
+  process_agent_movement: 0.0010082 s
+  resolve_local_interactions: 0.0140025 s
+  execute_radio: 0.0005266 s
+  update_battery_and_counters: 0.000514 s
+  post_processing: 0.0004178 s
+  fill_torch_obs: 0.0002848 s
+  fill_torch_state: 0.000459 s
+  reset_env: 0.0491732 s
+  python_overhead: 0.015342 s
+  TOTAL step() time: 0.0939343 s
+
+[Timing after 45000 steps]
+  process_agent_movement: 0.0010134 s
+  resolve_local_interactions: 0.0142947 s
+  execute_radio: 0.0005214 s
+  update_battery_and_counters: 0.0005251 s
+  post_processing: 0.0004219 s
+  fill_torch_obs: 0.0002795 s
+  fill_torch_state: 0.0004303 s
+  reset_env: 0.0497104 s
+  python_overhead: 0.0153079 s
+  TOTAL step() time: 0.0911636 s
+
+[Timing after 50000 steps]
+  process_agent_movement: 0.0010261 s
+  resolve_local_interactions: 0.0144051 s
+  execute_radio: 0.0005057 s
+  update_battery_and_counters: 0.0005507 s
+  post_processing: 0.0004345 s
+  fill_torch_obs: 0.0002797 s
+  fill_torch_state: 0.0004426 s
+  reset_env: 0.0501812 s
+  python_overhead: 0.01546 s
+  TOTAL step() time: 0.0959925 s
+
+[local] mode=no_obs        state=False | envs=  1 steps= 50000 fps=7,261.8 | spatial_shape=torch.Size([1, 11, 32, 32])
+
+--- Testing Config: decentralized (Requires State: False) ---
+Making env
+Resetting env
+Stepping env
+[Timing after 5000 steps]
+  process_agent_movement: 0.0010227 s
+  resolve_local_interactions: 0.0155212 s
+  execute_radio: 0.047393 s
+  update_battery_and_counters: 0.0004824 s
+  post_processing: 0.0004083 s
+  fill_torch_obs: 0.0471561 s
+  fill_torch_state: 0.0003498 s
+  reset_env: 0.0794596 s
+  python_overhead: 0.0154711 s
+  TOTAL step() time: 0.218611 s
+
+[Timing after 10000 steps]
+  process_agent_movement: 0.0010801 s
+  resolve_local_interactions: 0.0166425 s
+  execute_radio: 0.0511161 s
+  update_battery_and_counters: 0.0005299 s
+  post_processing: 0.0004219 s
+  fill_torch_obs: 0.0506517 s
+  fill_torch_state: 0.0003581 s
+  reset_env: 0.0914447 s
+  python_overhead: 0.0161165 s
+  TOTAL step() time: 0.239307 s
+
+[Timing after 15000 steps]
+  process_agent_movement: 0.001048 s
+  resolve_local_interactions: 0.0161236 s
+  execute_radio: 0.0497812 s
+  update_battery_and_counters: 0.0005303 s
+  post_processing: 0.0004068 s
+  fill_torch_obs: 0.049135 s
+  fill_torch_state: 0.0003649 s
+  reset_env: 0.0887944 s
+  python_overhead: 0.0161318 s
+  TOTAL step() time: 0.232956 s
+
+[Timing after 20000 steps]
+  process_agent_movement: 0.0010875 s
+  resolve_local_interactions: 0.0164626 s
+  execute_radio: 0.0503568 s
+  update_battery_and_counters: 0.0005349 s
+  post_processing: 0.000408 s
+  fill_torch_obs: 0.0497559 s
+  fill_torch_state: 0.000341 s
+  reset_env: 0.0903538 s
+  python_overhead: 0.0159858 s
+  TOTAL step() time: 0.234453 s
+
+[Timing after 25000 steps]
+  process_agent_movement: 0.0010947 s
+  resolve_local_interactions: 0.0162997 s
+  execute_radio: 0.0500714 s
+  update_battery_and_counters: 0.0005085 s
+  post_processing: 0.0004027 s
+  fill_torch_obs: 0.0496062 s
+  fill_torch_state: 0.0003908 s
+  reset_env: 0.0898317 s
+  python_overhead: 0.015772 s
+  TOTAL step() time: 0.23476 s
+
+[Timing after 30000 steps]
+  process_agent_movement: 0.0010334 s
+  resolve_local_interactions: 0.0160593 s
+  execute_radio: 0.049128 s
+  update_battery_and_counters: 0.0005307 s
+  post_processing: 0.0004119 s
+  fill_torch_obs: 0.048689 s
+  fill_torch_state: 0.0003589 s
+  reset_env: 0.0872088 s
+  python_overhead: 0.0161318 s
+  TOTAL step() time: 0.229798 s
+
+[Timing after 35000 steps]
+  process_agent_movement: 0.0010268 s
+  resolve_local_interactions: 0.0161334 s
+  execute_radio: 0.0487214 s
+  update_battery_and_counters: 0.0005055 s
+  post_processing: 0.0004099 s
+  fill_torch_obs: 0.0491469 s
+  fill_torch_state: 0.000337 s
+  reset_env: 0.0887242 s
+  python_overhead: 0.0155683 s
+  TOTAL step() time: 0.230232 s
+
+[Timing after 40000 steps]
+  process_agent_movement: 0.001051 s
+  resolve_local_interactions: 0.0161564 s
+  execute_radio: 0.0505295 s
+  update_battery_and_counters: 0.0005258 s
+  post_processing: 0.0004083 s
+  fill_torch_obs: 0.0500692 s
+  fill_torch_state: 0.0003352 s
+  reset_env: 0.0914146 s
+  python_overhead: 0.0159822 s
+  TOTAL step() time: 0.236486 s
+
+[Timing after 45000 steps]
+  process_agent_movement: 0.0009779 s
+  resolve_local_interactions: 0.0150855 s
+  execute_radio: 0.0464527 s
+  update_battery_and_counters: 0.0004905 s
+  post_processing: 0.0003874 s
+  fill_torch_obs: 0.0457063 s
+  fill_torch_state: 0.0003391 s
+  reset_env: 0.0802574 s
+  python_overhead: 0.0156552 s
+  TOTAL step() time: 0.213216 s
+
+[Timing after 50000 steps]
+  process_agent_movement: 0.0010185 s
+  resolve_local_interactions: 0.0155566 s
+  execute_radio: 0.0487208 s
+  update_battery_and_counters: 0.0004958 s
+  post_processing: 0.0003995 s
+  fill_torch_obs: 0.0479282 s
+  fill_torch_state: 0.0004204 s
+  reset_env: 0.0861763 s
+  python_overhead: 0.0156931 s
+  TOTAL step() time: 0.227644 s
+
+[local] mode=decentralized state=False | envs=  1 steps= 50000 fps=6,099.0 | spatial_shape=torch.Size([1, 3, 11, 32, 32])
+
+--- Testing Config: centralized (Requires State: False) ---
+Making env
+Resetting env
+Stepping env
+[Timing after 5000 steps]
+  process_agent_movement: 0.0009829 s
+  resolve_local_interactions: 0.0140743 s
+  execute_radio: 0.0005295 s
+  update_battery_and_counters: 0.0005333 s
+  post_processing: 0.00045 s
+  fill_torch_obs: 0.0138975 s
+  fill_torch_state: 0.0003764 s
+  reset_env: 0.060577 s
+  python_overhead: 0.0157739 s
+  TOTAL step() time: 0.118288 s
+
+[Timing after 10000 steps]
+  process_agent_movement: 0.0009268 s
+  resolve_local_interactions: 0.0132316 s
+  execute_radio: 0.0004955 s
+  update_battery_and_counters: 0.000491 s
+  post_processing: 0.0004106 s
+  fill_torch_obs: 0.0126914 s
+  fill_torch_state: 0.0003594 s
+  reset_env: 0.0579597 s
+  python_overhead: 0.0150862 s
+  TOTAL step() time: 0.110606 s
+
+[Timing after 15000 steps]
+  process_agent_movement: 0.0010154 s
+  resolve_local_interactions: 0.0139542 s
+  execute_radio: 0.0005112 s
+  update_battery_and_counters: 0.0005216 s
+  post_processing: 0.0004435 s
+  fill_torch_obs: 0.0136261 s
+  fill_torch_state: 0.0003798 s
+  reset_env: 0.0628737 s
+  python_overhead: 0.015488 s
+  TOTAL step() time: 0.116442 s
+
+[Timing after 20000 steps]
+  process_agent_movement: 0.0009679 s
+  resolve_local_interactions: 0.0137691 s
+  execute_radio: 0.0005274 s
+  update_battery_and_counters: 0.0005082 s
+  post_processing: 0.0004117 s
+  fill_torch_obs: 0.0134509 s
+  fill_torch_state: 0.0003631 s
+  reset_env: 0.0619266 s
+  python_overhead: 0.0155659 s
+  TOTAL step() time: 0.118656 s
+
+[Timing after 25000 steps]
+  process_agent_movement: 0.0009277 s
+  resolve_local_interactions: 0.0133231 s
+  execute_radio: 0.0004747 s
+  update_battery_and_counters: 0.000495 s
+  post_processing: 0.0003929 s
+  fill_torch_obs: 0.0129268 s
+  fill_torch_state: 0.0003517 s
+  reset_env: 0.0586562 s
+  python_overhead: 0.0151893 s
+  TOTAL step() time: 0.111178 s
+
+[Timing after 30000 steps]
+  process_agent_movement: 0.0009685 s
+  resolve_local_interactions: 0.0141163 s
+  execute_radio: 0.0005341 s
+  update_battery_and_counters: 0.0005114 s
+  post_processing: 0.0004305 s
+  fill_torch_obs: 0.0137013 s
+  fill_torch_state: 0.0003526 s
+  reset_env: 0.062929 s
+  python_overhead: 0.0157623 s
+  TOTAL step() time: 0.118051 s
+
+[Timing after 35000 steps]
+  process_agent_movement: 0.0009642 s
+  resolve_local_interactions: 0.0138466 s
+  execute_radio: 0.0004857 s
+  update_battery_and_counters: 0.0005039 s
+  post_processing: 0.0004431 s
+  fill_torch_obs: 0.013463 s
+  fill_torch_state: 0.0003546 s
+  reset_env: 0.0620727 s
+  python_overhead: 0.0152692 s
+  TOTAL step() time: 0.118097 s
+
+[Timing after 40000 steps]
+  process_agent_movement: 0.0009341 s
+  resolve_local_interactions: 0.0135657 s
+  execute_radio: 0.0005006 s
+  update_battery_and_counters: 0.0004962 s
+  post_processing: 0.0004315 s
+  fill_torch_obs: 0.0130782 s
+  fill_torch_state: 0.0003599 s
+  reset_env: 0.060574 s
+  python_overhead: 0.0151944 s
+  TOTAL step() time: 0.114192 s
+
+[Timing after 45000 steps]
+  process_agent_movement: 0.0009546 s
+  resolve_local_interactions: 0.0140954 s
+  execute_radio: 0.0005081 s
+  update_battery_and_counters: 0.0005124 s
+  post_processing: 0.0004395 s
+  fill_torch_obs: 0.0134674 s
+  fill_torch_state: 0.0003586 s
+  reset_env: 0.0619547 s
+  python_overhead: 0.0157302 s
+  TOTAL step() time: 0.120239 s
+
+[Timing after 50000 steps]
+  process_agent_movement: 0.0009612 s
+  resolve_local_interactions: 0.0138309 s
+  execute_radio: 0.0004698 s
+  update_battery_and_counters: 0.0004926 s
+  post_processing: 0.0004205 s
+  fill_torch_obs: 0.0133889 s
+  fill_torch_state: 0.0003411 s
+  reset_env: 0.062044 s
+  python_overhead: 0.0152847 s
+  TOTAL step() time: 0.116174 s
+
+[local] mode=centralized   state=False | envs=  1 steps= 50000 fps=7,159.6 | spatial_shape=torch.Size([1, 11, 32, 32])
+
+=== Running Renderer Smoke Test ===
+[render] true state & per-agent POV renderer: PASS

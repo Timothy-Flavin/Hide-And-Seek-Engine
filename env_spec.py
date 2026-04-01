@@ -168,13 +168,13 @@ def main():
         description="SAR environment unit/integration/benchmark suite"
     )
     parser.add_argument(
-        "--steps", type=int, default=10_000, help="Headless benchmark total steps"
+        "--steps", type=int, default=50_000, help="Headless benchmark total steps"
     )
     parser.add_argument(
         "--envs",
         type=int,
         nargs="*",
-        default=[1],  # 2, 4, 8, 32, 64],
+        default=[1, 2, 4, 8, 32, 64],
         help="Parallel env counts to test",
     )
     parser.add_argument(

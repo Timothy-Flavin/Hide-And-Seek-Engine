@@ -1,10 +1,23 @@
 {
-    "kid":{
-        "allowed_savers":["human","robodog"],
-        "moves":false
+    "kid": {
+        "allowed_savers": [
+            "human",
+            "robodog"
+        ],
+        "moves": false,
+        "start": [
+            0.8,
+            0.9
+        ]
     },
-    "adult":{
-        "allowed_savers":["human"],
-        "moves":true
+    "adult": {
+        "allowed_savers": [
+            "human"
+        ],
+        "moves": true,
+        "start": [
+            0.1,
+            0.9
+        ]
     }
 }
