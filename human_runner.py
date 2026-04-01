@@ -64,19 +64,23 @@ def run_episode(
             if event.type == pygame.QUIT:
                 return {}, []
 
-        action = np.zeros((1, env.n_agents, 3), dtype=np.float32)
+        action = np.zeros((1, env.config.n_agents, 3), dtype=np.float32)
         action[0, controlled_agent] = _keyboard_action()
 
-        for a in range(env.n_agents):
+        for a in range(env.config.n_agents):
             if a != controlled_agent:
                 action[0, a, :2] = np.random.uniform(-1.0, 1.0, size=(2,)).astype(
                     np.float32
                 )
                 action[0, a, 2] = float(np.random.randint(0, 4))
 
-        state = env.state()
-        next_obs, reward, terminated, truncated, _ = env.step(action)
-        next_state = env.state()
+        state = env.get_state()
+        move_actions = action[..., :2]
+        radio_actions = action[..., 2]
+        next_obs, reward, terminated, truncated, _ = env.step(
+            move_actions, radio_actions
+        )
+        next_state = env.get_state()
 
         # Data collection
         states_spatial.append(state["spatial"][0].cpu().numpy())
@@ -98,8 +102,8 @@ def run_episode(
         done = bool(terminated[0].item() or truncated[0].item())
 
         # Render
-        env.render_pov(controlled_agent, env_idx=0)
-        env.radio_render()
+        env.render(controlled_agent, env_idx=0)
+        # env.radio_render()
 
         # Capture frame for GIF if recording is enabled
         if record:
@@ -151,38 +155,34 @@ def main():
         tiles_json="test_level/tiles.json",
         agents_json="test_level/agents.json",
         survivors_json="test_level/survivors.json",
-        map_size=32,
-        seed=42,
+        requires_state=True,
     )
 
     print("Controls: WASD move, 1/2/3 radio channels, close window to exit")
 
-    try:
-        episode_idx = 0
-        while True:
-            controlled_agent = 0  # random.randrange(env.n_agents)
-            print(
-                f"Starting episode {episode_idx} with controlled agent_{controlled_agent}"
-            )
+    episode_idx = 0
+    while True:
+        controlled_agent = 0  # random.randrange(env.config.n_agents)
+        print(
+            f"Starting episode {episode_idx} with controlled agent_{controlled_agent}"
+        )
 
-            data, frames = run_episode(
-                env, controlled_agent=controlled_agent, record=args.record
-            )
+        data, frames = run_episode(
+            env, controlled_agent=controlled_agent, record=args.record
+        )
 
-            if not data:
-                break
+        if not data:
+            break
 
-            user_name = input("Save episode name (blank to skip): ").strip()
-            if user_name:
-                out_dir = os.path.join("saved_human_behavior", user_name)
-                save_episode(data, frames, out_dir)
-                print(f"Saved data and GIF to {out_dir}")
-            else:
-                print("Skipped saving")
+        user_name = input("Save episode name (blank to skip): ").strip()
+        if user_name:
+            out_dir = os.path.join("saved_human_behavior", user_name)
+            save_episode(data, frames, out_dir)
+            print(f"Saved data and GIF to {out_dir}")
+        else:
+            print("Skipped saving")
 
-            episode_idx += 1
-    finally:
-        env.close()
+        episode_idx += 1
 
 
 if __name__ == "__main__":
