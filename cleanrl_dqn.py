@@ -10,6 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+torch.set_float32_matmul_precision('high')
+
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from MixedObservationEncoder import MixedObservationEncoder
 
