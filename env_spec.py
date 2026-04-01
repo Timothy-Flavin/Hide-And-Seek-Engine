@@ -53,6 +53,7 @@ def run_local_headless(
     requires_state: bool,
     seed: int = 42,
 ) -> float:
+    print("Making env")
     env = SARBatchedGridEnv(
         num_envs=num_envs,
         map_png=assets["map_png"],
@@ -62,11 +63,13 @@ def run_local_headless(
         mode=mode,
         requires_state=requires_state,
     )
+    print("Resetting env")
     obs, _ = env.reset()
 
     t0 = time.perf_counter()
     total_step_calls = 0
 
+    print("Stepping env")
     for _ in range(steps // num_envs):
         move_acts, radio_acts = _random_local_actions(num_envs, env.config.n_agents)
         obs, _, terminated, _, _ = env.step(move_acts, radio_acts)
@@ -146,6 +149,10 @@ def benchmark_suite(assets: dict[str, str], steps: int, env_counts: list[int]):
         print(
             f"\n--- Testing Config: {cfg['mode']} (Requires State: {cfg['requires_state']}) ---"
         )
+        # if cfg["mode"] != "decentralized":
+        #     continue
+        # if cfg["requires_state"]:
+        #     continue
         for n in env_counts:
             run_local_headless(
                 num_envs=n,
@@ -167,7 +174,7 @@ def main():
         "--envs",
         type=int,
         nargs="*",
-        default=[1, 2, 4, 8, 32],
+        default=[1, 2, 4, 8, 32, 64],
         help="Parallel env counts to test",
     )
     parser.add_argument(

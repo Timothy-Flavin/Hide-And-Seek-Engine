@@ -243,12 +243,13 @@ private:
         // nothing happens. If it choses another action it is messaging
         // one of the other agents. It will share it's current information
         // updating it's x y in the other agent's tensor observation
-        if (mode != Mode::CENTRALIZED)
+        if (mode != Mode::DECENTRALIZED)
             return ""; // No-op for global and no_obs modes
 
         EnvStateView view = env_views[e];
         std::string log = "";
 
+        // std::cout << "Starting radio loop " << e << "\n";
         for (int a = 0; a < n_agents; ++a)
         {
             int target_agent = radio_act_data[e * n_agents + a];
@@ -259,6 +260,7 @@ private:
                 continue;
 
             // Agent 'a' sends info to 'target_agent'
+            // std::cout << "Agent " << a << " sending to " << target_agent << " thread: " << e << "\n";
 
             // 1. Share 'a' location with 'target_agent'
             AgentKnowledge &target_ak = view.agent_knowledge[target_agent * n_agents + a];
@@ -266,6 +268,7 @@ private:
             target_ak.y = view.agents[a].y;
             target_ak.has_contact = 1;
 
+            // std::cout << "share knowledge\n";
             // 2. Share POI knowledge
             for (int p = 0; p < n_pois; ++p)
             {
@@ -284,6 +287,9 @@ private:
                     receiver_pk.knows_saved = 1;
                 }
             }
+
+            // std::cout << "share tile knowledge " << e << "\n";
+
             // 3. Share Tile Knowledge (Merge maps)
             for (int i = 0; i < map_size; ++i)
             {
@@ -293,6 +299,9 @@ private:
                     t.set_agent_seen(target_agent);
                 }
             }
+
+            // std::cout << "log " << e << "\n";
+
             log += "Agent " + std::to_string(a) + " -> " + std::to_string(target_agent) + "; ";
         }
         return log;
@@ -317,7 +326,7 @@ private:
         for (int p = 0; p < n_pois; ++p)
         {
             if (!view.pois[p].saved)
-                poi_left;
+                poi_left++;
         }
         *view.poi_left = poi_left;
     }
@@ -585,6 +594,7 @@ public:
         env_truncated.resize(num_envs, false);
         current_frames.resize(num_envs, 0);
         radio_logs.resize(num_envs, "");
+        individual_rewards.resize(num_envs * n_agents, 0.0f);
 
         torch_obs_spatial_base = reinterpret_cast<float *>(obs_spatial_ptr);
         torch_obs_internal_base = reinterpret_cast<float *>(obs_internal_ptr);
@@ -711,10 +721,16 @@ public:
             if (env_terminated[e] || env_truncated[e])
                 reset_env(e);
 
+            // std::cout << "Env " << e << " process movement\n";
             process_agent_movement(e, act_data);
+            // std::cout << "Env " << e << " resolve interactions\n";
             resolve_local_interactions(e);
+            // std::cout << "Env " << e << " radio logs\n";
             radio_logs[e] = execute_radio(e, radio_act_data);
+            // std::cout << "Env " << e << " update counters\n";
             update_battery_and_counters(e);
+
+            // std::cout << "Env " << e << " post processing\n";
 
             bool all_saved = (*env_views[e].poi_left == 0);
             bool all_out_of_battery = (*env_views[e].agents_left == 0);
@@ -725,12 +741,14 @@ public:
 
             // If we are using this environment for machine learning
             // then fill the torch buffers accordingly
+            // std::cout << "Env " << e << " fill torch\n";
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
                 fill_torch_obs(e);
             if (requires_state)
                 fill_torch_state(e);
         }
 
+        // std::cout << "setup for python" << std::endl;
         auto py_rewards = py::array_t<float>({num_envs, n_agents});
         auto py_terminated = py::array_t<bool>(num_envs);
         auto py_truncated = py::array_t<bool>(num_envs);

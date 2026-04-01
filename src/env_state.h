@@ -246,8 +246,8 @@ public:
         size_t poi_knowledge_bytes = 0;
         if (mode == Mode::DECENTRALIZED)
         {
-            size_t agent_knowledge_bytes = (n_agents * n_agents) * sizeof(AgentKnowledge);
-            size_t poi_knowledge_bytes = (n_agents * n_pois) * sizeof(POIKnowledge);
+            agent_knowledge_bytes = (n_agents * n_agents) * sizeof(AgentKnowledge);
+            poi_knowledge_bytes = (n_agents * n_pois) * sizeof(POIKnowledge);
         }
         size_t counter_bytes = 4 * sizeof(int);
 
