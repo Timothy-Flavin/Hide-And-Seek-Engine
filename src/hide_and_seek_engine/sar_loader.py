@@ -20,6 +20,7 @@ class SARConfig:
     type_map: list[int]
     altitude_map: list[float]
     agent_speed_map: list[float]
+    agent_view_ranges: list[float]
     saveable_map: list[bool]
     initial_agent_pos: list[float]
     initial_poi_pos: list[float]
@@ -77,6 +78,7 @@ def load_sar_config(
     n_agents = len(agent_names)
     agent_speed_map = []
     initial_agent_pos = []
+    agent_view_ranges = []
     agent_colors = np.array(
         [agents_data[a].get("rgb", [255, 0, 0]) for a in agent_names], dtype=np.int32
     )
@@ -84,6 +86,7 @@ def load_sar_config(
     for a_name in agent_names:
         agent = agents_data[a_name]
         speeds = agent.get("terrain_speed", {})
+        agent_view_ranges.append(float(agent.get("base_view", 5.0)))
         for t_name in tile_names:
             agent_speed_map.append(float(speeds.get(t_name, 1.0)))
 
@@ -129,6 +132,7 @@ def load_sar_config(
         type_map=type_map,
         altitude_map=altitude_map,
         agent_speed_map=agent_speed_map,
+        agent_view_ranges=agent_view_ranges,
         saveable_map=saveable_map,
         initial_agent_pos=initial_agent_pos,
         initial_poi_pos=initial_poi_pos,

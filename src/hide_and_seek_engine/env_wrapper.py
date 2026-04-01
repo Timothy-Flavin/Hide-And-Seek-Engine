@@ -110,6 +110,7 @@ class SARBatchedGridEnv:
                 self.config.type_map,
                 self.config.altitude_map,
                 self.config.agent_speed_map,
+                self.config.agent_view_ranges,
                 self.config.saveable_map,
                 self.config.initial_agent_pos,
                 self.config.initial_poi_pos,

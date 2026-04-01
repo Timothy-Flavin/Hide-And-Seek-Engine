@@ -54,6 +54,7 @@ private:
     std::vector<int> type_map;
     std::vector<float> altitude_map;
     std::vector<float> agent_speed_map;
+    std::vector<float> agent_base_view_ranges;
     std::vector<bool> supports_walking;
     std::vector<bool> supports_aquatic;
     std::vector<bool> supports_flying;
@@ -131,7 +132,10 @@ private:
 
             int final_y = static_cast<int>(ny);
             int final_x = static_cast<int>(nx);
-            agent.current_tile = static_cast<uint16_t>(final_y * width + final_x);
+            uint16_t t_id = static_cast<uint16_t>(final_y * width + final_x);
+            agent.current_tile = t_id;
+            float final_altitude = view.grid[t_id].altitude;
+            agent.view_range = std::max(agent_base_view_ranges[a] * final_altitude, 1.0f);
         }
     }
 
@@ -657,6 +661,7 @@ public:
         std::vector<int> t_map, // width*height int for tile types
         std::vector<float> alt_map,
         std::vector<float> speed_map,
+        std::vector<float> agent_view_ranges,
         std::vector<bool> saveable_rules,     // n_poi * n_agents can this poi be saved by this agent
         std::vector<float> initial_agent_pos, // n_agent * 2 x y start locs
         std::vector<float> initial_poi_pos,   // n_poi * 2 x y start locs
@@ -675,6 +680,7 @@ public:
           supports_walking(std::move(supports_walk)), supports_aquatic(std::move(supports_aqua)),
           supports_flying(std::move(supports_fly)), is_blocking(std::move(is_block)),
           type_map(std::move(t_map)), altitude_map(std::move(alt_map)), agent_speed_map(std::move(speed_map)),
+          agent_base_view_ranges(std::move(agent_view_ranges)),
           saveable_rules(std::move(saveable_rules)), init_agent_positions(std::move(initial_agent_pos)),
           init_poi_positions(std::move(initial_poi_pos)), requires_state(requires_state), cooperative_rewards(coop_rewards),
           reward_new_tile(reward_new_tile_val), reward_found(reward_found_val), reward_saved(reward_saved_val),
@@ -763,7 +769,12 @@ public:
             view.agents[a].y = init_agent_positions[a * 2];
             view.agents[a].x = init_agent_positions[a * 2 + 1];
             view.agents[a].battery = 100.0f;
-            view.agents[a].view_range = 5.0f;
+            
+            int cy = static_cast<int>(view.agents[a].y);
+            int cx = static_cast<int>(view.agents[a].x);
+            float start_altitude = view.grid[cy * width + cx].altitude;
+            view.agents[a].view_range = std::max(agent_base_view_ranges[a] * start_altitude, 1.0f);
+            
             view.agents[a].deployment_remaining = view.agents[a].battery;
             view.agents[a].type = a;
             view.agents[a].stuck = 0;
@@ -1006,6 +1017,7 @@ PYBIND11_MODULE(cpp_engine, m)
                  std::vector<int>,   // t_map
                  std::vector<float>, // alt_map
                  std::vector<float>, // speed_map
+                 std::vector<float>, // agent_view_ranges
                  std::vector<bool>,  // saveable_rules
                  std::vector<float>, // initial_agent_pos
                  std::vector<float>, // initial_poi_pos
@@ -1032,6 +1044,7 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("t_map"),
              py::arg("alt_map"),
              py::arg("speed_map"),
+             py::arg("agent_view_ranges"),
              py::arg("saveable_rules"),
              py::arg("initial_agent_pos"),
              py::arg("initial_poi_pos"),
