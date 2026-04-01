@@ -1,6 +1,7 @@
 import os
 import random
 import time
+import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
 import numpy as np
@@ -131,11 +132,9 @@ class QNetwork(nn.Module):
 
         feats = self.encoder(x)
 
-        q_values = []
-        for i in range(self.n_agents):
-            q_values.append(self.q_heads[i](feats).unsqueeze(1))
+        q_values = torch.stack([head(feats) for head in self.q_heads], dim=1)
 
-        return torch.cat(q_values, dim=1)  # [B, n_agents, num_actions]
+        return q_values  # [B, n_agents, num_actions]
 
 
 def map_discrete_to_continuous_action(discrete_action):
@@ -175,9 +174,10 @@ if __name__ == "__main__":
     spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
-    q_network = QNetwork(spatial_shape, internal_dim, n_agents).to(device)
+    # Use torch.compile on the QNetwork
+    q_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
-    target_network = QNetwork(spatial_shape, internal_dim, n_agents).to(device)
+    target_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
     target_network.load_state_dict(q_network.state_dict())
 
     rb = CustomReplayBuffer(
@@ -321,3 +321,12 @@ if __name__ == "__main__":
                     args.tau * q_network_param.data
                     + (1.0 - args.tau) * target_network_param.data
                 )
+
+    # Plot episodic returns at the end
+    plt.figure()
+    plt.plot(episodic_returns)
+    plt.xlabel("Episode")
+    plt.ylabel("Return")
+    plt.title("Episodic Returns")
+    plt.savefig("episodic_returns.png")
+    print(f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'.")

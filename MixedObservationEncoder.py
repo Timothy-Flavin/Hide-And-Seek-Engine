@@ -14,6 +14,14 @@ def infer_encoder_out_dim(encoder: nn.Module, input_dim: int) -> int:
     return int(out.shape[-1])
 
 
+class ReshapeToSpatial(nn.Module):
+    def __init__(self, shape):
+        super().__init__()
+        self.shape = shape
+
+    def forward(self, x):
+        return x.view(-1, *self.shape)
+
 class MixedObservationEncoder(nn.Module):
     """Encodes flattened [spatial | vector] observations into a dense feature vector."""
 
@@ -34,6 +42,7 @@ class MixedObservationEncoder(nn.Module):
         if len(self.spatial_shape) == 3:
             c, h, w = self.spatial_shape
             self.spatial_encoder = nn.Sequential(
+                ReshapeToSpatial((c, h, w)),
                 nn.Conv2d(c, 32, kernel_size=4, stride=2, padding=1),
                 nn.ReLU(),
                 nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
@@ -45,10 +54,10 @@ class MixedObservationEncoder(nn.Module):
                 nn.Linear(64, spatial_hidden_dim),
                 nn.ReLU(),
             )
-            self._spatial_mode = "conv_chw"
         elif len(self.spatial_shape) == 2:
             h, w = self.spatial_shape
             self.spatial_encoder = nn.Sequential(
+                ReshapeToSpatial((1, h, w)),
                 nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1),
                 nn.ReLU(),
                 nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
@@ -60,7 +69,6 @@ class MixedObservationEncoder(nn.Module):
                 nn.Linear(64, spatial_hidden_dim),
                 nn.ReLU(),
             )
-            self._spatial_mode = "conv_hw"
         else:
             self.spatial_encoder = nn.Sequential(
                 nn.Linear(self.spatial_dim, spatial_hidden_dim),
@@ -68,7 +76,6 @@ class MixedObservationEncoder(nn.Module):
                 nn.Linear(spatial_hidden_dim, spatial_hidden_dim),
                 nn.ReLU(),
             )
-            self._spatial_mode = "mlp"
 
         if self.vector_dim > 0:
             self.vector_encoder = nn.Sequential(
@@ -78,9 +85,11 @@ class MixedObservationEncoder(nn.Module):
                 nn.ReLU(),
             )
             fusion_in_dim = spatial_hidden_dim + vector_hidden_dim
+            self.has_vector = True
         else:
             self.vector_encoder = None
             fusion_in_dim = spatial_hidden_dim
+            self.has_vector = False
 
         self.fusion = nn.Sequential(
             nn.Linear(fusion_in_dim, self.output_dim),
@@ -88,36 +97,12 @@ class MixedObservationEncoder(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        single = x.ndim == 1
-        if single:
-            x = x.unsqueeze(0)
-
-        expected = self.spatial_dim + self.vector_dim
-        if x.shape[-1] != expected:
-            raise ValueError(
-                f"MixedObservationEncoder expected last dim {expected}, got {x.shape[-1]}"
-            )
-
         spatial_flat = x[..., : self.spatial_dim]
-        vector = x[..., self.spatial_dim :]
-
-        if self._spatial_mode == "conv_chw":
-            spatial = spatial_flat.view(-1, *self.spatial_shape)
-        elif self._spatial_mode == "conv_hw":
-            h, w = self.spatial_shape
-            spatial = spatial_flat.view(-1, 1, h, w)
-        else:
-            spatial = spatial_flat
-
-        spatial_feat = self.spatial_encoder(spatial)
-
-        if self.vector_encoder is not None:
+        spatial_feat = self.spatial_encoder(spatial_flat)
+        if self.has_vector:
+            vector = x[..., self.spatial_dim :]
             vector_feat = self.vector_encoder(vector)
             fused = torch.cat([spatial_feat, vector_feat], dim=-1)
         else:
             fused = spatial_feat
-
-        out = self.fusion(fused)
-        if single:
-            return out.squeeze(0)
-        return out
+        return self.fusion(fused)

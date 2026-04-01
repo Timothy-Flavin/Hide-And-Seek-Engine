@@ -748,6 +748,55 @@ public:
         }
 
         reset();
+        initial_burn_in();
+    }
+
+    void initial_burn_in()
+    {
+#pragma omp parallel for schedule(static)
+        for (int e = 0; e < num_envs; ++e)
+        {
+            if (e == 0) continue;
+            std::uniform_real_distribution<float> rand_dir(-1.0f, 1.0f);
+            std::uniform_int_distribution<int> rand_radio(0, n_agents - 1);
+            
+            std::vector<float> mock_act_data(num_envs * n_agents * 2, 0.0f);
+            std::vector<int> mock_radio_data(num_envs * n_agents, 0);
+
+            for (int step = 0; step < e; ++step)
+            {
+                if (env_terminated[e] || env_truncated[e])
+                    reset_env(e);
+
+                for (int a = 0; a < n_agents; ++a)
+                {
+                    mock_act_data[e * n_agents * 2 + a * 2] = rand_dir(rngs[e]);
+                    mock_act_data[e * n_agents * 2 + a * 2 + 1] = rand_dir(rngs[e]);
+                    mock_radio_data[e * n_agents + a] = rand_radio(rngs[e]);
+                }
+
+                process_agent_movement(e, mock_act_data.data());
+                resolve_local_interactions(e);
+                execute_radio(e, mock_radio_data.data());
+                update_battery_and_counters(e);
+                
+                bool all_saved = (*env_views[e].poi_left == 0);
+                bool all_out_of_battery = (*env_views[e].agents_left == 0);
+                const bool timeout = current_frames[e] >= max_frames;
+                env_terminated[e] = all_saved || all_out_of_battery;
+                env_truncated[e] = timeout;
+                ++current_frames[e];
+                
+                if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
+                {
+                    fill_torch_obs(e);
+                }
+                if (requires_state)
+                {
+                    fill_torch_state(e);
+                }
+            }
+        }
     }
 
     void reset_env(int env_idx)
