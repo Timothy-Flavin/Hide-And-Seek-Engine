@@ -159,7 +159,10 @@ struct alignas(16) AgentState
     int type;
     uint8_t stuck;
     uint16_t current_tile;
-    // 1 bytes implicit padding
+    int last_x;
+    int last_y;
+    int state_last_x;
+    int state_last_y;
 };
 
 struct alignas(16) POIState
@@ -170,7 +173,10 @@ struct alignas(16) POIState
     uint8_t found;
     uint8_t saved;
     uint8_t moves;
-    // 1 byte implicit padding
+    int last_x;
+    int last_y;
+    int state_last_x;
+    int state_last_y;
 };
 
 // What Agent A knows about Agent B
@@ -179,7 +185,8 @@ struct alignas(16) AgentKnowledge
     float x;
     float y;
     uint8_t has_contact; // 0 = never seen/heard from, 1 = valid known location
-    // 7 bytes implicit padding
+    int last_x;
+    int last_y;
 };
 
 // What Agent A knows about POI (Survivor) K
@@ -189,7 +196,8 @@ struct alignas(16) POIKnowledge
     float y;
     uint8_t knows_found;
     uint8_t knows_saved;
-    // 6 bytes implicit padding
+    int last_x;
+    int last_y;
 };
 
 // 2. The View Struct: Maps to the contiguous flat memory

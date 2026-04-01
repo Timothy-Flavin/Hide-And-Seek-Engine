@@ -352,8 +352,6 @@ private:
                 float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
-                std::fill(spat_base, spat_base + spatial_stride, 0.0f);
-
                 // Spatial MASKED
                 for (int i = 0; i < map_area; ++i)
                 {
@@ -369,20 +367,42 @@ private:
                 for (int p = 0; p < n_pois; ++p)
                 {
                     POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
+                    
+                    if (pk.last_y >= 0 && pk.last_x >= 0 && pk.last_y < height && pk.last_x < width)
+                        spat_base[decentral_obs_strides->PIO_START + pk.last_y * width + pk.last_x] = 0.0f;
+                        
                     if (pk.knows_found && !pk.knows_saved)
                     {
                         int py = static_cast<int>(pk.y);
                         int px = static_cast<int>(pk.x);
-                        if (py >= 0 && py < height && px >= 0 && px < width)
+                        if (py >= 0 && py < height && px >= 0 && px < width) {
                             spat_base[decentral_obs_strides->PIO_START + py * width + px] = 1.0f;
+                            pk.last_y = py;
+                            pk.last_x = px;
+                        } else {
+                            pk.last_y = -1;
+                            pk.last_x = -1;
+                        }
+                    } else {
+                        pk.last_y = -1;
+                        pk.last_x = -1;
                     }
                 }
 
                 // Agents
+                if (view.agents[a].last_y >= 0 && view.agents[a].last_x >= 0 && view.agents[a].last_y < height && view.agents[a].last_x < width)
+                    spat_base[decentral_obs_strides->MY_LOCATION_START + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
+
                 int my_y = static_cast<int>(view.agents[a].y);
                 int my_x = static_cast<int>(view.agents[a].x);
-                if (my_y >= 0 && my_y < height && my_x >= 0 && my_x < width)
+                if (my_y >= 0 && my_y < height && my_x >= 0 && my_x < width) {
                     spat_base[decentral_obs_strides->MY_LOCATION_START + my_y * width + my_x] = 1.0f;
+                    view.agents[a].last_y = my_y;
+                    view.agents[a].last_x = my_x;
+                } else {
+                    view.agents[a].last_y = -1;
+                    view.agents[a].last_x = -1;
+                }
 
                 int other_idx = 0;
                 for (int a2 = 0; a2 < n_agents; ++a2)
@@ -390,12 +410,25 @@ private:
                     if (a == a2)
                         continue;
                     AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a2];
+                    
+                    if (ak.last_y >= 0 && ak.last_x >= 0 && ak.last_y < height && ak.last_x < width)
+                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + ak.last_y * width + ak.last_x] = 0.0f;
+
                     if (ak.has_contact)
                     {
                         int oy = static_cast<int>(ak.y);
                         int ox = static_cast<int>(ak.x);
-                        if (oy >= 0 && oy < height && ox >= 0 && ox < width)
+                        if (oy >= 0 && oy < height && ox >= 0 && ox < width) {
                             spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + oy * width + ox] = 1.0f;
+                            ak.last_y = oy;
+                            ak.last_x = ox;
+                        } else {
+                            ak.last_y = -1;
+                            ak.last_x = -1;
+                        }
+                    } else {
+                        ak.last_y = -1;
+                        ak.last_x = -1;
                     }
                     other_idx++;
                 }
@@ -415,8 +448,6 @@ private:
             float *spat_base = torch_obs_spatial_base + e * spatial_stride;
             float *int_base = torch_obs_internal_base + e * (n_agents * 6);
 
-            std::fill(spat_base, spat_base + spatial_stride, 0.0f);
-
             for (int i = 0; i < map_area; ++i)
             {
                 if (view.grid[i].is_global_observed())
@@ -429,21 +460,42 @@ private:
 
             for (int p = 0; p < n_pois; ++p)
             {
+                if (view.pois[p].last_y >= 0 && view.pois[p].last_x >= 0 && view.pois[p].last_y < height && view.pois[p].last_x < width)
+                    spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
+                    
                 if (view.pois[p].found && !view.pois[p].saved)
                 {
                     int py = static_cast<int>(view.pois[p].y);
                     int px = static_cast<int>(view.pois[p].x);
-                    if (py >= 0 && py < height && px >= 0 && px < width)
+                    if (py >= 0 && py < height && px >= 0 && px < width) {
                         spat_base[central_obs_strides->PIO_START + py * width + px] = 1.0f;
+                        view.pois[p].last_y = py;
+                        view.pois[p].last_x = px;
+                    } else {
+                        view.pois[p].last_y = -1;
+                        view.pois[p].last_x = -1;
+                    }
+                } else {
+                    view.pois[p].last_y = -1;
+                    view.pois[p].last_x = -1;
                 }
             }
 
             for (int a = 0; a < n_agents; ++a)
             {
+                if (view.agents[a].last_y >= 0 && view.agents[a].last_x >= 0 && view.agents[a].last_y < height && view.agents[a].last_x < width)
+                    spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
+                    
                 int ay = static_cast<int>(view.agents[a].y);
                 int ax = static_cast<int>(view.agents[a].x);
-                if (ay >= 0 && ay < height && ax >= 0 && ax < width)
+                if (ay >= 0 && ay < height && ax >= 0 && ax < width) {
                     spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + ay * width + ax] = 1.0f;
+                    view.agents[a].last_y = ay;
+                    view.agents[a].last_x = ax;
+                } else {
+                    view.agents[a].last_y = -1;
+                    view.agents[a].last_x = -1;
+                }
 
                 int_base[a * 6 + 0] = view.agents[a].y;
                 int_base[a * 6 + 1] = view.agents[a].x;
@@ -466,8 +518,6 @@ private:
 
         float *spat_base = torch_state_spatial_base + e * spatial_stride;
         float *int_base = torch_state_internal_base + e * (n_agents * 6 + n_pois * 4);
-
-        std::fill(spat_base, spat_base + spatial_stride, 0.0f);
 
         // UNMASKED Terrain
         for (int i = 0; i < map_area; ++i)
@@ -695,6 +745,59 @@ public:
 
         *view.poi_left = n_pois;
         *view.agents_left = n_agents;
+
+        // E. Diff Tracker & Tensor Clear
+        if (mode == Mode::DECENTRALIZED && torch_obs_spatial_base != nullptr)
+        {
+            ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
+            for (int a = 0; a < n_agents; ++a)
+            {
+                float *spat_base = torch_obs_spatial_base + env_idx * (n_agents * spatial_stride) + a * spatial_stride;
+                std::fill(spat_base, spat_base + spatial_stride, 0.0f);
+            }
+        }
+        else if (mode == Mode::CENTRALIZED && torch_obs_spatial_base != nullptr)
+        {
+            ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
+            float *spat_base = torch_obs_spatial_base + env_idx * spatial_stride;
+            std::fill(spat_base, spat_base + spatial_stride, 0.0f);
+        }
+        
+        if (requires_state && torch_state_spatial_base != nullptr)
+        {
+            ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
+            float *spat_base = torch_state_spatial_base + env_idx * spatial_stride;
+            std::fill(spat_base, spat_base + spatial_stride, 0.0f);
+        }
+
+        for (int a = 0; a < n_agents; ++a)
+        {
+            view.agents[a].last_x = -1;
+            view.agents[a].last_y = -1;
+            view.agents[a].state_last_x = -1;
+            view.agents[a].state_last_y = -1;
+        }
+        for (int p = 0; p < n_pois; ++p)
+        {
+            view.pois[p].last_x = -1;
+            view.pois[p].last_y = -1;
+            view.pois[p].state_last_x = -1;
+            view.pois[p].state_last_y = -1;
+        }
+
+        if (mode == Mode::DECENTRALIZED && view.agent_knowledge != nullptr)
+        {
+            for (int i = 0; i < n_agents * n_agents; ++i)
+            {
+                view.agent_knowledge[i].last_x = -1;
+                view.agent_knowledge[i].last_y = -1;
+            }
+            for (int i = 0; i < n_agents * n_pois; ++i)
+            {
+                view.poi_knowledge[i].last_x = -1;
+                view.poi_knowledge[i].last_y = -1;
+            }
+        }
     }
 
     void reset()

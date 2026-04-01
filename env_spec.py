@@ -174,7 +174,7 @@ def main():
         "--envs",
         type=int,
         nargs="*",
-        default=[1],  # , 2, 4, 8, 32, 64],
+        default=[1],  # 2, 4, 8, 32, 64],
         help="Parallel env counts to test",
     )
     parser.add_argument(
