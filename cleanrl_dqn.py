@@ -10,6 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+torch.set_float32_matmul_precision('high')
+
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from MixedObservationEncoder import MixedObservationEncoder
 
@@ -70,19 +72,50 @@ class CustomReplayBuffer:
 
     def add(self, spatial, internal, next_spatial, next_internal, action, reward, done):
         batch_size = spatial.shape[0]
-        for i in range(batch_size):
-            idx = (self.pos + i) % self.capacity
-            self.spatial_obs[idx].copy_(spatial[i])
-            self.internal_obs[idx].copy_(internal[i])
-            self.next_spatial_obs[idx].copy_(next_spatial[i])
-            self.next_internal_obs[idx].copy_(next_internal[i])
-            self.actions[idx] = torch.tensor(action[i], dtype=torch.int64)
-            # Use summed total reward
-            self.rewards[idx, 0] = reward[i].sum()
-            self.dones[idx, 0] = done[i]
+        
+        # Convert action to tensor if it isn't already (usually numpy array)
+        if not isinstance(action, torch.Tensor):
+            action = torch.tensor(action, dtype=torch.int64)
+            
+        # reward and done are already tensors from the env
+        summed_reward = reward.sum(dim=1, keepdim=True)
+        done_col = done.unsqueeze(1) if done.dim() == 1 else done
 
-            self.size = min(self.size + 1, self.capacity)
+        if self.pos + batch_size <= self.capacity:
+            idx = slice(self.pos, self.pos + batch_size)
+            
+            self.spatial_obs[idx].copy_(spatial)
+            self.internal_obs[idx].copy_(internal)
+            self.next_spatial_obs[idx].copy_(next_spatial)
+            self.next_internal_obs[idx].copy_(next_internal)
+            self.actions[idx].copy_(action)
+            self.rewards[idx].copy_(summed_reward)
+            self.dones[idx].copy_(done_col)
+        else:
+            # Handle wrap around
+            part1_len = self.capacity - self.pos
+            part2_len = batch_size - part1_len
+            
+            idx1 = slice(self.pos, self.capacity)
+            idx2 = slice(0, part2_len)
+            
+            self.spatial_obs[idx1].copy_(spatial[:part1_len])
+            self.internal_obs[idx1].copy_(internal[:part1_len])
+            self.next_spatial_obs[idx1].copy_(next_spatial[:part1_len])
+            self.next_internal_obs[idx1].copy_(next_internal[:part1_len])
+            self.actions[idx1].copy_(action[:part1_len])
+            self.rewards[idx1].copy_(summed_reward[:part1_len])
+            self.dones[idx1].copy_(done_col[:part1_len])
+            
+            self.spatial_obs[idx2].copy_(spatial[part1_len:])
+            self.internal_obs[idx2].copy_(internal[part1_len:])
+            self.next_spatial_obs[idx2].copy_(next_spatial[part1_len:])
+            self.next_internal_obs[idx2].copy_(next_internal[part1_len:])
+            self.actions[idx2].copy_(action[part1_len:])
+            self.rewards[idx2].copy_(summed_reward[part1_len:])
+            self.dones[idx2].copy_(done_col[part1_len:])
 
+        self.size = min(self.size + batch_size, self.capacity)
         self.pos = (self.pos + batch_size) % self.capacity
 
     def sample(self, batch_size):
@@ -136,18 +169,13 @@ class QNetwork(nn.Module):
 
         return q_values  # [B, n_agents, num_actions]
 
-
-def map_discrete_to_continuous_action(discrete_action):
-    # Mapping 0: stay, 1: up, 2: down, 3: left, 4: right
-    mapping = {
-        0: [0.0, 0.0],
-        1: [-1.0, 0.0],
-        2: [1.0, 0.0],
-        3: [0.0, -1.0],
-        4: [0.0, 1.0],
-    }
-    return mapping.get(discrete_action, [0.0, 0.0])
-
+ACTION_MAP = np.array([
+    [0.0, 0.0],
+    [-1.0, 0.0],
+    [1.0, 0.0],
+    [0.0, -1.0],
+    [0.0, 1.0],
+], dtype=np.float32)
 
 if __name__ == "__main__":
     args = Args()
@@ -174,7 +202,6 @@ if __name__ == "__main__":
     spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
-    # Use torch.compile on the QNetwork
     q_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
@@ -217,13 +244,8 @@ if __name__ == "__main__":
                 actions_discrete_t = torch.argmax(q_values, dim=2)
                 actions_discrete = actions_discrete_t.cpu().numpy()
 
-        move_actions = np.zeros((args.num_envs, n_agents, 2), dtype=np.float32)
+        move_actions = ACTION_MAP[actions_discrete] # Shape: (num_envs, n_agents, 2)
         radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
-
-        for e in range(args.num_envs):
-            for a in range(n_agents):
-                act_cont = map_discrete_to_continuous_action(actions_discrete[e, a])
-                move_actions[e, a] = act_cont
 
         next_obs, rewards, terminations, truncations, infos = env.step(
             move_actions, radio_actions
