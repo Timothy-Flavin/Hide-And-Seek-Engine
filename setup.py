@@ -7,10 +7,12 @@ from setuptools import find_packages
 c_args = []
 l_args = []
 
+
+# Require C++17
 if sys.platform == "win32":
-    c_args = ["/openmp", "/O2"]
+    c_args = ["/openmp", "/O2", "/std:c++17"]
 else:
-    c_args = ["-fopenmp", "-O3", "-march=native"]
+    c_args = ["-fopenmp", "-O3", "-march=native", "-std=c++17"]
     l_args = ["-fopenmp"]
 
 ext_modules = [
