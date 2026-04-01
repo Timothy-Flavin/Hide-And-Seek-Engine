@@ -1,30 +1,46 @@
 {
     "grass": {
-        "rgb": [89, 171, 96],
-        "altitude": 0.1,
-        "supports_walking": true,
-        "supports_flying": true,
-        "supports_aquatic": false,
-        "blocking": false
-    },
-    "water": {
-        "rgb": [64, 164, 223],
-        "altitude": 0.0,
-        "supports_walking": false,
-        "supports_flying": true,
-        "supports_aquatic": true,
-        "blocking": false
-    },
-    "mountain": {
-        "rgb": [120, 120, 120],
+        "rgb": [
+            89,
+            171,
+            96
+        ],
         "altitude": 0.5,
         "supports_walking": true,
         "supports_flying": true,
         "supports_aquatic": false,
         "blocking": false
     },
+    "water": {
+        "rgb": [
+            64,
+            164,
+            223
+        ],
+        "altitude": 0.3,
+        "supports_walking": false,
+        "supports_flying": true,
+        "supports_aquatic": true,
+        "blocking": false
+    },
+    "mountain": {
+        "rgb": [
+            120,
+            120,
+            120
+        ],
+        "altitude": 0.7,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
     "peak": {
-        "rgb": [200, 200, 200],
+        "rgb": [
+            200,
+            200,
+            200
+        ],
         "altitude": 0.9,
         "supports_walking": true,
         "supports_flying": false,
@@ -32,8 +48,12 @@
         "blocking": true
     },
     "forest": {
-        "rgb": [34, 139, 34],
-        "altitude": -0.4,
+        "rgb": [
+            34,
+            139,
+            34
+        ],
+        "altitude": 0.2,
         "supports_walking": true,
         "supports_flying": true,
         "supports_aquatic": false,
