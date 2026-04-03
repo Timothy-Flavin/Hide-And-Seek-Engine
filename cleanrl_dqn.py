@@ -23,7 +23,7 @@ class Args:
     torch_deterministic: bool = True
     cuda: bool = True
 
-    total_timesteps: int = 1000000
+    total_timesteps: int = 10000000
     learning_rate: float = 2.5e-4
     num_envs: int = 64
     buffer_size: int = 10000
@@ -219,6 +219,7 @@ if __name__ == "__main__":
     cached_logical_steps = 0
     num_actions_per_agent = 5
     episodic_returns = []
+    q_losses = []
 
     obs, _ = env.reset()
     spatial = obs["spatial"]
@@ -226,7 +227,9 @@ if __name__ == "__main__":
 
     episode_rewards = np.zeros(args.num_envs, dtype=np.float32)
 
-    for global_step in range(args.total_timesteps // args.num_envs):
+    for iteration in range(args.total_timesteps // args.num_envs):
+        global_step = iteration * args.num_envs
+        
         epsilon = linear_schedule(
             args.start_e,
             args.end_e,
@@ -258,21 +261,6 @@ if __name__ == "__main__":
         env_rewards = rewards.sum(dim=1).cpu().numpy()
         episode_rewards += env_rewards
 
-        if terminations.any() or truncations.any():
-            for e in range(args.num_envs):
-                if terminations[e] or truncations[e]:
-                    episodic_returns.append(episode_rewards[e])
-                    if len(episodic_returns) % 10 == 0:
-                        print(
-                            f"global_step={global_step}, episodic_return={episode_rewards[e]}"
-                        )
-                    episode_rewards[e] = 0.0
-                    env.reset_env(e)
-
-            obs = env._get_obs_dict()
-            n_spatial = obs["spatial"]
-            n_internal = obs["internal"]
-
         rb.add(
             spatial,
             internal,
@@ -286,13 +274,28 @@ if __name__ == "__main__":
         spatial = n_spatial
         internal = n_internal
 
+        if terminations.any() or truncations.any():
+            for e in range(args.num_envs):
+                if terminations[e] or truncations[e]:
+                    episodic_returns.append(episode_rewards[e])
+                    if len(episodic_returns) % 10 == 0:
+                        print(
+                            f"global_step={global_step}, episodic_return={episode_rewards[e]}"
+                        )
+                    episode_rewards[e] = 0.0
+                    env.reset_env(e)
+
+            obs = env._get_obs_dict()
+            spatial = obs["spatial"]
+            internal = obs["internal"]
+
         # --- Steps/sec and model updates/sec tracking ---
         step_count += args.num_envs
         cached_logical_steps += args.num_envs
 
         # Model update every 4 logical steps (across all envs)
         while cached_logical_steps >= 32:
-            if global_step * args.num_envs > args.learning_starts:
+            if global_step > args.learning_starts:
                 (
                     b_spatial,
                     b_internal,
@@ -318,6 +321,7 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                q_losses.append(loss.item())
                 update_count += 1
             cached_logical_steps -= 32
 
@@ -335,7 +339,7 @@ if __name__ == "__main__":
             update_count = 0
 
         # Target network update
-        if global_step % args.target_network_frequency == 0:
+        if iteration % max(1, args.target_network_frequency // args.num_envs) == 0:
             for target_network_param, q_network_param in zip(
                 target_network.parameters(), q_network.parameters()
             ):
@@ -352,3 +356,11 @@ if __name__ == "__main__":
     plt.title("Episodic Returns")
     plt.savefig("episodic_returns.png")
     print(f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'.")
+
+    plt.figure()
+    plt.plot(q_losses)
+    plt.xlabel("Update Step")
+    plt.ylabel("Q Loss")
+    plt.title("Q Network Loss")
+    plt.savefig("q_losses.png")
+    print(f"Plotted {len(q_losses)} loss values to 'q_losses.png'.")
