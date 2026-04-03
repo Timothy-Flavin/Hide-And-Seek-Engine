@@ -229,6 +229,7 @@ class EnvironmentArena
 {
 public:
     std::vector<uint8_t> memory;
+    uint8_t* aligned_base;
     size_t env_stride;
     Mode mode;
 
@@ -271,7 +272,12 @@ public:
         env_stride = (raw_stride + 63) & ~63;
 
         // Allocate the contiguous memory block for all environments, initialized to 0.
-        memory.resize(num_envs * env_stride, 0);
+        // We add 63 extra bytes to manually align the origin pointer to a 64-byte boundary
+        // since std::vector's default allocator does not guarantee CPU cache line alignment.
+        memory.resize(num_envs * env_stride + 63, 0);
+        
+        uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
+        aligned_base = reinterpret_cast<uint8_t*>((raw_ptr + 63) & ~63);
     }
 
     // Explicitly inline for hot-loop performance
@@ -280,7 +286,7 @@ public:
         EnvStateView view;
 
         // Calculate the starting memory address for this specific environment
-        uint8_t *base = memory.data() + (env_idx * env_stride);
+        uint8_t *base = aligned_base + (env_idx * env_stride);
         size_t offset = 0;
 
         view.grid = reinterpret_cast<Tile *>(base + offset);

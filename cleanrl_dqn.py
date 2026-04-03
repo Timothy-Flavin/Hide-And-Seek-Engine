@@ -219,6 +219,11 @@ if __name__ == "__main__":
     cached_logical_steps = 0
     num_actions_per_agent = 5
     episodic_returns = []
+    n_episodes_passed = 0
+    total_ep_returns = 0.0
+    logical_steps_since_last_record = 0
+    LOGICAL_STEPS_PER_RECORD = 10000
+    MAX_EPISODIC_RETURNS = 1000
     q_losses = []
 
     obs, _ = env.reset()
@@ -229,7 +234,7 @@ if __name__ == "__main__":
 
     for iteration in range(args.total_timesteps // args.num_envs):
         global_step = iteration * args.num_envs
-        
+
         epsilon = linear_schedule(
             args.start_e,
             args.end_e,
@@ -274,20 +279,34 @@ if __name__ == "__main__":
         spatial = n_spatial
         internal = n_internal
 
+        # Track logical steps for episodic return recording
+        logical_steps_since_last_record += args.num_envs
+
         if terminations.any() or truncations.any():
             for e in range(args.num_envs):
                 if terminations[e] or truncations[e]:
-                    episodic_returns.append(episode_rewards[e])
-                    if len(episodic_returns) % 10 == 0:
-                        print(
-                            f"global_step={global_step}, episodic_return={episode_rewards[e]}"
-                        )
+                    n_episodes_passed += 1
+                    total_ep_returns += episode_rewards[e]
                     episode_rewards[e] = 0.0
                     env.reset_env(e)
 
             obs = env._get_obs_dict()
             spatial = obs["spatial"]
             internal = obs["internal"]
+
+        # Every LOGICAL_STEPS_PER_RECORD, record the running average episodic return
+        if logical_steps_since_last_record >= LOGICAL_STEPS_PER_RECORD:
+            if n_episodes_passed > 0:
+                avg_return = total_ep_returns / n_episodes_passed
+                episodic_returns.append(avg_return)
+                # Keep only the last MAX_EPISODIC_RETURNS
+                if len(episodic_returns) > MAX_EPISODIC_RETURNS:
+                    episodic_returns = episodic_returns[-MAX_EPISODIC_RETURNS:]
+                print(f"global_step={global_step}, avg episodic return={avg_return}")
+                # Reset counters
+                n_episodes_passed = 0
+                total_ep_returns = 0.0
+            logical_steps_since_last_record = 0
 
         # --- Steps/sec and model updates/sec tracking ---
         step_count += args.num_envs
@@ -356,6 +375,19 @@ if __name__ == "__main__":
     plt.title("Episodic Returns")
     plt.savefig("episodic_returns.png")
     print(f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'.")
+
+    # Plot smoothed episodic returns using EMA (0.99)
+    if len(episodic_returns) > 0:
+        ema_returns = [episodic_returns[0]]
+        for r in episodic_returns[1:]:
+            ema_returns.append(0.99 * ema_returns[-1] + 0.01 * r)
+        plt.figure()
+        plt.plot(ema_returns)
+        plt.xlabel("Episode")
+        plt.ylabel("EMA Return (0.99)")
+        plt.title("Smoothed Episodic Returns (EMA 0.99)")
+        plt.savefig("episodic_returns_ema99.png")
+        print(f"Plotted EMA-smoothed episodic returns to 'episodic_returns_ema99.png'.")
 
     plt.figure()
     plt.plot(q_losses)
