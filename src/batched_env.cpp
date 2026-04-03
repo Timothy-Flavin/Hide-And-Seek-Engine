@@ -55,11 +55,11 @@ private:
     std::vector<float> altitude_map;
     std::vector<float> agent_speed_map;
     std::vector<float> agent_base_view_ranges;
-    std::vector<bool> supports_walking;
-    std::vector<bool> supports_aquatic;
-    std::vector<bool> supports_flying;
-    std::vector<bool> is_blocking;
-    std::vector<bool> saveable_rules;
+    std::vector<uint8_t> supports_walking;
+    std::vector<uint8_t> supports_aquatic;
+    std::vector<uint8_t> supports_flying;
+    std::vector<uint8_t> is_blocking;
+    std::vector<uint8_t> saveable_rules;
     unsigned long long steps_taken = 0;
 
     void process_agent_movement(int e, const float *act_data)
@@ -243,7 +243,7 @@ private:
         }
     }
 
-    std::string execute_radio(int e, const int *radio_act_data)
+    void execute_radio(int e, const int *radio_act_data)
     {
         // for environment e:
         // If an agent chose radio action 0, it is messaging itself and
@@ -251,10 +251,9 @@ private:
         // one of the other agents. It will share it's current information
         // updating it's x y in the other agent's tensor observation
         if (mode != Mode::DECENTRALIZED)
-            return ""; // No-op for global and no_obs modes
+            return; // No-op for global and no_obs modes
 
         EnvStateView view = env_views[e];
-        std::string log = "";
 
         // std::cout << "Starting radio loop " << e << "\n";
         for (int a = 0; a < n_agents; ++a)
@@ -324,10 +323,7 @@ private:
             }
 
             // std::cout << "log " << e << "\n";
-
-            log += "Agent " + std::to_string(a) + " -> " + std::to_string(target_agent) + "; ";
         }
-        return log;
     }
 
     void update_battery_and_counters(int e)
@@ -654,17 +650,17 @@ public:
         int sim_seed,
         int w,
         int h,
-        std::vector<bool> supports_walk,
-        std::vector<bool> supports_aqua,
-        std::vector<bool> supports_fly,
-        std::vector<bool> is_block,
-        std::vector<int> t_map, // width*height int for tile types
-        std::vector<float> alt_map,
-        std::vector<float> speed_map,
-        std::vector<float> agent_view_ranges,
-        std::vector<bool> saveable_rules,     // n_poi * n_agents can this poi be saved by this agent
-        std::vector<float> initial_agent_pos, // n_agent * 2 x y start locs
-        std::vector<float> initial_poi_pos,   // n_poi * 2 x y start locs
+        const std::vector<uint8_t>& supports_walk,
+        const std::vector<uint8_t>& supports_aqua,
+        const std::vector<uint8_t>& supports_fly,
+        const std::vector<uint8_t>& is_block,
+        const std::vector<int>& t_map, // width*height int for tile types
+        const std::vector<float>& alt_map,
+        const std::vector<float>& speed_map,
+        const std::vector<float>& agent_view_ranges,
+        const std::vector<uint8_t>& saveable_rules,     // n_poi * n_agents can this poi be saved by this agent
+        const std::vector<float>& initial_agent_pos, // n_agent * 2 x y start locs
+        const std::vector<float>& initial_poi_pos,   // n_poi * 2 x y start locs
         uintptr_t obs_spatial_ptr,
         uintptr_t obs_internal_ptr,
         uintptr_t state_spatial_ptr,
@@ -968,7 +964,7 @@ public:
             resolve_local_interactions(e);
             // auto t3 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " radio logs\n";
-            radio_logs[e] = execute_radio(e, radio_act_data);
+            execute_radio(e, radio_act_data);
             // auto t4 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " update counters\n";
             update_battery_and_counters(e);
@@ -1064,15 +1060,15 @@ PYBIND11_MODULE(cpp_engine, m)
                  int,                // sim_seed
                  int,                // width
                  int,                // height
-                 std::vector<bool>,  // supports_walk
-                 std::vector<bool>,  // supports_aqua
-                 std::vector<bool>,  // supports_fly
-                 std::vector<bool>,  // is_block
+                 std::vector<uint8_t>,  // supports_walk
+                 std::vector<uint8_t>,  // supports_aqua
+                 std::vector<uint8_t>,  // supports_fly
+                 std::vector<uint8_t>,  // is_block
                  std::vector<int>,   // t_map
                  std::vector<float>, // alt_map
                  std::vector<float>, // speed_map
                  std::vector<float>, // agent_view_ranges
-                 std::vector<bool>,  // saveable_rules
+                 std::vector<uint8_t>,  // saveable_rules
                  std::vector<float>, // initial_agent_pos
                  std::vector<float>, // initial_poi_pos
                  uintptr_t,          // obs_spatial_ptr
