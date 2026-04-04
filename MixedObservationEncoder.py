@@ -22,6 +22,7 @@ class ReshapeToSpatial(nn.Module):
     def forward(self, x):
         return x.view(-1, *self.shape)
 
+
 class MixedObservationEncoder(nn.Module):
     """Encodes flattened [spatial | vector] observations into a dense feature vector."""
 
