@@ -23,14 +23,14 @@ class Args:
     torch_deterministic: bool = True
     cuda: bool = True
 
-    total_timesteps: int = 10000000
+    total_timesteps: int = 100000000
     learning_rate: float = 2.5e-4
-    num_envs: int = 64
+    num_envs: int = 128
     buffer_size: int = 10000
     gamma: float = 0.99
     tau: float = 1.0
     target_network_frequency: int = 500
-    batch_size: int = 128
+    batch_size: int = 256
     start_e: float = 1
     end_e: float = 0.05
     exploration_fraction: float = 0.5

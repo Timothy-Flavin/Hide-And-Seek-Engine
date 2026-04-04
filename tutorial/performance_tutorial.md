@@ -132,7 +132,7 @@ Transitioning an environment from Python prototypes to ML-ready C++ engines requ
 
 To make your RL environments exceptionally fast, follow these core takeaways:
 1. **Escape the GIL:** Move sequential, branch-heavy simulation logic out of Python and into a parallelized C++ engine (e.g., using OpenMP).
-2. **Respect the Cache:** Pack data densely into Arrays of Structures (AoS) or Structs of Arrays (SoA). Use `uint8_t` instead of floats for booleans to natively fit exponentially more data into a single 64-byte cache line.
+2. **Respect the Cache:** Pack data densely into Arrays of Structures (AoS) or Structs of Arrays (SoA). Use `uint8_t` instead of floats for booleans to natively fit exponentially more data into a single 64-byte cache line. It is important that data which is accessed together in code is located together in RAM. 
 3. **Prevent False Sharing:** Manually calculate and pad your multi-threaded environment state block sizes to align strictly onto independent 64-byte memory boundaries, mathematically stopping CPU threads from invalidating each other's L1 caches.
 4. **Use Zero-Copy Tensors:** Allocate PyTorch Pinned Memory at startup and write directly to it via PyBind11. This unlocks Direct Memory Access (DMA) to completely bypass the CPU and OS paging constraints during PCIe transfers to the GPU.
 5. **Amortize GPU Overheads:** Scale your continuous environment batches into the thousands per forward pass to distribute the static PCIe and CUDA kernel spin-up latencies across massive parallel data volume.
