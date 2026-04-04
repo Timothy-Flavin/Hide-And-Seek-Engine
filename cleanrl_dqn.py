@@ -23,14 +23,14 @@ class Args:
     torch_deterministic: bool = True
     cuda: bool = True
 
-    total_timesteps: int = 1000000
+    total_timesteps: int = 100000000
     learning_rate: float = 2.5e-4
-    num_envs: int = 64
+    num_envs: int = 128
     buffer_size: int = 10000
     gamma: float = 0.99
     tau: float = 1.0
     target_network_frequency: int = 500
-    batch_size: int = 128
+    batch_size: int = 256
     start_e: float = 1
     end_e: float = 0.05
     exploration_fraction: float = 0.5
@@ -72,19 +72,50 @@ class CustomReplayBuffer:
 
     def add(self, spatial, internal, next_spatial, next_internal, action, reward, done):
         batch_size = spatial.shape[0]
-        for i in range(batch_size):
-            idx = (self.pos + i) % self.capacity
-            self.spatial_obs[idx].copy_(spatial[i])
-            self.internal_obs[idx].copy_(internal[i])
-            self.next_spatial_obs[idx].copy_(next_spatial[i])
-            self.next_internal_obs[idx].copy_(next_internal[i])
-            self.actions[idx] = torch.tensor(action[i], dtype=torch.int64)
-            # Use summed total reward
-            self.rewards[idx, 0] = reward[i].sum()
-            self.dones[idx, 0] = done[i]
+        
+        # Convert action to tensor if it isn't already (usually numpy array)
+        if not isinstance(action, torch.Tensor):
+            action = torch.tensor(action, dtype=torch.int64)
+            
+        # reward and done are already tensors from the env
+        summed_reward = reward.sum(dim=1, keepdim=True)
+        done_col = done.unsqueeze(1) if done.dim() == 1 else done
 
-            self.size = min(self.size + 1, self.capacity)
+        if self.pos + batch_size <= self.capacity:
+            idx = slice(self.pos, self.pos + batch_size)
+            
+            self.spatial_obs[idx].copy_(spatial)
+            self.internal_obs[idx].copy_(internal)
+            self.next_spatial_obs[idx].copy_(next_spatial)
+            self.next_internal_obs[idx].copy_(next_internal)
+            self.actions[idx].copy_(action)
+            self.rewards[idx].copy_(summed_reward)
+            self.dones[idx].copy_(done_col)
+        else:
+            # Handle wrap around
+            part1_len = self.capacity - self.pos
+            part2_len = batch_size - part1_len
+            
+            idx1 = slice(self.pos, self.capacity)
+            idx2 = slice(0, part2_len)
+            
+            self.spatial_obs[idx1].copy_(spatial[:part1_len])
+            self.internal_obs[idx1].copy_(internal[:part1_len])
+            self.next_spatial_obs[idx1].copy_(next_spatial[:part1_len])
+            self.next_internal_obs[idx1].copy_(next_internal[:part1_len])
+            self.actions[idx1].copy_(action[:part1_len])
+            self.rewards[idx1].copy_(summed_reward[:part1_len])
+            self.dones[idx1].copy_(done_col[:part1_len])
+            
+            self.spatial_obs[idx2].copy_(spatial[part1_len:])
+            self.internal_obs[idx2].copy_(internal[part1_len:])
+            self.next_spatial_obs[idx2].copy_(next_spatial[part1_len:])
+            self.next_internal_obs[idx2].copy_(next_internal[part1_len:])
+            self.actions[idx2].copy_(action[part1_len:])
+            self.rewards[idx2].copy_(summed_reward[part1_len:])
+            self.dones[idx2].copy_(done_col[part1_len:])
 
+        self.size = min(self.size + batch_size, self.capacity)
         self.pos = (self.pos + batch_size) % self.capacity
 
     def sample(self, batch_size):
@@ -138,18 +169,13 @@ class QNetwork(nn.Module):
 
         return q_values  # [B, n_agents, num_actions]
 
-
-def map_discrete_to_continuous_action(discrete_action):
-    # Mapping 0: stay, 1: up, 2: down, 3: left, 4: right
-    mapping = {
-        0: [0.0, 0.0],
-        1: [-1.0, 0.0],
-        2: [1.0, 0.0],
-        3: [0.0, -1.0],
-        4: [0.0, 1.0],
-    }
-    return mapping.get(discrete_action, [0.0, 0.0])
-
+ACTION_MAP = np.array([
+    [0.0, 0.0],
+    [-1.0, 0.0],
+    [1.0, 0.0],
+    [0.0, -1.0],
+    [0.0, 1.0],
+], dtype=np.float32)
 
 if __name__ == "__main__":
     args = Args()
@@ -176,7 +202,6 @@ if __name__ == "__main__":
     spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
-    # Use torch.compile on the QNetwork
     q_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
@@ -194,6 +219,12 @@ if __name__ == "__main__":
     cached_logical_steps = 0
     num_actions_per_agent = 5
     episodic_returns = []
+    n_episodes_passed = 0
+    total_ep_returns = 0.0
+    logical_steps_since_last_record = 0
+    LOGICAL_STEPS_PER_RECORD = 10000
+    MAX_EPISODIC_RETURNS = 1000
+    q_losses = []
 
     obs, _ = env.reset()
     spatial = obs["spatial"]
@@ -201,7 +232,9 @@ if __name__ == "__main__":
 
     episode_rewards = np.zeros(args.num_envs, dtype=np.float32)
 
-    for global_step in range(args.total_timesteps // args.num_envs):
+    for iteration in range(args.total_timesteps // args.num_envs):
+        global_step = iteration * args.num_envs
+
         epsilon = linear_schedule(
             args.start_e,
             args.end_e,
@@ -219,13 +252,8 @@ if __name__ == "__main__":
                 actions_discrete_t = torch.argmax(q_values, dim=2)
                 actions_discrete = actions_discrete_t.cpu().numpy()
 
-        move_actions = np.zeros((args.num_envs, n_agents, 2), dtype=np.float32)
+        move_actions = ACTION_MAP[actions_discrete] # Shape: (num_envs, n_agents, 2)
         radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
-
-        for e in range(args.num_envs):
-            for a in range(n_agents):
-                act_cont = map_discrete_to_continuous_action(actions_discrete[e, a])
-                move_actions[e, a] = act_cont
 
         next_obs, rewards, terminations, truncations, infos = env.step(
             move_actions, radio_actions
@@ -237,21 +265,6 @@ if __name__ == "__main__":
         # Sum rewards over all agents for each environment, yielding an array of shape (num_envs,)
         env_rewards = rewards.sum(dim=1).cpu().numpy()
         episode_rewards += env_rewards
-
-        if terminations.any() or truncations.any():
-            for e in range(args.num_envs):
-                if terminations[e] or truncations[e]:
-                    episodic_returns.append(episode_rewards[e])
-                    if len(episodic_returns) % 10 == 0:
-                        print(
-                            f"global_step={global_step}, episodic_return={episode_rewards[e]}"
-                        )
-                    episode_rewards[e] = 0.0
-                    env.reset_env(e)
-
-            obs = env._get_obs_dict()
-            n_spatial = obs["spatial"]
-            n_internal = obs["internal"]
 
         rb.add(
             spatial,
@@ -266,13 +279,42 @@ if __name__ == "__main__":
         spatial = n_spatial
         internal = n_internal
 
+        # Track logical steps for episodic return recording
+        logical_steps_since_last_record += args.num_envs
+
+        if terminations.any() or truncations.any():
+            for e in range(args.num_envs):
+                if terminations[e] or truncations[e]:
+                    n_episodes_passed += 1
+                    total_ep_returns += episode_rewards[e]
+                    episode_rewards[e] = 0.0
+                    env.reset_env(e)
+
+            obs = env._get_obs_dict()
+            spatial = obs["spatial"]
+            internal = obs["internal"]
+
+        # Every LOGICAL_STEPS_PER_RECORD, record the running average episodic return
+        if logical_steps_since_last_record >= LOGICAL_STEPS_PER_RECORD:
+            if n_episodes_passed > 0:
+                avg_return = total_ep_returns / n_episodes_passed
+                episodic_returns.append(avg_return)
+                # Keep only the last MAX_EPISODIC_RETURNS
+                if len(episodic_returns) > MAX_EPISODIC_RETURNS:
+                    episodic_returns = episodic_returns[-MAX_EPISODIC_RETURNS:]
+                print(f"global_step={global_step}, avg episodic return={avg_return}")
+                # Reset counters
+                n_episodes_passed = 0
+                total_ep_returns = 0.0
+            logical_steps_since_last_record = 0
+
         # --- Steps/sec and model updates/sec tracking ---
         step_count += args.num_envs
         cached_logical_steps += args.num_envs
 
         # Model update every 4 logical steps (across all envs)
         while cached_logical_steps >= 32:
-            if global_step * args.num_envs > args.learning_starts:
+            if global_step > args.learning_starts:
                 (
                     b_spatial,
                     b_internal,
@@ -298,6 +340,7 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                q_losses.append(loss.item())
                 update_count += 1
             cached_logical_steps -= 32
 
@@ -315,7 +358,7 @@ if __name__ == "__main__":
             update_count = 0
 
         # Target network update
-        if global_step % args.target_network_frequency == 0:
+        if iteration % max(1, args.target_network_frequency // args.num_envs) == 0:
             for target_network_param, q_network_param in zip(
                 target_network.parameters(), q_network.parameters()
             ):
@@ -332,3 +375,24 @@ if __name__ == "__main__":
     plt.title("Episodic Returns")
     plt.savefig("episodic_returns.png")
     print(f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'.")
+
+    # Plot smoothed episodic returns using EMA (0.99)
+    if len(episodic_returns) > 0:
+        ema_returns = [episodic_returns[0]]
+        for r in episodic_returns[1:]:
+            ema_returns.append(0.99 * ema_returns[-1] + 0.01 * r)
+        plt.figure()
+        plt.plot(ema_returns)
+        plt.xlabel("Episode")
+        plt.ylabel("EMA Return (0.99)")
+        plt.title("Smoothed Episodic Returns (EMA 0.99)")
+        plt.savefig("episodic_returns_ema99.png")
+        print(f"Plotted EMA-smoothed episodic returns to 'episodic_returns_ema99.png'.")
+
+    plt.figure()
+    plt.plot(q_losses)
+    plt.xlabel("Update Step")
+    plt.ylabel("Q Loss")
+    plt.title("Q Network Loss")
+    plt.savefig("q_losses.png")
+    print(f"Plotted {len(q_losses)} loss values to 'q_losses.png'.")

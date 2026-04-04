@@ -6,7 +6,11 @@ echo "Installing project dependencies..."
 python -m pip install --upgrade pip
 
 # Install required dependencies
+<<<<<<< HEAD
 pip install torch matplotlib numpy pybind11 gymnasium pettingzoo imageio Pillow
+=======
+pip install torch matplotlib numpy pybind11 gymnasium pettingzoo imageio Pillow minigrid
+>>>>>>> optimbranch
 
 # Install the current package in editable mode
 pip install -e .
