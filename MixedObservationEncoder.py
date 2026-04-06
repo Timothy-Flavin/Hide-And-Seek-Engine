@@ -41,6 +41,7 @@ class MixedObservationEncoder(nn.Module):
 
         if len(self.spatial_shape) == 3:
             c, h, w = self.spatial_shape
+            flattened_size = 64 * (h // 4) * (w // 4)
             self.spatial_encoder = nn.Sequential(
                 ReshapeToSpatial((c, h, w)),
                 nn.Conv2d(c, 32, kernel_size=4, stride=2, padding=1),
@@ -49,13 +50,13 @@ class MixedObservationEncoder(nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
                 nn.ReLU(),
-                nn.AdaptiveAvgPool2d((1, 1)),
                 nn.Flatten(),
-                nn.Linear(64, spatial_hidden_dim),
+                nn.Linear(flattened_size, spatial_hidden_dim),
                 nn.ReLU(),
             )
         elif len(self.spatial_shape) == 2:
             h, w = self.spatial_shape
+            flattened_size = 64 * (h // 4) * (w // 4)
             self.spatial_encoder = nn.Sequential(
                 ReshapeToSpatial((1, h, w)),
                 nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1),
@@ -64,9 +65,8 @@ class MixedObservationEncoder(nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
                 nn.ReLU(),
-                nn.AdaptiveAvgPool2d((1, 1)),
                 nn.Flatten(),
-                nn.Linear(64, spatial_hidden_dim),
+                nn.Linear(flattened_size, spatial_hidden_dim),
                 nn.ReLU(),
             )
         else:
