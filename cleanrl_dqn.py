@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from MixedObservationEncoder import MixedObservationEncoder
@@ -72,18 +72,18 @@ class CustomReplayBuffer:
 
     def add(self, spatial, internal, next_spatial, next_internal, action, reward, done):
         batch_size = spatial.shape[0]
-        
+
         # Convert action to tensor if it isn't already (usually numpy array)
         if not isinstance(action, torch.Tensor):
             action = torch.tensor(action, dtype=torch.int64)
-            
+
         # reward and done are already tensors from the env
         summed_reward = reward.sum(dim=1, keepdim=True)
         done_col = done.unsqueeze(1) if done.dim() == 1 else done
 
         if self.pos + batch_size <= self.capacity:
             idx = slice(self.pos, self.pos + batch_size)
-            
+
             self.spatial_obs[idx].copy_(spatial)
             self.internal_obs[idx].copy_(internal)
             self.next_spatial_obs[idx].copy_(next_spatial)
@@ -95,10 +95,10 @@ class CustomReplayBuffer:
             # Handle wrap around
             part1_len = self.capacity - self.pos
             part2_len = batch_size - part1_len
-            
+
             idx1 = slice(self.pos, self.capacity)
             idx2 = slice(0, part2_len)
-            
+
             self.spatial_obs[idx1].copy_(spatial[:part1_len])
             self.internal_obs[idx1].copy_(internal[:part1_len])
             self.next_spatial_obs[idx1].copy_(next_spatial[:part1_len])
@@ -106,7 +106,7 @@ class CustomReplayBuffer:
             self.actions[idx1].copy_(action[:part1_len])
             self.rewards[idx1].copy_(summed_reward[:part1_len])
             self.dones[idx1].copy_(done_col[:part1_len])
-            
+
             self.spatial_obs[idx2].copy_(spatial[part1_len:])
             self.internal_obs[idx2].copy_(internal[part1_len:])
             self.next_spatial_obs[idx2].copy_(next_spatial[part1_len:])
@@ -169,13 +169,17 @@ class QNetwork(nn.Module):
 
         return q_values  # [B, n_agents, num_actions]
 
-ACTION_MAP = np.array([
-    [0.0, 0.0],
-    [-1.0, 0.0],
-    [1.0, 0.0],
-    [0.0, -1.0],
-    [0.0, 1.0],
-], dtype=np.float32)
+
+ACTION_MAP = np.array(
+    [
+        [0.0, 0.0],
+        [-1.0, 0.0],
+        [1.0, 0.0],
+        [0.0, -1.0],
+        [0.0, 1.0],
+    ],
+    dtype=np.float32,
+)
 
 if __name__ == "__main__":
     args = Args()
@@ -202,9 +206,13 @@ if __name__ == "__main__":
     spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
-    q_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
+    q_network = torch.compile(
+        QNetwork(spatial_shape, internal_dim, n_agents).to(device)
+    )
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
-    target_network = torch.compile(QNetwork(spatial_shape, internal_dim, n_agents).to(device))
+    target_network = torch.compile(
+        QNetwork(spatial_shape, internal_dim, n_agents).to(device)
+    )
     target_network.load_state_dict(q_network.state_dict())
 
     rb = CustomReplayBuffer(
@@ -252,7 +260,7 @@ if __name__ == "__main__":
                 actions_discrete_t = torch.argmax(q_values, dim=2)
                 actions_discrete = actions_discrete_t.cpu().numpy()
 
-        move_actions = ACTION_MAP[actions_discrete] # Shape: (num_envs, n_agents, 2)
+        move_actions = ACTION_MAP[actions_discrete]  # Shape: (num_envs, n_agents, 2)
         radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
 
         next_obs, rewards, terminations, truncations, infos = env.step(
@@ -374,7 +382,9 @@ if __name__ == "__main__":
     plt.ylabel("Return")
     plt.title("Episodic Returns")
     plt.savefig("episodic_returns.png")
-    print(f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'.")
+    print(
+        f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'."
+    )
 
     # Plot smoothed episodic returns using EMA (0.99)
     if len(episodic_returns) > 0:
