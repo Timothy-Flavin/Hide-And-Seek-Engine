@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 #include <cstdint>
-// #include <chrono>
+#include <chrono>
 #include "env_state.h"
 
 #include <omp.h>
@@ -48,7 +48,9 @@ private:
     int width;
     int height;
     bool requires_state;
-    std::vector<float> individual_rewards;
+    float *individual_rewards = nullptr;
+    uint8_t *env_terminated = nullptr;
+    uint8_t *env_truncated = nullptr;
     // std::vector<float> global_rewards;
     std::vector<EnvStateView> env_views;
     std::vector<int> type_map;
@@ -178,18 +180,49 @@ private:
                         Tile &t = view.grid[t_idx];
 
                         // Global discovery reward
+                        bool newly_global = false;
                         if (!t.is_global_observed())
                         {
                             t.set_global_observed();
                             (*view.undiscovered_remaining)--;
                             // Add reward (assume 'rewards' is an accessible class member or passed ref)
                             individual_rewards[e * n_agents + a] += reward_new_tile;
+                            newly_global = true;
                         }
 
                         // Local observation tracking
                         if (mode == Mode::DECENTRALIZED)
                         {
-                            t.set_agent_seen(a);
+                            if (!t.has_agent_seen(a)) {
+                                t.set_agent_seen(a);
+                                if (torch_obs_spatial_base != nullptr) {
+                                    ssize_t map_area = width * height;
+                                    ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                    float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
+                                    spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                    spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                    spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                                }
+                            }
+                        }
+                        else if (mode == Mode::CENTRALIZED && newly_global)
+                        {
+                            if (torch_obs_spatial_base != nullptr) {
+                                ssize_t map_area = width * height;
+                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                float *spat_base = torch_obs_spatial_base + e * spatial_stride;
+                                spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                            }
+                            if (requires_state && torch_state_spatial_base != nullptr) {
+                                ssize_t map_area = width * height;
+                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                float *spat_base = torch_state_spatial_base + e * spatial_stride;
+                                spat_base[central_state_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                spat_base[central_state_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                spat_base[central_state_strides->OBSERVED_START + t_idx] = 1.0f;
+                            }
                         }
                     }
                 }
@@ -314,9 +347,17 @@ private:
                     {
                         int t_idx = y * width + x;
                         Tile &t = view.grid[t_idx];
-                        if (t.has_agent_seen(a))
+                        if (t.has_agent_seen(a) && !t.has_agent_seen(target_agent))
                         {
                             t.set_agent_seen(target_agent);
+                            if (torch_obs_spatial_base != nullptr) {
+                                ssize_t map_area = width * height;
+                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
+                                spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                            }
                         }
                     }
                 }
@@ -369,20 +410,7 @@ private:
                 float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
-                // Spatial MASKED
-                float *base_type = spat_base + decentral_obs_strides->TYLE_TYPE_START;
-                float *base_alt = spat_base + decentral_obs_strides->ALTITUDE_TYPE_START;
-                float *base_obs = spat_base + decentral_obs_strides->OBSERVED_START;
-
-                for (int i = 0; i < map_area; ++i)
-                {
-                    if (view.grid[i].has_agent_seen(a))
-                    {
-                        base_type[view.grid[i].get_type() * map_area + i] = 1.0f;
-                        base_alt[i] = view.grid[i].altitude;
-                        base_obs[i] = 1.0f;
-                    }
-                }
+                // Spatial MASKED already handled inline during discovery
 
                 // POI MASKED
                 for (int p = 0; p < n_pois; ++p)
@@ -482,20 +510,6 @@ private:
             float *spat_base = torch_obs_spatial_base + e * spatial_stride;
             float *int_base = torch_obs_internal_base + e * (n_agents * 6);
 
-            float *base_type = spat_base + central_obs_strides->TYLE_TYPE_START;
-            float *base_alt = spat_base + central_obs_strides->ALTITUDE_TYPE_START;
-            float *base_obs = spat_base + central_obs_strides->OBSERVED_START;
-
-            for (int i = 0; i < map_area; ++i)
-            {
-                if (view.grid[i].is_global_observed())
-                {
-                    base_type[view.grid[i].get_type() * map_area + i] = 1.0f;
-                    base_alt[i] = view.grid[i].altitude;
-                    base_obs[i] = 1.0f;
-                }
-            }
-
             for (int p = 0; p < n_pois; ++p)
             {
                 if (view.pois[p].last_y >= 0 && view.pois[p].last_x >= 0 && view.pois[p].last_y < height && view.pois[p].last_x < width)
@@ -565,18 +579,8 @@ private:
         float *spat_base = torch_state_spatial_base + e * spatial_stride;
         float *int_base = torch_state_internal_base + e * (n_agents * 6 + n_pois * 4);
 
-        // UNMASKED Terrain
-        for (int i = 0; i < map_area; ++i)
-        {
-            float altitude = view.grid[i].altitude;
-            spat_base[central_state_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_area + i] = 1.0f;
-            spat_base[central_state_strides->ALTITUDE_TYPE_START + i] = altitude;
-            if (view.grid[i].is_global_observed())
-            {
-                spat_base[central_state_strides->OBSERVED_START + i] = 1.0f;
-            }
-        }
-
+        // UNMASKED Terrain already largely static, just update during discovery
+        
         // UNMASKED POIs (Any POI not yet saved)
         for (int p = 0; p < n_pois; ++p)
         {
@@ -637,8 +641,6 @@ public:
     // Internal data for resetting the environment managing randomness
     // and rendering the radio
     std::vector<std::mt19937> rngs;
-    std::vector<bool> env_terminated;
-    std::vector<bool> env_truncated;
     std::vector<int> current_frames;
     std::vector<float> init_agent_positions;
     std::vector<float> init_poi_positions;
@@ -650,21 +652,24 @@ public:
         int sim_seed,
         int w,
         int h,
-        const std::vector<uint8_t>& supports_walk,
-        const std::vector<uint8_t>& supports_aqua,
-        const std::vector<uint8_t>& supports_fly,
-        const std::vector<uint8_t>& is_block,
-        const std::vector<int>& t_map, // width*height int for tile types
-        const std::vector<float>& alt_map,
-        const std::vector<float>& speed_map,
-        const std::vector<float>& agent_view_ranges,
-        const std::vector<uint8_t>& saveable_rules,     // n_poi * n_agents can this poi be saved by this agent
-        const std::vector<float>& initial_agent_pos, // n_agent * 2 x y start locs
-        const std::vector<float>& initial_poi_pos,   // n_poi * 2 x y start locs
+        const std::vector<uint8_t> &supports_walk,
+        const std::vector<uint8_t> &supports_aqua,
+        const std::vector<uint8_t> &supports_fly,
+        const std::vector<uint8_t> &is_block,
+        const std::vector<int> &t_map, // width*height int for tile types
+        const std::vector<float> &alt_map,
+        const std::vector<float> &speed_map,
+        const std::vector<float> &agent_view_ranges,
+        const std::vector<uint8_t> &saveable_rules,  // n_poi * n_agents can this poi be saved by this agent
+        const std::vector<float> &initial_agent_pos, // n_agent * 2 x y start locs
+        const std::vector<float> &initial_poi_pos,   // n_poi * 2 x y start locs
         uintptr_t obs_spatial_ptr,
         uintptr_t obs_internal_ptr,
         uintptr_t state_spatial_ptr,
         uintptr_t state_internal_ptr,
+        uintptr_t rewards_ptr,
+        uintptr_t terminated_ptr,
+        uintptr_t truncated_ptr,
         bool requires_state = false, // Should we allocate the true state tensor?
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
@@ -692,16 +697,16 @@ public:
         n_pois = int(init_poi_positions.size() / 2);
 
         // 2. Setup internal simulation states
-        env_terminated.resize(num_envs, false);
-        env_truncated.resize(num_envs, false);
         current_frames.resize(num_envs, 0);
         radio_logs.resize(num_envs, "");
-        individual_rewards.resize(num_envs * n_agents, 0.0f);
 
         torch_obs_spatial_base = reinterpret_cast<float *>(obs_spatial_ptr);
         torch_obs_internal_base = reinterpret_cast<float *>(obs_internal_ptr);
         torch_state_spatial_base = reinterpret_cast<float *>(state_spatial_ptr);
         torch_state_internal_base = reinterpret_cast<float *>(state_internal_ptr);
+        individual_rewards = reinterpret_cast<float *>(rewards_ptr);
+        env_terminated = reinterpret_cast<uint8_t *>(terminated_ptr);
+        env_truncated = reinterpret_cast<uint8_t *>(truncated_ptr);
 
         std::mt19937 base_rng(seed);
         for (int i = 0; i < num_envs; ++i)
@@ -754,18 +759,20 @@ public:
         {
             std::uniform_real_distribution<float> rand_dir(-1.0f, 1.0f);
             std::uniform_int_distribution<int> rand_radio(0, n_agents - 1);
-            
+
             // Find max battery among agents for this environment
             float max_battery = 0.0f;
-            for (int a = 0; a < n_agents; ++a) {
-                if (env_views[e].agents[a].battery > max_battery) {
+            for (int a = 0; a < n_agents; ++a)
+            {
+                if (env_views[e].agents[a].battery > max_battery)
+                {
                     max_battery = env_views[e].agents[a].battery;
                 }
             }
-            
+
             std::uniform_int_distribution<int> rand_steps(1, std::max(1, static_cast<int>(max_battery)));
             int steps_to_take = rand_steps(rngs[e]);
-            
+
             std::vector<float> mock_act_data(num_envs * n_agents * 2, 0.0f);
             std::vector<int> mock_radio_data(num_envs * n_agents, 0);
 
@@ -785,14 +792,14 @@ public:
                 resolve_local_interactions(e);
                 execute_radio(e, mock_radio_data.data());
                 update_battery_and_counters(e);
-                
+
                 bool all_saved = (*env_views[e].poi_left == 0);
                 bool all_out_of_battery = (*env_views[e].agents_left == 0);
                 const bool timeout = current_frames[e] >= max_frames;
                 env_terminated[e] = all_saved || all_out_of_battery;
                 env_truncated[e] = timeout;
                 ++current_frames[e];
-                
+
                 if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
                 {
                     fill_torch_obs(e);
@@ -893,6 +900,13 @@ public:
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
             float *spat_base = torch_state_spatial_base + env_idx * spatial_stride;
             std::memset(spat_base, 0, spatial_stride * sizeof(float));
+
+            // Populate static Unmasked Terrain Type and Altitude exactly once per episode
+            for (int i = 0; i < map_size; ++i)
+            {
+                spat_base[central_state_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_size + i] = 1.0f;
+                spat_base[central_state_strides->ALTITUDE_TYPE_START + i] = view.grid[i].altitude;
+            }
         }
 
         for (int a = 0; a < n_agents; ++a)
@@ -933,20 +947,20 @@ public:
     }
 
     // Timing accumulators
-    // inline static std::chrono::duration<double> t_process_movement{0};
-    // inline static std::chrono::duration<double> t_resolve_interactions{0};
-    // inline static std::chrono::duration<double> t_radio_logs{0};
-    // inline static std::chrono::duration<double> t_update_counters{0};
-    // inline static std::chrono::duration<double> t_post_processing{0};
-    // inline static std::chrono::duration<double> t_fill_torch_obs{0};
-    // inline static std::chrono::duration<double> t_fill_torch_state{0};
-    // inline static std::chrono::duration<double> t_reset_time{0};
-    // inline static std::chrono::duration<double> t_python_overhead{0};
-    // inline static std::chrono::duration<double> t_total{0};
+    inline static std::chrono::duration<double> t_process_movement{0};
+    inline static std::chrono::duration<double> t_resolve_interactions{0};
+    inline static std::chrono::duration<double> t_radio_logs{0};
+    inline static std::chrono::duration<double> t_update_counters{0};
+    inline static std::chrono::duration<double> t_post_processing{0};
+    inline static std::chrono::duration<double> t_fill_torch_obs{0};
+    inline static std::chrono::duration<double> t_fill_torch_state{0};
+    inline static std::chrono::duration<double> t_reset_time{0};
+    inline static std::chrono::duration<double> t_python_overhead{0};
+    inline static std::chrono::duration<double> t_total{0};
 
-    py::tuple step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
+    void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
-        // auto t_step_start = std::chrono::high_resolution_clock::now();
+        auto t_step_start = std::chrono::high_resolution_clock::now();
         // action space is box2d[dx, dy], discrete(num radio choices)
         if ((move_actions_array.ndim() != 1) || (radio_actions_array.ndim() != 1))
             throw std::invalid_argument("actions must have shape [E*A*2] for movement and [E*A] for radio");
@@ -956,29 +970,29 @@ public:
         const float *act_data = move_actions_array.data();
         const int *radio_act_data = radio_actions_array.data();
 
-        std::fill(individual_rewards.begin(), individual_rewards.end(), 0.0f);
+        std::memset(individual_rewards, 0, num_envs * n_agents * sizeof(float));
 
-        // auto t0 = std::chrono::high_resolution_clock::now();
+        auto t0 = std::chrono::high_resolution_clock::now();
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            // auto t_reset_s = std::chrono::high_resolution_clock::now();
+            auto t_reset_s = std::chrono::high_resolution_clock::now();
             if (env_terminated[e] || env_truncated[e])
                 reset_env(e);
 
             // std::cout << "Env " << e << " process movement\n";
-            // auto t1 = std::chrono::high_resolution_clock::now();
+            auto t1 = std::chrono::high_resolution_clock::now();
             process_agent_movement(e, act_data);
-            // auto t2 = std::chrono::high_resolution_clock::now();
+            auto t2 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " resolve interactions\n";
             resolve_local_interactions(e);
-            // auto t3 = std::chrono::high_resolution_clock::now();
+            auto t3 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " radio logs\n";
             execute_radio(e, radio_act_data);
-            // auto t4 = std::chrono::high_resolution_clock::now();
+            auto t4 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " update counters\n";
             update_battery_and_counters(e);
-            // auto t5 = std::chrono::high_resolution_clock::now();
+            auto t5 = std::chrono::high_resolution_clock::now();
 
             // std::cout << "Env " << e << " post processing\n";
             bool all_saved = (*env_views[e].poi_left == 0);
@@ -987,7 +1001,7 @@ public:
             env_terminated[e] = all_saved || all_out_of_battery;
             env_truncated[e] = timeout;
             ++current_frames[e];
-            // auto t6 = std::chrono::high_resolution_clock::now();
+            auto t6 = std::chrono::high_resolution_clock::now();
 
             // If we are using this environment for machine learning
             // then fill the torch buffers accordingly
@@ -996,55 +1010,48 @@ public:
             {
                 fill_torch_obs(e);
             }
-            // auto t7 = std::chrono::high_resolution_clock::now();
+            auto t7 = std::chrono::high_resolution_clock::now();
             if (requires_state)
             {
                 fill_torch_state(e);
             }
-            // auto t8 = std::chrono::high_resolution_clock::now();
+            auto t8 = std::chrono::high_resolution_clock::now();
 
-            // Accumulate timing for each segment (atomic add for thread safety)
-            // {
-            //     t_reset_time += (t1 - t_reset_s);
-            //     t_process_movement += (t2 - t1);
-            //     t_resolve_interactions += (t3 - t2);
-            //     t_radio_logs += (t4 - t3);
-            //     t_update_counters += (t5 - t4);
-            //     t_post_processing += (t6 - t5);
-            //     t_fill_torch_obs += (t7 - t6);
-            //     t_fill_torch_state += (t8 - t7);
-            // }
+#pragma omp critical
+            {
+                t_reset_time += (t1 - t_reset_s);
+                t_process_movement += (t2 - t1);
+                t_resolve_interactions += (t3 - t2);
+                t_radio_logs += (t4 - t3);
+                t_update_counters += (t5 - t4);
+                t_post_processing += (t6 - t5);
+                t_fill_torch_obs += (t7 - t6);
+                t_fill_torch_state += (t8 - t7);
+            }
         }
-        // auto t9 = std::chrono::high_resolution_clock::now();
+        auto t9 = std::chrono::high_resolution_clock::now();
 
-        // std::cout << "setup for python" << std::endl;
-        auto py_rewards = py::array_t<float>({num_envs, n_agents});
-        auto py_terminated = py::array_t<bool>(num_envs);
-        auto py_truncated = py::array_t<bool>(num_envs);
-        std::copy(individual_rewards.begin(), individual_rewards.end(), py_rewards.mutable_data());
-        std::copy(env_terminated.begin(), env_terminated.end(), py_terminated.mutable_data());
-        std::copy(env_truncated.begin(), env_truncated.end(), py_truncated.mutable_data());
-
-        // auto t_step_end = std::chrono::high_resolution_clock::now();
-        // t_total += (t_step_end - t_step_start);
-        // t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
+        auto t_step_end = std::chrono::high_resolution_clock::now();
+        t_total += (t_step_end - t_step_start);
+        t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        // if (steps_taken % 10000 == 0)
-        // {
-        //     std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
-        //     std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
-        //     std::cout << "  resolve_local_interactions: " << t_resolve_interactions.count() << " s" << std::endl;
-        //     std::cout << "  execute_radio: " << t_radio_logs.count() << " s" << std::endl;
-        //     std::cout << "  update_battery_and_counters: " << t_update_counters.count() << " s" << std::endl;
-        //     std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
-        //     std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
-        //     std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
-        //     std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
-        //     std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
-        //     std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
-        //     std::cout << std::endl;
-        //     // Optionally reset timers if you want per-interval stats
+        if (steps_taken % 10000 == 0)
+        {
+            std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
+            std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
+            std::cout << "  resolve_local_interactions: " << t_resolve_interactions.count() << " s" << std::endl;
+            std::cout << "  execute_radio: " << t_radio_logs.count() << " s" << std::endl;
+            std::cout << "  update_battery_and_counters: " << t_update_counters.count() << " s" << std::endl;
+            std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
+            std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
+            std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
+            std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
+            std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
+            std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
+            std::cout << std::endl;
+        }
+        // Optionally reset timers if you want per-interval stats
         //     t_process_movement = std::chrono::duration<double>(0);
         //     t_resolve_interactions = std::chrono::duration<double>(0);
         //     t_radio_logs = std::chrono::duration<double>(0);
@@ -1055,8 +1062,8 @@ public:
         //     t_reset_time = std::chrono::duration<double>(0);
         //     t_python_overhead = std::chrono::duration<double>(0);
         //     t_total = std::chrono::duration<double>(0);
-        // }
-        return py::make_tuple(py_rewards, py_terminated, py_truncated);
+        
+        return;
     }
 };
 
@@ -1066,32 +1073,35 @@ PYBIND11_MODULE(cpp_engine, m)
 
     py::class_<BatchedEnvironment>(m, "BatchedEnvironment")
         .def(py::init<
-                 int,                // n_envs
-                 int,                // sim_seed
-                 int,                // width
-                 int,                // height
-                 std::vector<uint8_t>,  // supports_walk
-                 std::vector<uint8_t>,  // supports_aqua
-                 std::vector<uint8_t>,  // supports_fly
-                 std::vector<uint8_t>,  // is_block
-                 std::vector<int>,   // t_map
-                 std::vector<float>, // alt_map
-                 std::vector<float>, // speed_map
-                 std::vector<float>, // agent_view_ranges
-                 std::vector<uint8_t>,  // saveable_rules
-                 std::vector<float>, // initial_agent_pos
-                 std::vector<float>, // initial_poi_pos
-                 uintptr_t,          // obs_spatial_ptr
-                 uintptr_t,          // obs_internal_ptr
-                 uintptr_t,          // state_spatial_ptr
-                 uintptr_t,          // state_internal_ptr
-                 bool,               // requires_state
-                 bool,               // coop_rewards
-                 float,              // reward_new_tile_val
-                 float,              // reward_found_val
-                 float,              // reward_saved_val
-                 int,                // max_frames_val
-                 int                 // mode_value
+                 int,                  // n_envs
+                 int,                  // sim_seed
+                 int,                  // width
+                 int,                  // height
+                 std::vector<uint8_t>, // supports_walk
+                 std::vector<uint8_t>, // supports_aqua
+                 std::vector<uint8_t>, // supports_fly
+                 std::vector<uint8_t>, // is_block
+                 std::vector<int>,     // t_map
+                 std::vector<float>,   // alt_map
+                 std::vector<float>,   // speed_map
+                 std::vector<float>,   // agent_view_ranges
+                 std::vector<uint8_t>, // saveable_rules
+                 std::vector<float>,   // initial_agent_pos
+                 std::vector<float>,   // initial_poi_pos
+                 uintptr_t,            // obs_spatial_ptr
+                 uintptr_t,            // obs_internal_ptr
+                 uintptr_t,            // state_spatial_ptr
+                 uintptr_t,            // state_internal_ptr
+                 uintptr_t,            // rewards_ptr
+                 uintptr_t,            // terminated_ptr
+                 uintptr_t,            // truncated_ptr
+                 bool,                 // requires_state
+                 bool,                 // coop_rewards
+                 float,                // reward_new_tile_val
+                 float,                // reward_found_val
+                 float,                // reward_saved_val
+                 int,                  // max_frames_val
+                 int                   // mode_value
                  >(),
              py::arg("n_envs"),
              py::arg("sim_seed"),
@@ -1112,6 +1122,9 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("obs_internal_ptr"),
              py::arg("state_spatial_ptr"),
              py::arg("state_internal_ptr"),
+             py::arg("rewards_ptr"),
+             py::arg("terminated_ptr"),
+             py::arg("truncated_ptr"),
              py::arg("requires_state") = false,
              py::arg("coop_rewards") = true,
              py::arg("reward_new_tile_val") = 0.05f,

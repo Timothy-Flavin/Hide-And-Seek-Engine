@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import torch
 from hide_and_seek_engine.sar_loader import load_sar_config
@@ -29,6 +30,12 @@ class SARBatchedGridEnv:
         self.device = device
         self.requires_state = requires_state
         self.render_initialized = False
+        
+        self.steps_taken = 0
+        self.t_py_flatten = 0.0
+        self.t_cpp_step = 0.0
+        self.t_py_tensor = 0.0
+        self.t_py_obs = 0.0
 
         mode_map = {"decentralized": 0, "centralized": 1, "no_obs": 2}
         self.mode_val = mode_map.get(mode.lower(), 0)
@@ -96,6 +103,22 @@ class SARBatchedGridEnv:
             self.state_spatial = torch.empty(0)
             self.state_internal = torch.empty(0)
 
+        self.rewards = torch.zeros(
+            (self.num_envs, self.config.n_agents),
+            dtype=torch.float32,
+            pin_memory=True,
+        ).contiguous()
+        self.terminated = torch.zeros(
+            (self.num_envs,),
+            dtype=torch.bool,
+            pin_memory=True,
+        ).contiguous()
+        self.truncated = torch.zeros(
+            (self.num_envs,),
+            dtype=torch.bool,
+            pin_memory=True,
+        ).contiguous()
+
         # 3. Instantiate C++ Engine passing data_ptr()
         if cpp_engine is not None:
             self.env = cpp_engine.BatchedEnvironment(
@@ -118,6 +141,9 @@ class SARBatchedGridEnv:
                 self.obs_internal.data_ptr() if self.mode_val != 2 else 0,
                 self.state_spatial.data_ptr() if self.requires_state else 0,
                 self.state_internal.data_ptr() if self.requires_state else 0,
+                self.rewards.data_ptr(),
+                self.terminated.data_ptr(),
+                self.truncated.data_ptr(),
                 self.requires_state,
                 True,  # Cooperative rewards
                 0.05,  # Reward: new tile
@@ -154,24 +180,50 @@ class SARBatchedGridEnv:
         """
         Takes move_actions [num_envs, n_agents, 2] and radio_actions [num_envs, n_agents]
         """
-        # Ensure correct formatting for the pybind arrays
-        move_act = np.asarray(move_actions, dtype=np.float32).flatten()
-        radio_act = np.asarray(radio_actions, dtype=np.int32).flatten()
+        t0 = time.perf_counter()
+        
+        # Ensure correct formatting for the pybind arrays. Use reshape(-1) to avoid copying memory!
+        move_act = np.asarray(move_actions, dtype=np.float32).reshape(-1)
+        radio_act = np.asarray(radio_actions, dtype=np.int32).reshape(-1)
 
+        t1 = time.perf_counter()
         # Advance the environment. The C++ function directly writes to our spatial/internal memory!
-        rewards_np, terminated_np, truncated_np = self.env.step(move_act, radio_act)
+        self.env.step(move_act, radio_act)
 
-        # Convert engine returns to tensors
-        rewards = torch.from_numpy(rewards_np)
-        terminated = torch.from_numpy(terminated_np)
-        truncated = torch.from_numpy(truncated_np)
+        t2 = time.perf_counter()
+        # Returns directly reference the pre-allocated tensors
+        rewards = self.rewards
+        terminated = self.terminated
+        truncated = self.truncated
 
         if self.device != "cpu":
             rewards = rewards.to(self.device)
             terminated = terminated.to(self.device)
             truncated = truncated.to(self.device)
+            
+        t3 = time.perf_counter()
+        obs = self._get_obs_dict()
+        t4 = time.perf_counter()
+        
+        self.steps_taken += 1
+        self.t_py_flatten += (t1 - t0)
+        self.t_cpp_step += (t2 - t1)
+        self.t_py_tensor += (t3 - t2)
+        self.t_py_obs += (t4 - t3)
+        
+        if self.steps_taken % 10000 == 0:
+            print(f"[Python Timing after {self.steps_taken} steps]")
+            print(f"  py_flatten_actions: {self.t_py_flatten:.4f} s")
+            print(f"  cpp_engine_step: {self.t_cpp_step:.4f} s")
+            print(f"  py_tensor_conversion: {self.t_py_tensor:.4f} s")
+            print(f"  py_get_obs: {self.t_py_obs:.4f} s")
+            print()
+            self.t_py_flatten = 0.0
+            self.t_cpp_step = 0.0
+            self.t_py_tensor = 0.0
+            self.t_py_obs = 0.0
 
-        return self._get_obs_dict(), rewards, terminated, truncated, {}
+        return obs, rewards, terminated, truncated, {}
 
     def get_state(self):
         if not self.requires_state:
