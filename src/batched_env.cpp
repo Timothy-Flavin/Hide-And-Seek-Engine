@@ -848,7 +848,7 @@ public:
             // Load specialized speeds
             for (int t = 0; t < n_tiles; ++t)
             {
-                view.agent_speeds[a * n_agents + t] = agent_speed_map[a * n_tiles + t];
+                view.agent_speeds[a * n_tiles + t] = agent_speed_map[a * n_tiles + t];
             }
         }
 

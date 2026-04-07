@@ -42,7 +42,7 @@ class SARBatchedGridEnv:
 
         # 1. Determine Tensor Dimensions
         # Spatial Channels: Tiles + Altitude + POI + Observed Mask + Agents
-        self.spatial_channels = self.config.n_tiles + 3 + self.config.n_agents
+        self.spatial_channels = self.config.n_tiles + 4 + self.config.n_agents
 
         # Internal channels per agent: y, x, battery, view_range, deploy, stuck
         self.agent_internal_dim = 6

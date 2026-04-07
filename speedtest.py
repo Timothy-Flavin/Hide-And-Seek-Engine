@@ -68,7 +68,7 @@ def run_speedtest(
         mode="decentralized",
         requires_state=False,
     )
-    env.reset()
+    #env.reset()
 
     t0 = time.perf_counter()
     total_step_calls = 0
@@ -115,7 +115,7 @@ def run_speedtest(
 
 def main():
     steps = 50_000
-    env_counts = [1, 4, 16, 64, 128, 256]
+    env_counts = [4, 16, 64, 128, 256]
     agent_counts = list(range(1, 11))
     num_runs = 3
 
