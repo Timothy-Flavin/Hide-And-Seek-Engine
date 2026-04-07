@@ -98,9 +98,10 @@ def run_speedtest(
 
 
 def main():
-    steps = 10_000
+    steps = 50_000
     env_counts = [1, 4, 16, 64, 128, 256]
     agent_counts = list(range(1, 11))
+    num_runs = 5
 
     assets = {
         "map_png": "test_level/level.png",
@@ -108,17 +109,36 @@ def main():
         "survivors_json": "test_level/survivors.json",
     }
 
-    results = {n: [] for n in env_counts}
+    results_matrix = np.zeros((len(env_counts), len(agent_counts), num_runs))
 
-    for n_envs in env_counts:
-        for n_agents in agent_counts:
-            fps = run_speedtest(n_envs, n_agents, steps, assets)
-            results[n_envs].append(fps)
+    for env_idx, n_envs in enumerate(env_counts):
+        for agent_idx, n_agents in enumerate(agent_counts):
+            print(f"\n--- Testing {n_envs} envs, {n_agents} agents ---")
+            for run_idx in range(num_runs):
+                fps = run_speedtest(n_envs, n_agents, steps, assets)
+                results_matrix[env_idx, agent_idx, run_idx] = fps
+
+    np.save("speedtest_results_raw.npy", results_matrix)
 
     # Plotting
     plt.figure(figsize=(10, 6))
-    for n_envs, fps_list in results.items():
-        plt.plot(agent_counts, fps_list, marker="o", label=f"{n_envs} envs")
+    for env_idx, n_envs in enumerate(env_counts):
+        run_data = results_matrix[env_idx]
+        means = np.mean(run_data, axis=1)
+        mins = np.min(run_data, axis=1)
+        maxs = np.max(run_data, axis=1)
+        
+        # yerr takes [lower_errors, upper_errors] relative to the mean values
+        yerr = [means - mins, maxs - means]
+        
+        plt.errorbar(
+            agent_counts, 
+            means, 
+            yerr=yerr, 
+            marker="o", 
+            capsize=4,
+            label=f"{n_envs} envs"
+        )
 
     plt.xlabel("Number of Agents")
     plt.ylabel("FPS (Total steps / second)")
@@ -128,7 +148,7 @@ def main():
 
     plot_path = "speedtest_results.png"
     plt.savefig(plot_path)
-    print(f"\nSpeedtest complete. Plot saved to {plot_path}")
+    print(f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to speedtest_results_raw.npy")
 
 
 if __name__ == "__main__":
