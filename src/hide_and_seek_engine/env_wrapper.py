@@ -103,6 +103,22 @@ class SARBatchedGridEnv:
             self.state_spatial = torch.empty(0)
             self.state_internal = torch.empty(0)
 
+        self.rewards = torch.zeros(
+            (self.num_envs, self.config.n_agents),
+            dtype=torch.float32,
+            pin_memory=True,
+        ).contiguous()
+        self.terminated = torch.zeros(
+            (self.num_envs,),
+            dtype=torch.bool,
+            pin_memory=True,
+        ).contiguous()
+        self.truncated = torch.zeros(
+            (self.num_envs,),
+            dtype=torch.bool,
+            pin_memory=True,
+        ).contiguous()
+
         # 3. Instantiate C++ Engine passing data_ptr()
         if cpp_engine is not None:
             self.env = cpp_engine.BatchedEnvironment(
@@ -125,6 +141,9 @@ class SARBatchedGridEnv:
                 self.obs_internal.data_ptr() if self.mode_val != 2 else 0,
                 self.state_spatial.data_ptr() if self.requires_state else 0,
                 self.state_internal.data_ptr() if self.requires_state else 0,
+                self.rewards.data_ptr(),
+                self.terminated.data_ptr(),
+                self.truncated.data_ptr(),
                 self.requires_state,
                 True,  # Cooperative rewards
                 0.05,  # Reward: new tile
@@ -169,13 +188,13 @@ class SARBatchedGridEnv:
 
         t1 = time.perf_counter()
         # Advance the environment. The C++ function directly writes to our spatial/internal memory!
-        rewards_np, terminated_np, truncated_np = self.env.step(move_act, radio_act)
+        self.env.step(move_act, radio_act)
 
         t2 = time.perf_counter()
-        # Convert engine returns to tensors
-        rewards = torch.from_numpy(rewards_np)
-        terminated = torch.from_numpy(terminated_np)
-        truncated = torch.from_numpy(truncated_np)
+        # Returns directly reference the pre-allocated tensors
+        rewards = self.rewards
+        terminated = self.terminated
+        truncated = self.truncated
 
         if self.device != "cpu":
             rewards = rewards.to(self.device)

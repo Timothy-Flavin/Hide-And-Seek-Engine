@@ -48,7 +48,9 @@ private:
     int width;
     int height;
     bool requires_state;
-    std::vector<float> individual_rewards;
+    float *individual_rewards = nullptr;
+    uint8_t *env_terminated = nullptr;
+    uint8_t *env_truncated = nullptr;
     // std::vector<float> global_rewards;
     std::vector<EnvStateView> env_views;
     std::vector<int> type_map;
@@ -639,8 +641,6 @@ public:
     // Internal data for resetting the environment managing randomness
     // and rendering the radio
     std::vector<std::mt19937> rngs;
-    std::vector<bool> env_terminated;
-    std::vector<bool> env_truncated;
     std::vector<int> current_frames;
     std::vector<float> init_agent_positions;
     std::vector<float> init_poi_positions;
@@ -667,6 +667,9 @@ public:
         uintptr_t obs_internal_ptr,
         uintptr_t state_spatial_ptr,
         uintptr_t state_internal_ptr,
+        uintptr_t rewards_ptr,
+        uintptr_t terminated_ptr,
+        uintptr_t truncated_ptr,
         bool requires_state = false, // Should we allocate the true state tensor?
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
@@ -694,16 +697,16 @@ public:
         n_pois = int(init_poi_positions.size() / 2);
 
         // 2. Setup internal simulation states
-        env_terminated.resize(num_envs, false);
-        env_truncated.resize(num_envs, false);
         current_frames.resize(num_envs, 0);
         radio_logs.resize(num_envs, "");
-        individual_rewards.resize(num_envs * n_agents, 0.0f);
 
         torch_obs_spatial_base = reinterpret_cast<float *>(obs_spatial_ptr);
         torch_obs_internal_base = reinterpret_cast<float *>(obs_internal_ptr);
         torch_state_spatial_base = reinterpret_cast<float *>(state_spatial_ptr);
         torch_state_internal_base = reinterpret_cast<float *>(state_internal_ptr);
+        individual_rewards = reinterpret_cast<float *>(rewards_ptr);
+        env_terminated = reinterpret_cast<uint8_t *>(terminated_ptr);
+        env_truncated = reinterpret_cast<uint8_t *>(truncated_ptr);
 
         std::mt19937 base_rng(seed);
         for (int i = 0; i < num_envs; ++i)
@@ -955,7 +958,7 @@ public:
     inline static std::chrono::duration<double> t_python_overhead{0};
     inline static std::chrono::duration<double> t_total{0};
 
-    py::tuple step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
+    void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
         auto t_step_start = std::chrono::high_resolution_clock::now();
         // action space is box2d[dx, dy], discrete(num radio choices)
@@ -967,7 +970,7 @@ public:
         const float *act_data = move_actions_array.data();
         const int *radio_act_data = radio_actions_array.data();
 
-        std::fill(individual_rewards.begin(), individual_rewards.end(), 0.0f);
+        std::memset(individual_rewards, 0, num_envs * n_agents * sizeof(float));
 
         auto t0 = std::chrono::high_resolution_clock::now();
 #pragma omp parallel for schedule(static)
@@ -1028,14 +1031,6 @@ public:
         }
         auto t9 = std::chrono::high_resolution_clock::now();
 
-        // std::cout << "setup for python" << std::endl;
-        auto py_rewards = py::array_t<float>({num_envs, n_agents});
-        auto py_terminated = py::array_t<bool>(num_envs);
-        auto py_truncated = py::array_t<bool>(num_envs);
-        std::copy(individual_rewards.begin(), individual_rewards.end(), py_rewards.mutable_data());
-        std::copy(env_terminated.begin(), env_terminated.end(), py_terminated.mutable_data());
-        std::copy(env_truncated.begin(), env_truncated.end(), py_truncated.mutable_data());
-        auto pytup = py::make_tuple(py_rewards, py_terminated, py_truncated);
         auto t_step_end = std::chrono::high_resolution_clock::now();
         t_total += (t_step_end - t_step_start);
         t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
@@ -1067,9 +1062,8 @@ public:
         //     t_reset_time = std::chrono::duration<double>(0);
         //     t_python_overhead = std::chrono::duration<double>(0);
         //     t_total = std::chrono::duration<double>(0);
-        // }
         
-        return pytup;
+        return;
     }
 };
 
@@ -1098,6 +1092,9 @@ PYBIND11_MODULE(cpp_engine, m)
                  uintptr_t,            // obs_internal_ptr
                  uintptr_t,            // state_spatial_ptr
                  uintptr_t,            // state_internal_ptr
+                 uintptr_t,            // rewards_ptr
+                 uintptr_t,            // terminated_ptr
+                 uintptr_t,            // truncated_ptr
                  bool,                 // requires_state
                  bool,                 // coop_rewards
                  float,                // reward_new_tile_val
@@ -1125,6 +1122,9 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("obs_internal_ptr"),
              py::arg("state_spatial_ptr"),
              py::arg("state_internal_ptr"),
+             py::arg("rewards_ptr"),
+             py::arg("terminated_ptr"),
+             py::arg("truncated_ptr"),
              py::arg("requires_state") = false,
              py::arg("coop_rewards") = true,
              py::arg("reward_new_tile_val") = 0.05f,
