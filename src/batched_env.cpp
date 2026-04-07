@@ -335,7 +335,7 @@ private:
             if (view.agents[a].deployment_remaining > 0.0f)
             {
                 view.agents[a].deployment_remaining -= delta_time;
-                if (view.agents[a].deployment_remaining < 0.0f)
+                if (view.agents[a].deployment_remaining <= 0.0f)
                 {
                     --(*view.agents_left);
                 }
@@ -752,14 +752,24 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            if (e == 0) continue;
             std::uniform_real_distribution<float> rand_dir(-1.0f, 1.0f);
             std::uniform_int_distribution<int> rand_radio(0, n_agents - 1);
+            
+            // Find max battery among agents for this environment
+            float max_battery = 0.0f;
+            for (int a = 0; a < n_agents; ++a) {
+                if (env_views[e].agents[a].battery > max_battery) {
+                    max_battery = env_views[e].agents[a].battery;
+                }
+            }
+            
+            std::uniform_int_distribution<int> rand_steps(1, std::max(1, static_cast<int>(max_battery)));
+            int steps_to_take = rand_steps(rngs[e]);
             
             std::vector<float> mock_act_data(num_envs * n_agents * 2, 0.0f);
             std::vector<int> mock_radio_data(num_envs * n_agents, 0);
 
-            for (int step = 0; step < e; ++step)
+            for (int step = 0; step < steps_to_take; ++step)
             {
                 if (env_terminated[e] || env_truncated[e])
                     reset_env(e);

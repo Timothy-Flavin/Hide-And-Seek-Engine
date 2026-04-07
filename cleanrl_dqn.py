@@ -20,16 +20,17 @@ from MixedObservationEncoder import MixedObservationEncoder
 class Args:
     exp_name: str = "custom_dqn"
     seed: int = 1
+    run_number: int = 1
     torch_deterministic: bool = True
     cuda: bool = True
 
-    total_timesteps: int = 50000000
+    total_timesteps: int = 10000000
     learning_rate: float = 2.5e-4
     num_envs: int = 128
-    buffer_size: int = 10000
+    buffer_size: int = 100000
     gamma: float = 0.99
     tau: float = 1.0
-    target_network_frequency: int = 500
+    target_network_frequency: int = 1024
     batch_size: int = 128
     start_e: float = 1
     end_e: float = 0.05
@@ -146,7 +147,7 @@ class QNetwork(nn.Module):
             vector_hidden_dim=32,
             output_dim=256,
         )
-        self.q_heads = nn.ModuleList(
+        self.adv_heads = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Linear(256, 128),
@@ -157,6 +158,22 @@ class QNetwork(nn.Module):
             ]
         )
 
+        self.v_head = nn.Sequential(
+                    nn.Linear(256, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 1),
+                )
+
+    def get_action(self, spatial, internal):
+        B = spatial.shape[0]
+        spatial_flat = spatial.view(B, -1)
+        internal_flat = internal.view(B, -1)
+        x = torch.cat([spatial_flat, internal_flat], dim=-1)
+
+        feats = self.encoder(x)
+        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
+        return torch.argmax(adv_values, dim=2)
+
     def forward(self, spatial, internal):
         B = spatial.shape[0]
         spatial_flat = spatial.view(B, -1)
@@ -165,9 +182,10 @@ class QNetwork(nn.Module):
 
         feats = self.encoder(x)
 
-        q_values = torch.stack([head(feats) for head in self.q_heads], dim=1)
+        v_value = self.v_head(feats) # [B, 1]
+        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
 
-        return q_values  # [B, n_agents, num_actions]
+        return v_value, adv_values
 
 
 ACTION_MAP = np.array(
@@ -228,13 +246,11 @@ if __name__ == "__main__":
     num_actions_per_agent = 5
     episodic_returns = []
     n_episodes_passed = 0
-    total_ep_returns = 0.0
     logical_steps_since_last_record = 0
     LOGICAL_STEPS_PER_RECORD = 10000
-    MAX_EPISODIC_RETURNS = 1000
     q_losses = []
 
-    obs, _ = env.reset()
+    obs = env._get_obs_dict()
     spatial = obs["spatial"]
     internal = obs["internal"]
 
@@ -256,8 +272,7 @@ if __name__ == "__main__":
             )
         else:
             with torch.no_grad():
-                q_values = q_network(spatial, internal)
-                actions_discrete_t = torch.argmax(q_values, dim=2)
+                actions_discrete_t = q_network.get_action(spatial, internal)
                 actions_discrete = actions_discrete_t.cpu().numpy()
 
         move_actions = ACTION_MAP[actions_discrete]  # Shape: (num_envs, n_agents, 2)
@@ -294,27 +309,12 @@ if __name__ == "__main__":
             for e in range(args.num_envs):
                 if terminations[e] or truncations[e]:
                     n_episodes_passed += 1
-                    total_ep_returns += episode_rewards[e]
+                    episodic_returns.append(episode_rewards[e])
                     episode_rewards[e] = 0.0
-                    env.reset_env(e)
 
             obs = env._get_obs_dict()
             spatial = obs["spatial"]
             internal = obs["internal"]
-
-        # Every LOGICAL_STEPS_PER_RECORD, record the running average episodic return
-        if logical_steps_since_last_record >= LOGICAL_STEPS_PER_RECORD:
-            if n_episodes_passed > 0:
-                avg_return = total_ep_returns / n_episodes_passed
-                episodic_returns.append(avg_return)
-                # Keep only the last MAX_EPISODIC_RETURNS
-                if len(episodic_returns) > MAX_EPISODIC_RETURNS:
-                    episodic_returns = episodic_returns[-MAX_EPISODIC_RETURNS:]
-                print(f"global_step={global_step}, avg episodic return={avg_return}")
-                # Reset counters
-                n_episodes_passed = 0
-                total_ep_returns = 0.0
-            logical_steps_since_last_record = 0
 
         # --- Steps/sec and model updates/sec tracking ---
         step_count += args.num_envs
@@ -334,14 +334,14 @@ if __name__ == "__main__":
                 ) = rb.sample(args.batch_size)
 
                 with torch.no_grad():
-                    target_q = target_network(b_n_spatial, b_n_internal)
-                    target_max, _ = target_q.max(dim=2)
-                    target_q_sum = target_max.sum(dim=1, keepdim=True)
+                    target_v, target_adv = target_network(b_n_spatial, b_n_internal)
+                    target_adv_max, _ = target_adv.max(dim=2)
+                    target_q_sum = target_v + target_adv_max.sum(dim=1, keepdim=True)
                     td_target = b_rewards + args.gamma * target_q_sum * (1 - b_dones)
 
-                q_vals = q_network(b_spatial, b_internal)
-                old_val = q_vals.gather(2, b_actions.unsqueeze(2)).squeeze(2)
-                old_val_sum = old_val.sum(dim=1, keepdim=True)
+                v, adv = q_network(b_spatial, b_internal)
+                adv_taken = adv.gather(2, b_actions.unsqueeze(2)).squeeze(2)
+                old_val_sum = v + adv_taken.sum(dim=1, keepdim=True)
 
                 loss = F.mse_loss(td_target, old_val_sum)
 
@@ -353,18 +353,17 @@ if __name__ == "__main__":
             cached_logical_steps -= 32
 
         # --- Logging steps/sec and updates/sec every 1000 env steps ---
-        if step_count >= 1000:
+        if step_count >= args.total_timesteps//100:
             now = time.time()
             elapsed = now - last_log_time
             steps_per_sec = step_count / elapsed
             updates_per_sec = update_count / elapsed if elapsed > 0 else 0.0
             print(
-                f"Steps/sec: {steps_per_sec:.2f}, Model updates/sec: {updates_per_sec:.2f}"
+                f"Steps/sec: {steps_per_sec:.2f}, Model updates/sec: {updates_per_sec:.2f} qloss: {sum(q_losses[-100:])/100}, return: {sum(episodic_returns[-100:])/100}"
             )
             last_log_time = now
             step_count = 0
             update_count = 0
-
         # Target network update
         if iteration % max(1, args.target_network_frequency // args.num_envs) == 0:
             for target_network_param, q_network_param in zip(
@@ -376,14 +375,17 @@ if __name__ == "__main__":
                 )
 
     # Plot episodic returns at the end
+    os.makedirs("results", exist_ok=True)
+    np.save(f"results/dqn_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+
     plt.figure()
     plt.plot(episodic_returns)
     plt.xlabel("Episode")
     plt.ylabel("Return")
-    plt.title("Episodic Returns")
-    plt.savefig("episodic_returns.png")
+    plt.title(f"Episodic Returns (Run {args.run_number})")
+    plt.savefig(f"results/dqn_episodic_returns_run_{args.run_number}.png")
     print(
-        f"End of training. Plotted {len(episodic_returns)} episodes to 'episodic_returns.png'."
+        f"End of training. Plotted {len(episodic_returns)} episodes to 'results/dqn_episodic_returns_run_{args.run_number}.png'."
     )
 
     # Plot smoothed episodic returns using EMA (0.99)
@@ -395,14 +397,14 @@ if __name__ == "__main__":
         plt.plot(ema_returns)
         plt.xlabel("Episode")
         plt.ylabel("EMA Return (0.99)")
-        plt.title("Smoothed Episodic Returns (EMA 0.99)")
-        plt.savefig("episodic_returns_ema99.png")
-        print(f"Plotted EMA-smoothed episodic returns to 'episodic_returns_ema99.png'.")
+        plt.title(f"Smoothed Episodic Returns (EMA 0.99) (Run {args.run_number})")
+        plt.savefig(f"results/dqn_episodic_returns_ema99_run_{args.run_number}.png")
+        print(f"Plotted EMA-smoothed episodic returns to 'results/dqn_episodic_returns_ema99_run_{args.run_number}.png'.")
 
     plt.figure()
     plt.plot(q_losses)
     plt.xlabel("Update Step")
     plt.ylabel("Q Loss")
-    plt.title("Q Network Loss")
-    plt.savefig("q_losses.png")
-    print(f"Plotted {len(q_losses)} loss values to 'q_losses.png'.")
+    plt.title(f"Q Network Loss (Run {args.run_number})")
+    plt.savefig(f"results/dqn_q_losses_run_{args.run_number}.png")
+    print(f"Plotted {len(q_losses)} loss values to 'results/dqn_q_losses_run_{args.run_number}.png'.")
