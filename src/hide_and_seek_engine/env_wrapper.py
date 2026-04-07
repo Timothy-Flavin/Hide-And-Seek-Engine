@@ -110,6 +110,7 @@ def load_sar_config(
     survivors_json: str,
     num_envs: int,
     map_size: int = 32,
+    n_agents: int = 4,
 ) -> SARConfig:
     tiles_payload = _as_named_list(_load_json(tiles_json), "tiles")
     agents_payload = _as_named_list(_load_json(agents_json), "agents")
@@ -150,7 +151,7 @@ def load_sar_config(
     agent_names = [
         str(a.get("name", f"agent_{i}")) for i, a in enumerate(agents_payload)
     ]
-    while len(agent_names) < 4:
+    while len(agent_names) < n_agents:
         agent_names.append(f"agent_{len(agent_names)}")
 
     agent_class_names = sorted(
@@ -159,15 +160,15 @@ def load_sar_config(
             for i, a in enumerate(agents_payload)
         }
     )
-    while len(agent_class_names) < 4:
+    while len(agent_class_names) < n_agents:
         agent_class_names.append(f"class_{len(agent_class_names)}")
     agent_class_to_id = {name: idx for idx, name in enumerate(agent_class_names)}
 
     n_tiles = len(tiles_payload)
     spec_width = 10 + n_tiles
-    agent_specs = np.zeros((4, spec_width), dtype=np.float32)
-    agent_rgb = np.zeros((4, 3), dtype=np.int32)
-    initial_agent_positions = np.zeros((num_envs, 4, 2), dtype=np.float32)
+    agent_specs = np.zeros((n_agents, spec_width), dtype=np.float32)
+    agent_rgb = np.zeros((n_agents, 3), dtype=np.int32)
+    initial_agent_positions = np.zeros((num_envs, n_agents, 2), dtype=np.float32)
 
     default_agent = {
         "flying": False,
@@ -182,7 +183,7 @@ def load_sar_config(
         "rgb": [255, 0, 0],
     }
 
-    for i in range(min(4, len(agents_payload))):
+    for i in range(min(n_agents, len(agents_payload))):
         a = {**default_agent, **agents_payload[i]}
         terrain_multipliers = a.get("terrain_speed", {}) or {}
 
@@ -212,7 +213,7 @@ def load_sar_config(
         for e in range(num_envs):
             initial_agent_positions[e, i, :] = pos
 
-    for i in range(len(agents_payload), 4):
+    for i in range(len(agents_payload), n_agents):
         agent_specs[i, 2] = 1.0
         agent_specs[i, 4] = 1.0
         agent_specs[i, 5] = 1.0
@@ -328,11 +329,15 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         reward_found: float = 2.0,
         reward_saved: float = 20.0,
         max_frames: int = 250,
+        n_agents: int = 4,
     ):
+        # Always initialize _pygame_screen first to avoid AttributeError in close()
+        self._pygame_screen = None
+
         self.num_envs = int(num_envs)
         self.map_size = int(map_size)
         self.device = device
-        self.n_agents = 4
+        self.n_agents = n_agents
         self._map_png = map_png
 
         self.config = load_sar_config(
@@ -341,6 +346,7 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
             survivors_json=survivors_json,
             num_envs=self.num_envs,
             map_size=self.map_size,
+            n_agents=self.n_agents,
         )
         terrain_tensor = build_terrain_tensor_from_png(
             map_png_path=map_png,
@@ -466,7 +472,6 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         self._raw_tensor = torch.from_numpy(np_array)
         self.state_tensor = self._raw_tensor.view(self.num_envs, self.stride)
 
-        self._pygame_screen = None
         self._pygame_tile_px = 20
         self._last_known_agent = np.full(
             (self.num_envs, self.n_agents, self.n_agents, 2), -1, dtype=np.int32
@@ -604,15 +609,49 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         return {"spatial": spatial, "internal": internal.astype(np.float32)}
 
     def _stack_actor_obs(self):
-        spatial = []
-        internal = []
-        for e in range(self.num_envs):
-            obs = self._extract_local_obs(self.state_tensor[e].cpu().numpy())
-            spatial.append(obs["spatial"])
-            internal.append(obs["internal"])
+        state_batch = self.state_tensor.cpu().numpy()
+        
+        terrain_altitude = state_batch[:, self.sl_terrain_altitude].reshape(
+            self.num_envs, self.terrain_channels, self.map_size, self.map_size
+        )
+        local_poi = state_batch[:, self.sl_local_poi_layers].reshape(
+            self.num_envs, self.n_agents, self.map_size, self.map_size
+        )
+        local_obs = state_batch[:, self.sl_local_obs_mask].reshape(
+            self.num_envs, self.n_agents, self.map_size, self.map_size
+        )
+        local_agents = state_batch[:, self.sl_local_agent_layers].reshape(
+            self.num_envs, self.n_agents, self.n_agents, self.map_size, self.map_size
+        )
+
+        spatial = np.zeros(
+            (
+                self.num_envs,
+                self.n_agents,
+                self.terrain_channels + 1 + 1 + self.n_agents,
+                self.map_size,
+                self.map_size,
+            ),
+            dtype=np.float32,
+        )
+        spatial[:, :, : self.terrain_channels] = terrain_altitude[:, None, :, :, :]
+        spatial[:, :, self.terrain_channels] = local_poi
+        spatial[:, :, self.terrain_channels + 1] = local_obs
+        spatial[:, :, self.terrain_channels + 2 :] = local_agents
+
+        pos = state_batch[:, self.sl_agent_positions].reshape(self.num_envs, self.n_agents, 2)
+        deploy = state_batch[:, self.sl_agent_deploy]
+        stuck = state_batch[:, self.sl_agent_stuck]
+        view = state_batch[:, self.sl_agent_view]
+        battery = state_batch[:, self.sl_agent_battery]
+        
+        internal = np.stack(
+            [deploy, stuck, view, battery, pos[:, :, 0], pos[:, :, 1]], axis=-1
+        ).astype(np.float32)
+
         return {
-            "spatial": torch.from_numpy(np.stack(spatial, axis=0)),
-            "internal": torch.from_numpy(np.stack(internal, axis=0)),
+            "spatial": torch.from_numpy(spatial),
+            "internal": torch.from_numpy(internal),
         }
 
     def reset(self, seed=None, options=None):
@@ -671,16 +710,63 @@ class SARBatchedGridEnv(gym.vector.VectorEnv):
         return obs, rewards, terminated, truncated, {}
 
     def state(self):
-        global_states = [
-            self._extract_global_state(self.state_tensor[e].cpu().numpy())
-            for e in range(self.num_envs)
-        ]
-        spatial = torch.from_numpy(
-            np.stack([g["spatial"] for g in global_states], axis=0)
+        state_batch = self.state_tensor.cpu().numpy()
+
+        terrain_altitude = state_batch[:, self.sl_terrain_altitude].reshape(
+            self.num_envs, self.terrain_channels, self.map_size, self.map_size
         )
-        internal = torch.from_numpy(
-            np.stack([g["internal"] for g in global_states], axis=0)
+        unsaved = state_batch[:, self.sl_global_unsaved_pois].reshape(
+            self.num_envs, self.map_size, self.map_size
         )
+        obs_mask = state_batch[:, self.sl_global_obs_mask].reshape(
+            self.num_envs, self.map_size, self.map_size
+        )
+        global_agents = state_batch[:, self.sl_global_agent_layers].reshape(
+            self.num_envs, self.n_agents, self.map_size, self.map_size
+        )
+        spatial = np.concatenate(
+            [terrain_altitude, unsaved[:, None, :, :], obs_mask[:, None, :, :], global_agents],
+            axis=1,
+        ).astype(np.float32)
+
+        pos = state_batch[:, self.sl_agent_positions].reshape(self.num_envs, self.n_agents, 2)
+        deploy = state_batch[:, self.sl_agent_deploy]
+        stuck = state_batch[:, self.sl_agent_stuck]
+        view = state_batch[:, self.sl_agent_view]
+        battery = state_batch[:, self.sl_agent_battery]
+        
+        poi_pos = (
+            state_batch[:, self.sl_poi_positions].reshape(self.num_envs, self.n_pois, 2)
+            if self.n_pois
+            else np.zeros((self.num_envs, 0, 2), dtype=np.float32)
+        )
+        poi_found = (
+            state_batch[:, self.sl_poi_found]
+            if self.n_pois
+            else np.zeros((self.num_envs, 0), dtype=np.float32)
+        )
+        poi_saved = (
+            state_batch[:, self.sl_poi_saved]
+            if self.n_pois
+            else np.zeros((self.num_envs, 0), dtype=np.float32)
+        )
+
+        agent_internal = np.stack(
+            [deploy, stuck, view, battery, pos[:, :, 0], pos[:, :, 1]], axis=-1
+        ).astype(np.float32)
+        
+        if self.n_pois:
+            poi_internal = np.concatenate(
+                [poi_pos, poi_found[:, :, None], poi_saved[:, :, None]], axis=2
+            ).astype(np.float32)
+            internal = np.concatenate(
+                [agent_internal.reshape(self.num_envs, -1), poi_internal.reshape(self.num_envs, -1)], axis=1
+            )
+        else:
+            internal = agent_internal.reshape(self.num_envs, -1)
+
+        spatial = torch.from_numpy(spatial)
+        internal = torch.from_numpy(internal)
         if self.device != "cpu":
             spatial = spatial.to(self.device)
             internal = internal.to(self.device)
