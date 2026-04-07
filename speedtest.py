@@ -65,7 +65,7 @@ def run_speedtest(
         tiles_json=assets["tiles_json"],
         agents_json=agents_json_path,
         survivors_json=assets["survivors_json"],
-        mode="decentralized",
+        mode="no_obs",
         requires_state=False,
     )
     #env.reset()
