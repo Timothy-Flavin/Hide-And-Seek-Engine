@@ -23,8 +23,6 @@ from MixedObservationEncoder import MixedObservationEncoder
 class Args:
     exp_name: str = "custom_sac"
     """the name of this experiment"""
-    seed: int = 1
-    """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
@@ -49,15 +47,15 @@ class Args:
     """the discount factor gamma"""
     tau: float = 0.005
     """target smoothing coefficient (default: 0.005 for soft updates)"""
-    batch_size: int = 128
+    batch_size: int = 1024
     """the batch size of sample from the reply memory"""
-    learning_starts: int = 2000
+    learning_starts: int = 4096
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
     q_lr: float = 3e-4
     """the learning rate of the Q network optimizer"""
-    train_frequency: int = 32
+    train_frequency: int = 128
     """how many logical steps between model updates"""
     target_network_frequency: int = 1
     """the frequency of updates for the target networks"""
@@ -65,7 +63,7 @@ class Args:
     """Entropy regularization coefficient."""
     autotune: bool = True
     """automatic tuning of the entropy coefficient"""
-    target_entropy_scale: float = 0.89
+    target_entropy_scale: float = 0.5
     """coefficient for scaling the autotune entropy target"""
 
 
@@ -167,7 +165,7 @@ class SoftQNetwork(nn.Module):
             vector_hidden_dim=32,
             output_dim=256,
         )
-        self.adv1_heads = nn.ModuleList([
+        self.adv_heads = nn.ModuleList([
             nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.ReLU(),
@@ -175,21 +173,7 @@ class SoftQNetwork(nn.Module):
             ) for _ in range(n_agents)
         ])
         
-        self.v1_head = nn.Sequential(
-            layer_init(nn.Linear(256, 128)),
-            nn.ReLU(),
-            layer_init(nn.Linear(128, 1))
-        )
-
-        self.adv2_heads = nn.ModuleList([
-            nn.Sequential(
-                layer_init(nn.Linear(256, 128)),
-                nn.ReLU(),
-                layer_init(nn.Linear(128, num_actions_per_agent))
-            ) for _ in range(n_agents)
-        ])
-        
-        self.v2_head = nn.Sequential(
+        self.v_head = nn.Sequential(
             layer_init(nn.Linear(256, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 1))
@@ -200,19 +184,14 @@ class SoftQNetwork(nn.Module):
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
         
-        v1_value = self.v1_head(feats) # [B, 1]
-        adv1_values = torch.stack([head(feats) for head in self.adv1_heads], dim=1) # [B, n_agents, num_actions]
-
-        v2_value = self.v2_head(feats) # [B, 1]
-        adv2_values = torch.stack([head(feats) for head in self.adv2_heads], dim=1) # [B, n_agents, num_actions]
+        v_value = self.v_head(feats) # [B, 1]
+        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
         
         if log_pi is not None and alpha is not None:
-            adv1_values = adv1_values - alpha * log_pi
-            adv2_values = adv2_values - alpha * log_pi
+            adv_values = adv_values - alpha * log_pi
             
-        adv1_values = adv1_values - adv1_values.mean(dim=2, keepdim=True)
-        adv2_values = adv2_values - adv2_values.mean(dim=2, keepdim=True)
-        return (v1_value, adv1_values), (v2_value, adv2_values)  # [B, 1], [B, n_agents, num_actions]
+        adv_values = adv_values - adv_values.mean(dim=2, keepdim=True)
+        return v_value, adv_values  # [B, 1], [B, n_agents, num_actions]
 
 
 class Actor(nn.Module):
@@ -268,7 +247,7 @@ ACTION_MAP = np.array(
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    run_name = f"GridWorld__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"GridWorld__{args.exp_name}__{args.run_number}__{int(time.time())}"
     
     if args.track:
         import wandb
@@ -288,9 +267,9 @@ if __name__ == "__main__":
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    random.seed(args.run_number)
+    np.random.seed(args.run_number)
+    torch.manual_seed(args.run_number)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")

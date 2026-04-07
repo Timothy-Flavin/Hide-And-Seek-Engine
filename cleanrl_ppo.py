@@ -21,8 +21,6 @@ from MixedObservationEncoder import MixedObservationEncoder
 class Args:
     exp_name: str = "custom_ppo"
     """the name of this experiment"""
-    seed: int = 1
-    """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
@@ -157,7 +155,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"GridWorld__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"GridWorld__{args.exp_name}__{args.run_number}__{int(time.time())}"
     
     if args.track:
         import wandb
@@ -177,9 +175,9 @@ if __name__ == "__main__":
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    random.seed(args.run_number)
+    np.random.seed(args.run_number)
+    torch.manual_seed(args.run_number)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")

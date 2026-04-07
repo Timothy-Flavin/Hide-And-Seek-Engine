@@ -20,7 +20,6 @@ from MixedObservationEncoder import MixedObservationEncoder
 @dataclass
 class Args:
     exp_name: str = "custom_dqn"
-    seed: int = 1
     run_number: int = 1
     torch_deterministic: bool = True
     cuda: bool = True
@@ -31,13 +30,13 @@ class Args:
     buffer_size: int = 100000
     gamma: float = 0.99
     tau: float = 1.0
-    target_network_frequency: int = 1024
-    batch_size: int = 128
+    target_network_frequency: int = 2048
+    batch_size: int = 1024
     start_e: float = 1
     end_e: float = 0.05
-    exploration_fraction: float = 0.5
+    exploration_fraction: float = 0.2
     learning_starts: int = 1000
-    train_frequency: int = 10
+    train_frequency: int = 128
 
 
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
@@ -203,9 +202,9 @@ ACTION_MAP = np.array(
 if __name__ == "__main__":
     args = tyro.cli(Args)
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    random.seed(args.run_number)
+    np.random.seed(args.run_number)
+    torch.manual_seed(args.run_number)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
@@ -322,7 +321,7 @@ if __name__ == "__main__":
         cached_logical_steps += args.num_envs
 
         # Model update every 4 logical steps (across all envs)
-        while cached_logical_steps >= 32:
+        while cached_logical_steps >= args.train_frequency:
             if global_step > args.learning_starts:
                 (
                     b_spatial,
@@ -351,7 +350,7 @@ if __name__ == "__main__":
                 optimizer.step()
                 q_losses.append(loss.item())
                 update_count += 1
-            cached_logical_steps -= 32
+            cached_logical_steps -= args.train_frequency
 
         # --- Logging steps/sec and updates/sec every 1000 env steps ---
         if step_count >= args.total_timesteps//100:
