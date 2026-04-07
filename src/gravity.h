@@ -8,7 +8,7 @@
 // ─── Shared constants ───────────────────────────────────────────────────────
 
 constexpr int MAP_SIZE = 32;
-constexpr int N_AGENTS = 4;
+constexpr int N_AGENTS = 10;
 constexpr int VIEW_RANGE = 3;
 constexpr float SPEED = 0.5f;
 constexpr float DANGER_PENALTY_FACTOR = 0.8f;
