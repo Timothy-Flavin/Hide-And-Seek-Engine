@@ -471,8 +471,8 @@ if __name__ == "__main__":
                 update_count += 1
             cached_logical_steps -= args.train_frequency
 
-        # --- Logging steps/sec and updates/sec every 1000 env steps ---
-        if step_count >= 1000 and global_step > args.learning_starts:
+        # --- Logging steps/sec and updates/sec every 1% of total steps ---
+        if step_count >= args.total_timesteps//100 and global_step > args.learning_starts:
             now = time.time()
             elapsed = now - last_log_time
             steps_per_sec = step_count / elapsed
@@ -487,7 +487,7 @@ if __name__ == "__main__":
             writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
             writer.add_scalar("losses/alpha", alpha, global_step)
             
-            print(f"Global Step: {global_step} | SPS: {steps_per_sec:.0f} | Q-Loss: {qf_loss.item() / 2.0:.3f} | Actor-Loss: {actor_loss.item():.3f}")
+            print(f"Global Step: {global_step} | SPS: {steps_per_sec:.0f} | Q-Loss: {qf_loss.item() / 2.0:.3f} | Actor-Loss: {actor_loss.item():.3f} left: {(args.total_timesteps-global_step)/steps_per_sec}s")
             
             if args.autotune:
                 writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)

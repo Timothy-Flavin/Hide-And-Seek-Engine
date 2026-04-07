@@ -359,7 +359,7 @@ if __name__ == "__main__":
             steps_per_sec = step_count / elapsed
             updates_per_sec = update_count / elapsed if elapsed > 0 else 0.0
             print(
-                f"Steps/sec: {steps_per_sec:.2f}, Model updates/sec: {updates_per_sec:.2f} qloss: {sum(q_losses[-100:])/100}, return: {sum(episodic_returns[-100:])/100}"
+                f"Steps/sec: {steps_per_sec:.2f}, up/sec: {updates_per_sec:.2f} qloss: {sum(q_losses[-100:])/100}, return: {sum(episodic_returns[-100:])/100} left: {(args.total_timesteps-global_step)/steps_per_sec}s"
             )
             last_log_time = now
             step_count = 0
