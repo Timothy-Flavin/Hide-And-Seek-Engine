@@ -22,6 +22,9 @@ def plot_results():
                 if len(returns) == 0:
                     continue
                 
+                for xi in range(1,len(returns)):
+                    returns[xi] = 0.95*returns[xi-1]+0.05*returns[xi]
+
                 # Create the corresponding x-axis for this specific run
                 x = np.linspace(0, 10000, len(returns))
                 

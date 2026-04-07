@@ -167,7 +167,7 @@ class SoftQNetwork(nn.Module):
             vector_hidden_dim=32,
             output_dim=256,
         )
-        self.adv_heads = nn.ModuleList([
+        self.adv1_heads = nn.ModuleList([
             nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.ReLU(),
@@ -175,7 +175,21 @@ class SoftQNetwork(nn.Module):
             ) for _ in range(n_agents)
         ])
         
-        self.v_head = nn.Sequential(
+        self.v1_head = nn.Sequential(
+            layer_init(nn.Linear(256, 128)),
+            nn.ReLU(),
+            layer_init(nn.Linear(128, 1))
+        )
+
+        self.adv2_heads = nn.ModuleList([
+            nn.Sequential(
+                layer_init(nn.Linear(256, 128)),
+                nn.ReLU(),
+                layer_init(nn.Linear(128, num_actions_per_agent))
+            ) for _ in range(n_agents)
+        ])
+        
+        self.v2_head = nn.Sequential(
             layer_init(nn.Linear(256, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 1))
@@ -186,14 +200,19 @@ class SoftQNetwork(nn.Module):
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
         
-        v_value = self.v_head(feats) # [B, 1]
-        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
+        v1_value = self.v1_head(feats) # [B, 1]
+        adv1_values = torch.stack([head(feats) for head in self.adv1_heads], dim=1) # [B, n_agents, num_actions]
+
+        v2_value = self.v2_head(feats) # [B, 1]
+        adv2_values = torch.stack([head(feats) for head in self.adv2_heads], dim=1) # [B, n_agents, num_actions]
         
         if log_pi is not None and alpha is not None:
-            adv_values = adv_values - alpha * log_pi
+            adv1_values = adv1_values - alpha * log_pi
+            adv2_values = adv2_values - alpha * log_pi
             
-        adv_values = adv_values - adv_values.mean(dim=2, keepdim=True)
-        return v_value, adv_values  # [B, 1], [B, n_agents, num_actions]
+        adv1_values = adv1_values - adv1_values.mean(dim=2, keepdim=True)
+        adv2_values = adv2_values - adv2_values.mean(dim=2, keepdim=True)
+        return (v1_value, adv1_values), (v2_value, adv2_values)  # [B, 1], [B, n_agents, num_actions]
 
 
 class Actor(nn.Module):
@@ -501,4 +520,4 @@ if __name__ == "__main__":
     writer.close()
     
     os.makedirs("results", exist_ok=True)
-    np.save(f"results/sac_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+    np.save(f"results/sac_central_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))

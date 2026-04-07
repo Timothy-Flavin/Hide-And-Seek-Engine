@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import tyro
 
 torch.set_float32_matmul_precision("high")
 
@@ -200,7 +201,7 @@ ACTION_MAP = np.array(
 )
 
 if __name__ == "__main__":
-    args = Args()
+    args = tyro.cli(Args)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
