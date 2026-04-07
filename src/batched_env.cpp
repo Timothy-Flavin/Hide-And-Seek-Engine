@@ -178,18 +178,49 @@ private:
                         Tile &t = view.grid[t_idx];
 
                         // Global discovery reward
+                        bool newly_global = false;
                         if (!t.is_global_observed())
                         {
                             t.set_global_observed();
                             (*view.undiscovered_remaining)--;
                             // Add reward (assume 'rewards' is an accessible class member or passed ref)
                             individual_rewards[e * n_agents + a] += reward_new_tile;
+                            newly_global = true;
                         }
 
                         // Local observation tracking
                         if (mode == Mode::DECENTRALIZED)
                         {
-                            t.set_agent_seen(a);
+                            if (!t.has_agent_seen(a)) {
+                                t.set_agent_seen(a);
+                                if (torch_obs_spatial_base != nullptr) {
+                                    ssize_t map_area = width * height;
+                                    ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                    float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
+                                    spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                    spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                    spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                                }
+                            }
+                        }
+                        else if (mode == Mode::CENTRALIZED && newly_global)
+                        {
+                            if (torch_obs_spatial_base != nullptr) {
+                                ssize_t map_area = width * height;
+                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                float *spat_base = torch_obs_spatial_base + e * spatial_stride;
+                                spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                            }
+                            if (requires_state && torch_state_spatial_base != nullptr) {
+                                ssize_t map_area = width * height;
+                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                float *spat_base = torch_state_spatial_base + e * spatial_stride;
+                                spat_base[central_state_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                spat_base[central_state_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                spat_base[central_state_strides->OBSERVED_START + t_idx] = 1.0f;
+                            }
                         }
                     }
                 }
@@ -314,9 +345,17 @@ private:
                     {
                         int t_idx = y * width + x;
                         Tile &t = view.grid[t_idx];
-                        if (t.has_agent_seen(a))
+                        if (t.has_agent_seen(a) && !t.has_agent_seen(target_agent))
                         {
                             t.set_agent_seen(target_agent);
+                            if (torch_obs_spatial_base != nullptr) {
+                                ssize_t map_area = width * height;
+                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
+                                spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                            }
                         }
                     }
                 }
@@ -369,20 +408,7 @@ private:
                 float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
-                // Spatial MASKED
-                float *base_type = spat_base + decentral_obs_strides->TYLE_TYPE_START;
-                float *base_alt = spat_base + decentral_obs_strides->ALTITUDE_TYPE_START;
-                float *base_obs = spat_base + decentral_obs_strides->OBSERVED_START;
-
-                for (int i = 0; i < map_area; ++i)
-                {
-                    if (view.grid[i].has_agent_seen(a))
-                    {
-                        base_type[view.grid[i].get_type() * map_area + i] = 1.0f;
-                        base_alt[i] = view.grid[i].altitude;
-                        base_obs[i] = 1.0f;
-                    }
-                }
+                // Spatial MASKED already handled inline during discovery
 
                 // POI MASKED
                 for (int p = 0; p < n_pois; ++p)
@@ -482,20 +508,6 @@ private:
             float *spat_base = torch_obs_spatial_base + e * spatial_stride;
             float *int_base = torch_obs_internal_base + e * (n_agents * 6);
 
-            float *base_type = spat_base + central_obs_strides->TYLE_TYPE_START;
-            float *base_alt = spat_base + central_obs_strides->ALTITUDE_TYPE_START;
-            float *base_obs = spat_base + central_obs_strides->OBSERVED_START;
-
-            for (int i = 0; i < map_area; ++i)
-            {
-                if (view.grid[i].is_global_observed())
-                {
-                    base_type[view.grid[i].get_type() * map_area + i] = 1.0f;
-                    base_alt[i] = view.grid[i].altitude;
-                    base_obs[i] = 1.0f;
-                }
-            }
-
             for (int p = 0; p < n_pois; ++p)
             {
                 if (view.pois[p].last_y >= 0 && view.pois[p].last_x >= 0 && view.pois[p].last_y < height && view.pois[p].last_x < width)
@@ -565,18 +577,8 @@ private:
         float *spat_base = torch_state_spatial_base + e * spatial_stride;
         float *int_base = torch_state_internal_base + e * (n_agents * 6 + n_pois * 4);
 
-        // UNMASKED Terrain
-        for (int i = 0; i < map_area; ++i)
-        {
-            float altitude = view.grid[i].altitude;
-            spat_base[central_state_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_area + i] = 1.0f;
-            spat_base[central_state_strides->ALTITUDE_TYPE_START + i] = altitude;
-            if (view.grid[i].is_global_observed())
-            {
-                spat_base[central_state_strides->OBSERVED_START + i] = 1.0f;
-            }
-        }
-
+        // UNMASKED Terrain already largely static, just update during discovery
+        
         // UNMASKED POIs (Any POI not yet saved)
         for (int p = 0; p < n_pois; ++p)
         {
@@ -895,6 +897,13 @@ public:
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
             float *spat_base = torch_state_spatial_base + env_idx * spatial_stride;
             std::memset(spat_base, 0, spatial_stride * sizeof(float));
+
+            // Populate static Unmasked Terrain Type and Altitude exactly once per episode
+            for (int i = 0; i < map_size; ++i)
+            {
+                spat_base[central_state_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_size + i] = 1.0f;
+                spat_base[central_state_strides->ALTITUDE_TYPE_START + i] = view.grid[i].altitude;
+            }
         }
 
         for (int a = 0; a < n_agents; ++a)
