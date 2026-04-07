@@ -487,7 +487,7 @@ if __name__ == "__main__":
             writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
             writer.add_scalar("losses/alpha", alpha, global_step)
             
-            print(f"Global Step: {global_step} | SPS: {steps_per_sec:.0f} | Q-Loss: {qf_loss.item() / 2.0:.3f} | Actor-Loss: {actor_loss.item():.3f} left: {(args.total_timesteps-global_step)/steps_per_sec}s")
+            print(f"Global Step: {global_step} | SPS: {steps_per_sec:.0f} | Q-Loss: {qf_loss.item() / 2.0:.3f} | Actor-Loss: {actor_loss.item():.3f} left: {(args.total_timesteps-global_step)/steps_per_sec}s r: {sum(episodic_returns[-10:])/10.0}")
             
             if args.autotune:
                 writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)

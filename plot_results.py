@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def plot_results():
-    algorithms = ['ppo', 'dqn', 'sac']
-    colors = {'ppo': 'blue', 'dqn': 'red', 'sac': 'green'}
+    algorithms = ['ppo', 'dqn', 'sac_central']
+    colors = {'ppo': 'blue', 'dqn': 'red', 'sac': 'green', 'sac_central': 'green'}
     
     # The x-axis represents 10 million steps, scaled to 10,000 units (e.g., thousands of steps).
     # We create a common x-axis of 1000 evenly spaced points to interpolate against
