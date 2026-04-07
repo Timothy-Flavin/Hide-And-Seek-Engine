@@ -73,12 +73,22 @@ def run_speedtest(
     t0 = time.perf_counter()
     total_step_calls = 0
 
+    t_random_act = 0.0
+    t_step_cpp = 0.0
+    t_reset = 0.0
+
     for _ in range(steps // num_envs):
+        t_start_act = time.perf_counter()
         move_acts, radio_acts = _random_local_actions(num_envs, num_agents)
+        t_random_act += time.perf_counter() - t_start_act
+
+        t_start_step = time.perf_counter()
         obs, _, terminated, _, _ = env.step(move_acts, radio_acts)
+        t_step_cpp += time.perf_counter() - t_start_step
 
         total_step_calls += num_envs
 
+        t_start_reset = time.perf_counter()
         term_np = (
             terminated.cpu().numpy()
             if isinstance(terminated, torch.Tensor)
@@ -86,6 +96,7 @@ def run_speedtest(
         )
         for e in np.where(term_np)[0]:
             env.reset_env(int(e))
+        t_reset += time.perf_counter() - t_start_reset
 
     dt = time.perf_counter() - t0
     fps = total_step_calls / max(dt, 1e-8)
@@ -93,6 +104,11 @@ def run_speedtest(
     # Cleanup
     os.remove(agents_json_path)
 
+    print(f"  Py Wall Clock:")
+    print(f"    Random Acts: {t_random_act:.3f} s")
+    print(f"    Env Step:    {t_step_cpp:.3f} s")
+    print(f"    Env Reset:   {t_reset:.3f} s")
+    print(f"    Total:       {dt:.3f} s")
     print(f"  FPS: {fps:,.1f}")
     return fps
 

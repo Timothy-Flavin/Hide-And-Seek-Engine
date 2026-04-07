@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 #include <cstdint>
-// #include <chrono>
+#include <chrono>
 #include "env_state.h"
 
 #include <omp.h>
@@ -650,17 +650,17 @@ public:
         int sim_seed,
         int w,
         int h,
-        const std::vector<uint8_t>& supports_walk,
-        const std::vector<uint8_t>& supports_aqua,
-        const std::vector<uint8_t>& supports_fly,
-        const std::vector<uint8_t>& is_block,
-        const std::vector<int>& t_map, // width*height int for tile types
-        const std::vector<float>& alt_map,
-        const std::vector<float>& speed_map,
-        const std::vector<float>& agent_view_ranges,
-        const std::vector<uint8_t>& saveable_rules,     // n_poi * n_agents can this poi be saved by this agent
-        const std::vector<float>& initial_agent_pos, // n_agent * 2 x y start locs
-        const std::vector<float>& initial_poi_pos,   // n_poi * 2 x y start locs
+        const std::vector<uint8_t> &supports_walk,
+        const std::vector<uint8_t> &supports_aqua,
+        const std::vector<uint8_t> &supports_fly,
+        const std::vector<uint8_t> &is_block,
+        const std::vector<int> &t_map, // width*height int for tile types
+        const std::vector<float> &alt_map,
+        const std::vector<float> &speed_map,
+        const std::vector<float> &agent_view_ranges,
+        const std::vector<uint8_t> &saveable_rules,  // n_poi * n_agents can this poi be saved by this agent
+        const std::vector<float> &initial_agent_pos, // n_agent * 2 x y start locs
+        const std::vector<float> &initial_poi_pos,   // n_poi * 2 x y start locs
         uintptr_t obs_spatial_ptr,
         uintptr_t obs_internal_ptr,
         uintptr_t state_spatial_ptr,
@@ -754,18 +754,20 @@ public:
         {
             std::uniform_real_distribution<float> rand_dir(-1.0f, 1.0f);
             std::uniform_int_distribution<int> rand_radio(0, n_agents - 1);
-            
+
             // Find max battery among agents for this environment
             float max_battery = 0.0f;
-            for (int a = 0; a < n_agents; ++a) {
-                if (env_views[e].agents[a].battery > max_battery) {
+            for (int a = 0; a < n_agents; ++a)
+            {
+                if (env_views[e].agents[a].battery > max_battery)
+                {
                     max_battery = env_views[e].agents[a].battery;
                 }
             }
-            
+
             std::uniform_int_distribution<int> rand_steps(1, std::max(1, static_cast<int>(max_battery)));
             int steps_to_take = rand_steps(rngs[e]);
-            
+
             std::vector<float> mock_act_data(num_envs * n_agents * 2, 0.0f);
             std::vector<int> mock_radio_data(num_envs * n_agents, 0);
 
@@ -785,14 +787,14 @@ public:
                 resolve_local_interactions(e);
                 execute_radio(e, mock_radio_data.data());
                 update_battery_and_counters(e);
-                
+
                 bool all_saved = (*env_views[e].poi_left == 0);
                 bool all_out_of_battery = (*env_views[e].agents_left == 0);
                 const bool timeout = current_frames[e] >= max_frames;
                 env_terminated[e] = all_saved || all_out_of_battery;
                 env_truncated[e] = timeout;
                 ++current_frames[e];
-                
+
                 if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
                 {
                     fill_torch_obs(e);
@@ -933,20 +935,20 @@ public:
     }
 
     // Timing accumulators
-    // inline static std::chrono::duration<double> t_process_movement{0};
-    // inline static std::chrono::duration<double> t_resolve_interactions{0};
-    // inline static std::chrono::duration<double> t_radio_logs{0};
-    // inline static std::chrono::duration<double> t_update_counters{0};
-    // inline static std::chrono::duration<double> t_post_processing{0};
-    // inline static std::chrono::duration<double> t_fill_torch_obs{0};
-    // inline static std::chrono::duration<double> t_fill_torch_state{0};
-    // inline static std::chrono::duration<double> t_reset_time{0};
-    // inline static std::chrono::duration<double> t_python_overhead{0};
-    // inline static std::chrono::duration<double> t_total{0};
+    inline static std::chrono::duration<double> t_process_movement{0};
+    inline static std::chrono::duration<double> t_resolve_interactions{0};
+    inline static std::chrono::duration<double> t_radio_logs{0};
+    inline static std::chrono::duration<double> t_update_counters{0};
+    inline static std::chrono::duration<double> t_post_processing{0};
+    inline static std::chrono::duration<double> t_fill_torch_obs{0};
+    inline static std::chrono::duration<double> t_fill_torch_state{0};
+    inline static std::chrono::duration<double> t_reset_time{0};
+    inline static std::chrono::duration<double> t_python_overhead{0};
+    inline static std::chrono::duration<double> t_total{0};
 
     py::tuple step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
-        // auto t_step_start = std::chrono::high_resolution_clock::now();
+        auto t_step_start = std::chrono::high_resolution_clock::now();
         // action space is box2d[dx, dy], discrete(num radio choices)
         if ((move_actions_array.ndim() != 1) || (radio_actions_array.ndim() != 1))
             throw std::invalid_argument("actions must have shape [E*A*2] for movement and [E*A] for radio");
@@ -958,27 +960,27 @@ public:
 
         std::fill(individual_rewards.begin(), individual_rewards.end(), 0.0f);
 
-        // auto t0 = std::chrono::high_resolution_clock::now();
+        auto t0 = std::chrono::high_resolution_clock::now();
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            // auto t_reset_s = std::chrono::high_resolution_clock::now();
+            auto t_reset_s = std::chrono::high_resolution_clock::now();
             if (env_terminated[e] || env_truncated[e])
                 reset_env(e);
 
             // std::cout << "Env " << e << " process movement\n";
-            // auto t1 = std::chrono::high_resolution_clock::now();
+            auto t1 = std::chrono::high_resolution_clock::now();
             process_agent_movement(e, act_data);
-            // auto t2 = std::chrono::high_resolution_clock::now();
+            auto t2 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " resolve interactions\n";
             resolve_local_interactions(e);
-            // auto t3 = std::chrono::high_resolution_clock::now();
+            auto t3 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " radio logs\n";
             execute_radio(e, radio_act_data);
-            // auto t4 = std::chrono::high_resolution_clock::now();
+            auto t4 = std::chrono::high_resolution_clock::now();
             // std::cout << "Env " << e << " update counters\n";
             update_battery_and_counters(e);
-            // auto t5 = std::chrono::high_resolution_clock::now();
+            auto t5 = std::chrono::high_resolution_clock::now();
 
             // std::cout << "Env " << e << " post processing\n";
             bool all_saved = (*env_views[e].poi_left == 0);
@@ -987,7 +989,7 @@ public:
             env_terminated[e] = all_saved || all_out_of_battery;
             env_truncated[e] = timeout;
             ++current_frames[e];
-            // auto t6 = std::chrono::high_resolution_clock::now();
+            auto t6 = std::chrono::high_resolution_clock::now();
 
             // If we are using this environment for machine learning
             // then fill the torch buffers accordingly
@@ -996,26 +998,26 @@ public:
             {
                 fill_torch_obs(e);
             }
-            // auto t7 = std::chrono::high_resolution_clock::now();
+            auto t7 = std::chrono::high_resolution_clock::now();
             if (requires_state)
             {
                 fill_torch_state(e);
             }
-            // auto t8 = std::chrono::high_resolution_clock::now();
+            auto t8 = std::chrono::high_resolution_clock::now();
 
-            // Accumulate timing for each segment (atomic add for thread safety)
-            // {
-            //     t_reset_time += (t1 - t_reset_s);
-            //     t_process_movement += (t2 - t1);
-            //     t_resolve_interactions += (t3 - t2);
-            //     t_radio_logs += (t4 - t3);
-            //     t_update_counters += (t5 - t4);
-            //     t_post_processing += (t6 - t5);
-            //     t_fill_torch_obs += (t7 - t6);
-            //     t_fill_torch_state += (t8 - t7);
-            // }
+#pragma omp critical
+            {
+                t_reset_time += (t1 - t_reset_s);
+                t_process_movement += (t2 - t1);
+                t_resolve_interactions += (t3 - t2);
+                t_radio_logs += (t4 - t3);
+                t_update_counters += (t5 - t4);
+                t_post_processing += (t6 - t5);
+                t_fill_torch_obs += (t7 - t6);
+                t_fill_torch_state += (t8 - t7);
+            }
         }
-        // auto t9 = std::chrono::high_resolution_clock::now();
+        auto t9 = std::chrono::high_resolution_clock::now();
 
         // std::cout << "setup for python" << std::endl;
         auto py_rewards = py::array_t<float>({num_envs, n_agents});
@@ -1024,27 +1026,28 @@ public:
         std::copy(individual_rewards.begin(), individual_rewards.end(), py_rewards.mutable_data());
         std::copy(env_terminated.begin(), env_terminated.end(), py_terminated.mutable_data());
         std::copy(env_truncated.begin(), env_truncated.end(), py_truncated.mutable_data());
-
-        // auto t_step_end = std::chrono::high_resolution_clock::now();
-        // t_total += (t_step_end - t_step_start);
-        // t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
+        auto pytup = py::make_tuple(py_rewards, py_terminated, py_truncated);
+        auto t_step_end = std::chrono::high_resolution_clock::now();
+        t_total += (t_step_end - t_step_start);
+        t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        // if (steps_taken % 10000 == 0)
-        // {
-        //     std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
-        //     std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
-        //     std::cout << "  resolve_local_interactions: " << t_resolve_interactions.count() << " s" << std::endl;
-        //     std::cout << "  execute_radio: " << t_radio_logs.count() << " s" << std::endl;
-        //     std::cout << "  update_battery_and_counters: " << t_update_counters.count() << " s" << std::endl;
-        //     std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
-        //     std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
-        //     std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
-        //     std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
-        //     std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
-        //     std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
-        //     std::cout << std::endl;
-        //     // Optionally reset timers if you want per-interval stats
+        if (steps_taken % 10000 == 0)
+        {
+            std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
+            std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
+            std::cout << "  resolve_local_interactions: " << t_resolve_interactions.count() << " s" << std::endl;
+            std::cout << "  execute_radio: " << t_radio_logs.count() << " s" << std::endl;
+            std::cout << "  update_battery_and_counters: " << t_update_counters.count() << " s" << std::endl;
+            std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
+            std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
+            std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
+            std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
+            std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
+            std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
+            std::cout << std::endl;
+        }
+        // Optionally reset timers if you want per-interval stats
         //     t_process_movement = std::chrono::duration<double>(0);
         //     t_resolve_interactions = std::chrono::duration<double>(0);
         //     t_radio_logs = std::chrono::duration<double>(0);
@@ -1056,7 +1059,8 @@ public:
         //     t_python_overhead = std::chrono::duration<double>(0);
         //     t_total = std::chrono::duration<double>(0);
         // }
-        return py::make_tuple(py_rewards, py_terminated, py_truncated);
+        
+        return pytup;
     }
 };
 
@@ -1066,32 +1070,32 @@ PYBIND11_MODULE(cpp_engine, m)
 
     py::class_<BatchedEnvironment>(m, "BatchedEnvironment")
         .def(py::init<
-                 int,                // n_envs
-                 int,                // sim_seed
-                 int,                // width
-                 int,                // height
-                 std::vector<uint8_t>,  // supports_walk
-                 std::vector<uint8_t>,  // supports_aqua
-                 std::vector<uint8_t>,  // supports_fly
-                 std::vector<uint8_t>,  // is_block
-                 std::vector<int>,   // t_map
-                 std::vector<float>, // alt_map
-                 std::vector<float>, // speed_map
-                 std::vector<float>, // agent_view_ranges
-                 std::vector<uint8_t>,  // saveable_rules
-                 std::vector<float>, // initial_agent_pos
-                 std::vector<float>, // initial_poi_pos
-                 uintptr_t,          // obs_spatial_ptr
-                 uintptr_t,          // obs_internal_ptr
-                 uintptr_t,          // state_spatial_ptr
-                 uintptr_t,          // state_internal_ptr
-                 bool,               // requires_state
-                 bool,               // coop_rewards
-                 float,              // reward_new_tile_val
-                 float,              // reward_found_val
-                 float,              // reward_saved_val
-                 int,                // max_frames_val
-                 int                 // mode_value
+                 int,                  // n_envs
+                 int,                  // sim_seed
+                 int,                  // width
+                 int,                  // height
+                 std::vector<uint8_t>, // supports_walk
+                 std::vector<uint8_t>, // supports_aqua
+                 std::vector<uint8_t>, // supports_fly
+                 std::vector<uint8_t>, // is_block
+                 std::vector<int>,     // t_map
+                 std::vector<float>,   // alt_map
+                 std::vector<float>,   // speed_map
+                 std::vector<float>,   // agent_view_ranges
+                 std::vector<uint8_t>, // saveable_rules
+                 std::vector<float>,   // initial_agent_pos
+                 std::vector<float>,   // initial_poi_pos
+                 uintptr_t,            // obs_spatial_ptr
+                 uintptr_t,            // obs_internal_ptr
+                 uintptr_t,            // state_spatial_ptr
+                 uintptr_t,            // state_internal_ptr
+                 bool,                 // requires_state
+                 bool,                 // coop_rewards
+                 float,                // reward_new_tile_val
+                 float,                // reward_found_val
+                 float,                // reward_saved_val
+                 int,                  // max_frames_val
+                 int                   // mode_value
                  >(),
              py::arg("n_envs"),
              py::arg("sim_seed"),
