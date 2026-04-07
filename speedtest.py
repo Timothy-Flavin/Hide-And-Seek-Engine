@@ -88,15 +88,15 @@ def run_speedtest(
 
         total_step_calls += num_envs
 
-        t_start_reset = time.perf_counter()
-        term_np = (
-            terminated.cpu().numpy()
-            if isinstance(terminated, torch.Tensor)
-            else terminated
-        )
-        for e in np.where(term_np)[0]:
-            env.reset_env(int(e))
-        t_reset += time.perf_counter() - t_start_reset
+        # t_start_reset = time.perf_counter()
+        # term_np = (
+        #     terminated.cpu().numpy()
+        #     if isinstance(terminated, torch.Tensor)
+        #     else terminated
+        # )
+        # # for e in np.where(term_np)[0]:
+        # #    env.reset_env(int(e))
+        # t_reset += time.perf_counter() - t_start_reset
 
     dt = time.perf_counter() - t0
     fps = total_step_calls / max(dt, 1e-8)
@@ -107,7 +107,7 @@ def run_speedtest(
     print(f"  Py Wall Clock:")
     print(f"    Random Acts: {t_random_act:.3f} s")
     print(f"    Env Step:    {t_step_cpp:.3f} s")
-    print(f"    Env Reset:   {t_reset:.3f} s")
+    # print(f"    Env Reset:   {t_reset:.3f} s")
     print(f"    Total:       {dt:.3f} s")
     print(f"  FPS: {fps:,.1f}")
     return fps
@@ -117,7 +117,7 @@ def main():
     steps = 50_000
     env_counts = [1, 4, 16, 64, 128, 256]
     agent_counts = list(range(1, 11))
-    num_runs = 5
+    num_runs = 3
 
     assets = {
         "map_png": "test_level/level.png",
@@ -128,6 +128,10 @@ def main():
     results_matrix = np.zeros((len(env_counts), len(agent_counts), num_runs))
 
     for env_idx, n_envs in enumerate(env_counts):
+        if n_envs == 1:
+            steps = 10000
+        else:
+            steps = 50000
         for agent_idx, n_agents in enumerate(agent_counts):
             print(f"\n--- Testing {n_envs} envs, {n_agents} agents ---")
             for run_idx in range(num_runs):
@@ -143,17 +147,17 @@ def main():
         means = np.mean(run_data, axis=1)
         mins = np.min(run_data, axis=1)
         maxs = np.max(run_data, axis=1)
-        
+
         # yerr takes [lower_errors, upper_errors] relative to the mean values
         yerr = [means - mins, maxs - means]
-        
+
         plt.errorbar(
-            agent_counts, 
-            means, 
-            yerr=yerr, 
-            marker="o", 
+            agent_counts,
+            means,
+            yerr=yerr,
+            marker="o",
             capsize=4,
-            label=f"{n_envs} envs"
+            label=f"{n_envs} envs",
         )
 
     plt.xlabel("Number of Agents")
@@ -164,7 +168,9 @@ def main():
 
     plot_path = "speedtest_results.png"
     plt.savefig(plot_path)
-    print(f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to speedtest_results_raw.npy")
+    print(
+        f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to speedtest_results_raw.npy"
+    )
 
 
 if __name__ == "__main__":
