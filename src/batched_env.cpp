@@ -141,7 +141,8 @@ private:
         }
     }
 
-    void resolve_local_interactions(int e)
+    template <Mode M, bool ReqState>
+    void resolve_local_interactions_impl(int e)
     {
         // for environment e:
         // Get agent view range from current tile and the tile agent view range
@@ -191,7 +192,7 @@ private:
                         }
 
                         // Local observation tracking
-                        if (mode == Mode::DECENTRALIZED)
+                        if constexpr (M == Mode::DECENTRALIZED)
                         {
                             if (!t.has_agent_seen(a)) {
                                 t.set_agent_seen(a);
@@ -205,23 +206,40 @@ private:
                                 }
                             }
                         }
-                        else if (mode == Mode::CENTRALIZED && newly_global)
+                        else if constexpr (M == Mode::CENTRALIZED)
                         {
-                            if (torch_obs_spatial_base != nullptr) {
-                                ssize_t map_area = width * height;
-                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                float *spat_base = torch_obs_spatial_base + e * spatial_stride;
-                                spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
-                                spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
-                                spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                            if (newly_global) {
+                                if (torch_obs_spatial_base != nullptr) {
+                                    ssize_t map_area = width * height;
+                                    ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                    float *spat_base = torch_obs_spatial_base + e * spatial_stride;
+                                    spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                    spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                    spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                                }
+                                if constexpr (ReqState) {
+                                    if (torch_state_spatial_base != nullptr) {
+                                        ssize_t map_area = width * height;
+                                        ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                        float *spat_base = torch_state_spatial_base + e * spatial_stride;
+                                        spat_base[central_state_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                        spat_base[central_state_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                        spat_base[central_state_strides->OBSERVED_START + t_idx] = 1.0f;
+                                    }
+                                }
                             }
-                            if (requires_state && torch_state_spatial_base != nullptr) {
-                                ssize_t map_area = width * height;
-                                ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                float *spat_base = torch_state_spatial_base + e * spatial_stride;
-                                spat_base[central_state_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
-                                spat_base[central_state_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
-                                spat_base[central_state_strides->OBSERVED_START + t_idx] = 1.0f;
+                        }
+                        else if constexpr (M == Mode::NO_OBS)
+                        {
+                            if constexpr (ReqState) {
+                                if (newly_global && torch_state_spatial_base != nullptr) {
+                                    ssize_t map_area = width * height;
+                                    ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
+                                    float *spat_base = torch_state_spatial_base + e * spatial_stride;
+                                    spat_base[central_state_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
+                                    spat_base[central_state_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
+                                    spat_base[central_state_strides->OBSERVED_START + t_idx] = 1.0f;
+                                }
                             }
                         }
                     }
@@ -250,11 +268,11 @@ private:
                     if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
                     {
                         poi.saved = 1;
-                        individual_rewards[e * n_agents + a] += reward_saved;
+                         individual_rewards[e * n_agents + a] += reward_saved;
                     }
 
                     // Update Local Beliefs
-                    if (mode == Mode::DECENTRALIZED)
+                    if constexpr (M == Mode::DECENTRALIZED)
                     {
                         POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
                         pk.x = poi.x;
@@ -266,13 +284,32 @@ private:
             }
 
             // Maintain self-knowledge
-            if (mode == Mode::DECENTRALIZED)
+            if constexpr (M == Mode::DECENTRALIZED)
             {
                 AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a];
                 ak.x = agent.y; // Or agent.x depending on your layout (consistency is key)
                 ak.y = agent.x;
                 ak.has_contact = 1;
             }
+        }
+    }
+
+    void resolve_local_interactions(int e)
+    {
+        if (mode == Mode::DECENTRALIZED)
+        {
+            if (requires_state) resolve_local_interactions_impl<Mode::DECENTRALIZED, true>(e);
+            else resolve_local_interactions_impl<Mode::DECENTRALIZED, false>(e);
+        }
+        else if (mode == Mode::CENTRALIZED)
+        {
+            if (requires_state) resolve_local_interactions_impl<Mode::CENTRALIZED, true>(e);
+            else resolve_local_interactions_impl<Mode::CENTRALIZED, false>(e);
+        }
+        else // Mode::NO_OBS
+        {
+            if (requires_state) resolve_local_interactions_impl<Mode::NO_OBS, true>(e);
+            else resolve_local_interactions_impl<Mode::NO_OBS, false>(e);
         }
     }
 
