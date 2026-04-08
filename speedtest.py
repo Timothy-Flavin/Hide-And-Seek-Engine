@@ -9,26 +9,18 @@ import numpy as np
 import torch
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
+
 rng = np.random.default_rng()
 
-def _random_local_actions(num_envs: int, n_agents: int) -> tuple[np.ndarray, np.ndarray]:
+
+def _random_local_actions(
+    num_envs: int, n_agents: int
+) -> tuple[np.ndarray, np.ndarray]:
     # Generating directly into the correct dtype saves a copy/cast cycle
     move_actions = rng.random((num_envs, n_agents, 2), dtype=np.float32)
     # Scale and shift: [0, 1) -> [-1, 1)
     move_actions = move_actions * 2.0 - 1.0
     radio_actions = rng.integers(0, n_agents, size=(num_envs, n_agents), dtype=np.int32)
-    return move_actions, radio_actions
-
-def _random_local_actions_old(
-    num_envs: int, n_agents: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Generates split movement and radio actions matching the new C++ API."""
-    move_actions = np.random.uniform(-1.0, 1.0, size=(num_envs, n_agents, 2)).astype(
-        np.float32
-    )
-    radio_actions = np.random.randint(0, n_agents, size=(num_envs, n_agents)).astype(
-        np.int32
-    )
     return move_actions, radio_actions
 
 
@@ -61,6 +53,8 @@ def run_speedtest(
     num_agents: int,
     steps: int,
     assets: dict[str, str],
+    mode: str,
+    requires_state: bool,
 ) -> float:
     print(f"Testing {num_agents} agents with {num_envs} parallel envs...")
 
@@ -73,8 +67,8 @@ def run_speedtest(
         tiles_json=assets["tiles_json"],
         agents_json=agents_json_path,
         survivors_json=assets["survivors_json"],
-        mode="centralized",
-        requires_state=False,
+        mode=mode,
+        requires_state=requires_state,
     )
     # env.reset()
 
@@ -122,6 +116,21 @@ def run_speedtest(
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="centralized",
+        choices=["centralized", "decentralized", "no_obs"],
+    )
+    parser.add_argument(
+        "--requires_state", type=str, default="False", choices=["True", "False"]
+    )
+    args = parser.parse_args()
+
+    mode = args.mode
+    requires_state = args.requires_state == "True"
+
     steps = 10_000_000
     env_counts = [1, 16, 128, 256, 1024]
     agent_counts = list(range(1, 11))
@@ -135,18 +144,27 @@ def main():
 
     results_matrix = np.zeros((len(env_counts), len(agent_counts), num_runs))
 
+    os.makedirs("laptop_speedtest", exist_ok=True)
+
     for env_idx, n_envs in enumerate(env_counts):
         if n_envs == 1:
             steps = 50000
         else:
             steps = 500000
         for agent_idx, n_agents in enumerate(agent_counts):
-            print(f"\n--- Testing {n_envs} envs, {n_agents} agents ---")
+            print(
+                f"\n--- Testing {n_envs} envs, {n_agents} agents ({mode}, state={requires_state}) ---"
+            )
             for run_idx in range(num_runs):
-                fps = run_speedtest(n_envs, n_agents, steps, assets)
+                fps = run_speedtest(
+                    n_envs, n_agents, steps, assets, mode, requires_state
+                )
                 results_matrix[env_idx, agent_idx, run_idx] = fps
 
-    np.save("speedtest_results_raw.npy", results_matrix)
+    state_str = "state" if requires_state else "nostate"
+    base_name = f"speedtest_results_{mode}_{state_str}"
+
+    np.save(os.path.join("laptop_speedtest", f"{base_name}_raw.npy"), results_matrix)
 
     # Plotting
     plt.figure(figsize=(10, 6))
@@ -170,14 +188,14 @@ def main():
 
     plt.xlabel("Number of Agents")
     plt.ylabel("FPS (Total steps / second)")
-    plt.title("Framerate Scaling vs Number of Agents and Parallel Envs")
+    plt.title(f"Framerate Scaling ({mode}, state={requires_state})")
     plt.legend()
     plt.grid(True)
 
-    plot_path = "speedtest_results.png"
+    plot_path = os.path.join("laptop_speedtest", f"{base_name}.png")
     plt.savefig(plot_path)
     print(
-        f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to speedtest_results_raw.npy"
+        f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to {base_name}_raw.npy"
     )
 
 

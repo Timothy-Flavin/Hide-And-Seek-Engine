@@ -1068,7 +1068,7 @@ public:
             bool all_saved = (*env_views[e].poi_left == 0);
             bool all_out_of_battery = (*env_views[e].agents_left == 0);
             const bool timeout = current_frames[e] >= max_frames;
-            
+
             padded_terminated[e * padded_byte_stride] = all_saved || all_out_of_battery;
             padded_truncated[e * padded_byte_stride] = timeout;
             ++current_frames[e];
@@ -1083,13 +1083,14 @@ public:
             }
         }
 
-        // Sequential single-thread collection copies directly into the dense PyTorch contiguous buffers 
+        // Sequential single-thread collection copies directly into the dense PyTorch contiguous buffers
         // to prevent multi-core cache invalidation storms
         for (int e = 0; e < num_envs; ++e)
         {
             env_terminated[e] = padded_terminated[e * padded_byte_stride];
             env_truncated[e] = padded_truncated[e * padded_byte_stride];
-            for (int a = 0; a < n_agents; ++a) {
+            for (int a = 0; a < n_agents; ++a)
+            {
                 individual_rewards[e * n_agents + a] = padded_rewards[e * padded_reward_stride + a];
             }
         }
