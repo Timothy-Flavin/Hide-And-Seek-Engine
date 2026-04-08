@@ -1,0 +1,72 @@
+--- src/batched_env.cpp
++++ src/batched_env.cpp
+@@ -783,23 +783,43 @@
+         ssize_t state_spatial_stride = spatial_channels * map_size;
+         ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
+ 
+-#pragma omp parallel for schedule(static)
+-        for (int e = 0; e < num_envs; ++e)
+-        {
+-            if (torch_obs_spatial_base)
+-                std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+-            if (torch_obs_internal_base)
+-                std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
+-            if (torch_state_spatial_base && requires_state)
+-                std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
+-            if (torch_state_internal_base && requires_state)
+-                std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
+-            if (individual_rewards)
+-                std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+-            if (env_terminated)
+-                env_terminated[e] = 0;
+-            if (env_truncated)
+-                env_truncated[e] = 0;
+-            padded_terminated[e * padded_byte_stride] = 0;
+-            padded_truncated[e * padded_byte_stride] = 0;
++        if (init_mode == 0) {
++            #pragma omp parallel for schedule(static)
++            for (int e = 0; e < num_envs; ++e)
++            {
++                if (torch_obs_spatial_base)
++                    std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
++                if (torch_obs_internal_base)
++                    std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
++                if (torch_state_spatial_base && requires_state)
++                    std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
++                if (torch_state_internal_base && requires_state)
++                    std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
++                if (individual_rewards)
++                    std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
++                if (env_terminated)
++                    env_terminated[e] = 0;
++                if (env_truncated)
++                    env_truncated[e] = 0;
++                padded_terminated[e * padded_byte_stride] = 0;
++                padded_truncated[e * padded_byte_stride] = 0;
++            }
++        } else {
++            for (int e = 0; e < num_envs; ++e)
++            {
++                if (torch_obs_spatial_base)
++                    std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
++                if (torch_obs_internal_base)
++                    std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
++                if (torch_state_spatial_base && requires_state)
++                    std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
++                if (torch_state_internal_base && requires_state)
++                    std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
++                if (individual_rewards)
++                    std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
++                if (env_terminated)
++                    env_terminated[e] = 0;
++                if (env_truncated)
++                    env_truncated[e] = 0;
++                padded_terminated[e * padded_byte_stride] = 0;
++                padded_truncated[e * padded_byte_stride] = 0;
++            }
+         }
+@@ -825,3 +845,3 @@
+ 
+-        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles, mode);
++        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles, mode, init_mode);
+         env_views.reserve(num_envs);

@@ -55,6 +55,7 @@ def run_speedtest(
     assets: dict[str, str],
     mode: str,
     requires_state: bool,
+    init_mode: str,
 ) -> float:
     print(f"Testing {num_agents} agents with {num_envs} parallel envs...")
 
@@ -69,6 +70,7 @@ def run_speedtest(
         survivors_json=assets["survivors_json"],
         mode=mode,
         requires_state=requires_state,
+        init_mode=init_mode,
     )
     # env.reset()
 
@@ -126,10 +128,14 @@ def main():
     parser.add_argument(
         "--requires_state", type=str, default="False", choices=["True", "False"]
     )
+    parser.add_argument(
+        "--init_mode", type=str, default="parallel_first_touch", choices=["parallel_first_touch", "serial"]
+    )
     args = parser.parse_args()
 
     mode = args.mode
     requires_state = args.requires_state == "True"
+    init_mode = args.init_mode
 
     steps = 10_000_000
     env_counts = [1, 16, 128, 256, 1024]
@@ -157,7 +163,7 @@ def main():
             )
             for run_idx in range(num_runs):
                 fps = run_speedtest(
-                    n_envs, n_agents, steps, assets, mode, requires_state
+                    n_envs, n_agents, steps, assets, mode, requires_state, init_mode
                 )
                 results_matrix[env_idx, agent_idx, run_idx] = fps
 

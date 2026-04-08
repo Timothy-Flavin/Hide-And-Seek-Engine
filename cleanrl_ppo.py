@@ -20,6 +20,7 @@ from MixedObservationEncoder import MixedObservationEncoder
 @dataclass
 class Args:
     exp_name: str = "custom_ppo"
+    torch_threads: int = 0
     """the name of this experiment"""
     centralized: bool = True
     """whether to use centralized or individual PPO"""
@@ -182,6 +183,8 @@ ACTION_MAP = np.array(
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+    if args.torch_threads > 0:
+        torch.set_num_threads(args.torch_threads)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
@@ -233,17 +236,17 @@ if __name__ == "__main__":
 
     # ALGO Logic: Storage setup
     if args.centralized:
-        obs_spatial = torch.zeros((args.num_steps, args.num_envs) + spatial_shape).to(device)
-        obs_internal = torch.zeros((args.num_steps, args.num_envs) + internal_dim).to(device)
+        obs_spatial = torch.empty((args.num_steps, args.num_envs) + spatial_shape).to(device)
+        obs_internal = torch.empty((args.num_steps, args.num_envs) + internal_dim).to(device)
     else:
-        obs_spatial = torch.zeros((args.num_steps, args.num_envs, n_agents) + spatial_shape).to(device)
-        obs_internal = torch.zeros((args.num_steps, args.num_envs, n_agents, env.agent_internal_dim)).to(device)
+        obs_spatial = torch.empty((args.num_steps, args.num_envs, n_agents) + spatial_shape).to(device)
+        obs_internal = torch.empty((args.num_steps, args.num_envs, n_agents, env.agent_internal_dim)).to(device)
     
-    actions = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
+    actions = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
+    logprobs = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
+    rewards = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
+    dones = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
+    values = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
 
     # Start the game
     global_step = 0
@@ -252,7 +255,7 @@ if __name__ == "__main__":
     obs = env._get_obs_dict()
     next_spatial = obs["spatial"]
     next_internal = obs["internal"]
-    next_done = torch.zeros(args.num_envs).to(device)
+    next_done = torch.empty(args.num_envs).to(device)
 
     # Manual episodic trackers for logging
     episode_rewards = np.zeros(args.num_envs, dtype=np.float32)
@@ -322,7 +325,7 @@ if __name__ == "__main__":
             if args.centralized:
                 next_value = next_value.expand(-1, n_agents)
             
-            advantages = torch.zeros_like(rewards).to(device)
+            advantages = torch.empty_like(rewards).to(device)
             lastgaelam = 0
             for t in reversed(range(args.num_steps)):
                 if t == args.num_steps - 1:

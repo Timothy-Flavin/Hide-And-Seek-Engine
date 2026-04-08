@@ -16,6 +16,8 @@
 #include <vector>
 #include <cstdint>
 #include <chrono>
+#include <fstream>
+#include <sched.h>
 #include "env_state.h"
 
 #include <omp.h>
@@ -735,7 +737,8 @@ public:
         float reward_found_val = 2.0f,
         float reward_saved_val = 20.0f,
         int max_frames_val = 250,
-        int mode_value = 0)
+        int mode_value = 0,
+        int init_mode = 0)
         : num_envs(n_envs), seed(sim_seed), width(w), height(h),
           supports_walking(std::move(supports_walk)), supports_aquatic(std::move(supports_aqua)),
           supports_flying(std::move(supports_fly)), is_blocking(std::move(is_block)),
@@ -781,25 +784,47 @@ public:
         ssize_t state_spatial_stride = spatial_channels * map_size;
         ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
 
+        if (init_mode == 0) {
 #pragma omp parallel for schedule(static)
-        for (int e = 0; e < num_envs; ++e)
-        {
-            if (torch_obs_spatial_base)
-                std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
-            if (torch_obs_internal_base)
-                std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
-            if (torch_state_spatial_base && requires_state)
-                std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
-            if (torch_state_internal_base && requires_state)
-                std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
-            if (individual_rewards)
-                std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
-            if (env_terminated)
-                env_terminated[e] = 0;
-            if (env_truncated)
-                env_truncated[e] = 0;
-            padded_terminated[e * padded_byte_stride] = 0;
-            padded_truncated[e * padded_byte_stride] = 0;
+            for (int e = 0; e < num_envs; ++e)
+            {
+                if (torch_obs_spatial_base)
+                    std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+                if (torch_obs_internal_base)
+                    std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
+                if (torch_state_spatial_base && requires_state)
+                    std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
+                if (torch_state_internal_base && requires_state)
+                    std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
+                if (individual_rewards)
+                    std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+                if (env_terminated)
+                    env_terminated[e] = 0;
+                if (env_truncated)
+                    env_truncated[e] = 0;
+                padded_terminated[e * padded_byte_stride] = 0;
+                padded_truncated[e * padded_byte_stride] = 0;
+            }
+        } else {
+            for (int e = 0; e < num_envs; ++e)
+            {
+                if (torch_obs_spatial_base)
+                    std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+                if (torch_obs_internal_base)
+                    std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
+                if (torch_state_spatial_base && requires_state)
+                    std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
+                if (torch_state_internal_base && requires_state)
+                    std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
+                if (individual_rewards)
+                    std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+                if (env_terminated)
+                    env_terminated[e] = 0;
+                if (env_truncated)
+                    env_truncated[e] = 0;
+                padded_terminated[e * padded_byte_stride] = 0;
+                padded_truncated[e * padded_byte_stride] = 0;
+            }
         }
 
         std::mt19937 base_rng(seed);
@@ -822,7 +847,7 @@ public:
             central_state_strides = std::make_unique<CentralizedStateStrides>(width, height, n_tiles, n_agents);
         }
 
-        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles, mode);
+        arena = std::make_unique<EnvironmentArena>(num_envs, width, height, n_agents, n_pois, n_tiles, mode, init_mode);
         env_views.reserve(num_envs);
         for (int e = 0; e < num_envs; ++e)
             env_views.push_back(arena->get_env_view(e));
@@ -1054,6 +1079,14 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
+            if (steps_taken == 0) {
+#pragma omp critical
+                {
+                    std::ofstream log("thread_affinity.log", std::ios_base::app);
+                    log << "Step loop Env " << e << ": Thread " << omp_get_thread_num() << " is on CPU " << sched_getcpu() << "\n";
+                }
+            }
+
             // Clear the 256-byte aligned local thread block instead of hitting the compact pyTorch array
             std::memset(padded_rewards.data() + e * padded_reward_stride, 0, n_agents * sizeof(float));
 
@@ -1133,7 +1166,8 @@ PYBIND11_MODULE(cpp_engine, m)
                  float,                // reward_found_val
                  float,                // reward_saved_val
                  int,                  // max_frames_val
-                 int                   // mode_value
+                 int,                  // mode_value
+                 int                   // init_mode
                  >(),
              py::arg("n_envs"),
              py::arg("sim_seed"),
@@ -1163,7 +1197,8 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("reward_found_val") = 2.0f,
              py::arg("reward_saved_val") = 20.0f,
              py::arg("max_frames_val") = 250,
-             py::arg("mode_value") = 0)
+             py::arg("mode_value") = 0,
+             py::arg("init_mode") = 0)
         .def("reset", &BatchedEnvironment::reset)
         .def("reset_env", &BatchedEnvironment::reset_env, py::arg("env_idx"))
         .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"))

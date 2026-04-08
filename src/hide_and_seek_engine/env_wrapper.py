@@ -24,12 +24,14 @@ class SARBatchedGridEnv:
         mode="decentralized",
         requires_state=True,
         device="cpu",
+        init_mode="parallel_first_touch",
     ):
         self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
         self.num_envs = num_envs
         self.device = device
         self.requires_state = requires_state
         self.render_initialized = False
+        self.init_mode_val = 0 if init_mode == "parallel_first_touch" else 1
 
         self.steps_taken = 0
         self.t_py_flatten = 0.0
@@ -151,6 +153,7 @@ class SARBatchedGridEnv:
                 20.0,  # Reward: saved
                 250,  # Max frames
                 self.mode_val,
+                self.init_mode_val,
             )
 
     def _get_obs_dict(self):
