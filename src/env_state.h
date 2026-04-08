@@ -266,18 +266,25 @@ public:
         size_t raw_stride = grid_bytes + agent_bytes + poi_bytes + speed_bytes +
                             agent_knowledge_bytes + poi_knowledge_bytes + counter_bytes;
 
-        // Align ONLY the total environment boundary to a 64-byte Cache Line.
+        // Align ONLY the total environment boundary to a 256-byte boundary.
         // This prevents Thread A (Environment 0) and Thread B (Environment 1)
-        // from writing to the same physical L1/L2 cache line (False Sharing).
-        env_stride = (raw_stride + 63) & ~63;
+        // from writing to the same physical L1/L2 cache line (False Sharing) 
+        // or triggering adjacency prefetchers.
+        env_stride = (raw_stride + 255) & ~255;
 
-        // Allocate the contiguous memory block for all environments, initialized to 0.
-        // We add 63 extra bytes to manually align the origin pointer to a 64-byte boundary
+        // Allocate the contiguous memory block for all environments, without initializing.
+        // We add 255 extra bytes to manually align the origin pointer to a 256-byte boundary
         // since std::vector's default allocator does not guarantee CPU cache line alignment.
-        memory.resize(num_envs * env_stride + 63, 0);
+        memory.resize(num_envs * env_stride + 255);
         
         uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
-        aligned_base = reinterpret_cast<uint8_t*>((raw_ptr + 63) & ~63);
+        aligned_base = reinterpret_cast<uint8_t*>((raw_ptr + 255) & ~255);
+
+        // First touch policy: Initialize memory in parallel to properly distribute across NUMA nodes
+        #pragma omp parallel for schedule(static)
+        for (int e = 0; e < num_envs; ++e) {
+            std::memset(aligned_base + (e * env_stride), 0, env_stride);
+        }
     }
 
     // Explicitly inline for hot-loop performance

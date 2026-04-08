@@ -50,7 +50,7 @@ class SARBatchedGridEnv:
         # 2. Allocate contiguous PyTorch memory for zero-copy C++ updates
         # Pinned memory ensures fast transfer if the user later shifts these to a GPU
         if self.mode_val == 0:  # DECENTRALIZED
-            self.obs_spatial = torch.zeros(
+            self.obs_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.config.n_agents,
@@ -61,13 +61,13 @@ class SARBatchedGridEnv:
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.obs_internal = torch.zeros(
+            self.obs_internal = torch.empty(
                 (self.num_envs, self.config.n_agents, self.agent_internal_dim),
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
         else:  # CENTRALIZED or NO_OBS
-            self.obs_spatial = torch.zeros(
+            self.obs_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.spatial_channels,
@@ -77,14 +77,14 @@ class SARBatchedGridEnv:
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.obs_internal = torch.zeros(
+            self.obs_internal = torch.empty(
                 (self.num_envs, self.config.n_agents, self.agent_internal_dim),
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
 
         if self.requires_state:
-            self.state_spatial = torch.zeros(
+            self.state_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.spatial_channels,
@@ -94,7 +94,7 @@ class SARBatchedGridEnv:
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.state_internal = torch.zeros(
+            self.state_internal = torch.empty(
                 (self.num_envs, self.config.n_agents * 6 + self.config.n_pois * 4),
                 dtype=torch.float32,
                 pin_memory=True,
@@ -103,17 +103,17 @@ class SARBatchedGridEnv:
             self.state_spatial = torch.empty(0)
             self.state_internal = torch.empty(0)
 
-        self.rewards = torch.zeros(
+        self.rewards = torch.empty(
             (self.num_envs, self.config.n_agents),
             dtype=torch.float32,
             pin_memory=True,
         ).contiguous()
-        self.terminated = torch.zeros(
+        self.terminated = torch.empty(
             (self.num_envs,),
             dtype=torch.bool,
             pin_memory=True,
         ).contiguous()
-        self.truncated = torch.zeros(
+        self.truncated = torch.empty(
             (self.num_envs,),
             dtype=torch.bool,
             pin_memory=True,

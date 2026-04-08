@@ -760,6 +760,32 @@ public:
         env_terminated = reinterpret_cast<uint8_t *>(terminated_ptr);
         env_truncated = reinterpret_cast<uint8_t *>(truncated_ptr);
 
+        // First-touch initialization for PyTorch tensors to ensure NUMA spreading
+        ssize_t spatial_channels = n_tiles + 3 + n_agents;
+        ssize_t obs_spatial_stride = (mode == Mode::DECENTRALIZED) ? (n_agents * spatial_channels * map_size) : (spatial_channels * map_size);
+        ssize_t obs_internal_stride = n_agents * 6;
+        ssize_t state_spatial_stride = spatial_channels * map_size;
+        ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
+
+#pragma omp parallel for schedule(static)
+        for (int e = 0; e < num_envs; ++e)
+        {
+            if (torch_obs_spatial_base)
+                std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+            if (torch_obs_internal_base)
+                std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
+            if (torch_state_spatial_base && requires_state)
+                std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
+            if (torch_state_internal_base && requires_state)
+                std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
+            if (individual_rewards)
+                std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+            if (env_terminated)
+                env_terminated[e] = 0;
+            if (env_truncated)
+                env_truncated[e] = 0;
+        }
+
         std::mt19937 base_rng(seed);
         for (int i = 0; i < num_envs; ++i)
         {
@@ -1088,7 +1114,7 @@ public:
         t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        if (steps_taken % 1000 == 0)
+        if (steps_taken % 10000 == 0)
         {
             std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
             std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
