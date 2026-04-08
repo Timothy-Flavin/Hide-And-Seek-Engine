@@ -1024,21 +1024,8 @@ public:
             reset_env(e);
     }
 
-    // Timing accumulators
-    inline static std::chrono::duration<double> t_process_movement{0};
-    inline static std::chrono::duration<double> t_resolve_interactions{0};
-    inline static std::chrono::duration<double> t_radio_logs{0};
-    inline static std::chrono::duration<double> t_update_counters{0};
-    inline static std::chrono::duration<double> t_post_processing{0};
-    inline static std::chrono::duration<double> t_fill_torch_obs{0};
-    inline static std::chrono::duration<double> t_fill_torch_state{0};
-    inline static std::chrono::duration<double> t_reset_time{0};
-    inline static std::chrono::duration<double> t_python_overhead{0};
-    inline static std::chrono::duration<double> t_total{0};
-
     void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
-        auto t_step_start = std::chrono::high_resolution_clock::now();
         // action space is box2d[dx, dy], discrete(num radio choices)
         if ((move_actions_array.ndim() != 1) || (radio_actions_array.ndim() != 1))
             throw std::invalid_argument("actions must have shape [E*A*2] for movement and [E*A] for radio");
@@ -1048,100 +1035,37 @@ public:
         const float *act_data = move_actions_array.data();
         const int *radio_act_data = radio_actions_array.data();
 
-        std::memset(individual_rewards, 0, num_envs * n_agents * sizeof(float));
-
-        auto t0 = std::chrono::high_resolution_clock::now();
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            auto t_reset_s = std::chrono::high_resolution_clock::now();
+            std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+
             if (env_terminated[e] || env_truncated[e])
                 reset_env(e);
 
-            // std::cout << "Env " << e << " process movement\n";
-            auto t1 = std::chrono::high_resolution_clock::now();
             process_agent_movement(e, act_data);
-            auto t2 = std::chrono::high_resolution_clock::now();
-            // std::cout << "Env " << e << " resolve interactions\n";
             resolve_local_interactions(e);
-            auto t3 = std::chrono::high_resolution_clock::now();
-            // std::cout << "Env " << e << " radio logs\n";
             execute_radio(e, radio_act_data);
-            auto t4 = std::chrono::high_resolution_clock::now();
-            // std::cout << "Env " << e << " update counters\n";
             update_battery_and_counters(e);
-            auto t5 = std::chrono::high_resolution_clock::now();
 
-            // std::cout << "Env " << e << " post processing\n";
             bool all_saved = (*env_views[e].poi_left == 0);
             bool all_out_of_battery = (*env_views[e].agents_left == 0);
             const bool timeout = current_frames[e] >= max_frames;
             env_terminated[e] = all_saved || all_out_of_battery;
             env_truncated[e] = timeout;
             ++current_frames[e];
-            auto t6 = std::chrono::high_resolution_clock::now();
 
-            // If we are using this environment for machine learning
-            // then fill the torch buffers accordingly
-            // std::cout << "Env " << e << " fill torch\n";
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
             {
                 fill_torch_obs(e);
             }
-            auto t7 = std::chrono::high_resolution_clock::now();
             if (requires_state)
             {
                 fill_torch_state(e);
             }
-            auto t8 = std::chrono::high_resolution_clock::now();
-
-#pragma omp critical
-            {
-                t_reset_time += (t1 - t_reset_s);
-                t_process_movement += (t2 - t1);
-                t_resolve_interactions += (t3 - t2);
-                t_radio_logs += (t4 - t3);
-                t_update_counters += (t5 - t4);
-                t_post_processing += (t6 - t5);
-                t_fill_torch_obs += (t7 - t6);
-                t_fill_torch_state += (t8 - t7);
-            }
         }
-        auto t9 = std::chrono::high_resolution_clock::now();
-
-        auto t_step_end = std::chrono::high_resolution_clock::now();
-        t_total += (t_step_end - t_step_start);
-        t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        if (steps_taken % 10000 == 0)
-        {
-            std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
-            std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
-            std::cout << "  resolve_local_interactions: " << t_resolve_interactions.count() << " s" << std::endl;
-            std::cout << "  execute_radio: " << t_radio_logs.count() << " s" << std::endl;
-            std::cout << "  update_battery_and_counters: " << t_update_counters.count() << " s" << std::endl;
-            std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
-            std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
-            std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
-            std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
-            std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
-            std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
-            std::cout << std::endl;
-        }
-        // Optionally reset timers if you want per-interval stats
-        //     t_process_movement = std::chrono::duration<double>(0);
-        //     t_resolve_interactions = std::chrono::duration<double>(0);
-        //     t_radio_logs = std::chrono::duration<double>(0);
-        //     t_update_counters = std::chrono::duration<double>(0);
-        //     t_post_processing = std::chrono::duration<double>(0);
-        //     t_fill_torch_obs = std::chrono::duration<double>(0);
-        //     t_fill_torch_state = std::chrono::duration<double>(0);
-        //     t_reset_time = std::chrono::duration<double>(0);
-        //     t_python_overhead = std::chrono::duration<double>(0);
-        //     t_total = std::chrono::duration<double>(0);
-
-        return;
     }
 };
 
