@@ -194,9 +194,11 @@ private:
                         // Local observation tracking
                         if constexpr (M == Mode::DECENTRALIZED)
                         {
-                            if (!t.has_agent_seen(a)) {
+                            if (!t.has_agent_seen(a))
+                            {
                                 t.set_agent_seen(a);
-                                if (torch_obs_spatial_base != nullptr) {
+                                if (torch_obs_spatial_base != nullptr)
+                                {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                     float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
@@ -208,8 +210,10 @@ private:
                         }
                         else if constexpr (M == Mode::CENTRALIZED)
                         {
-                            if (newly_global) {
-                                if (torch_obs_spatial_base != nullptr) {
+                            if (newly_global)
+                            {
+                                if (torch_obs_spatial_base != nullptr)
+                                {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                     float *spat_base = torch_obs_spatial_base + e * spatial_stride;
@@ -217,8 +221,10 @@ private:
                                     spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
                                     spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
                                 }
-                                if constexpr (ReqState) {
-                                    if (torch_state_spatial_base != nullptr) {
+                                if constexpr (ReqState)
+                                {
+                                    if (torch_state_spatial_base != nullptr)
+                                    {
                                         ssize_t map_area = width * height;
                                         ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                         float *spat_base = torch_state_spatial_base + e * spatial_stride;
@@ -231,8 +237,10 @@ private:
                         }
                         else if constexpr (M == Mode::NO_OBS)
                         {
-                            if constexpr (ReqState) {
-                                if (newly_global && torch_state_spatial_base != nullptr) {
+                            if constexpr (ReqState)
+                            {
+                                if (newly_global && torch_state_spatial_base != nullptr)
+                                {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                     float *spat_base = torch_state_spatial_base + e * spatial_stride;
@@ -263,12 +271,12 @@ private:
                         poi.found = 1;
                         individual_rewards[e * n_agents + a] += reward_found;
                     }
- 
+
                     // Attempt Rescue
                     if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
                     {
                         poi.saved = 1;
-                         individual_rewards[e * n_agents + a] += reward_saved;
+                        individual_rewards[e * n_agents + a] += reward_saved;
                     }
 
                     // Update Local Beliefs
@@ -298,18 +306,24 @@ private:
     {
         if (mode == Mode::DECENTRALIZED)
         {
-            if (requires_state) resolve_local_interactions_impl<Mode::DECENTRALIZED, true>(e);
-            else resolve_local_interactions_impl<Mode::DECENTRALIZED, false>(e);
+            if (requires_state)
+                resolve_local_interactions_impl<Mode::DECENTRALIZED, true>(e);
+            else
+                resolve_local_interactions_impl<Mode::DECENTRALIZED, false>(e);
         }
         else if (mode == Mode::CENTRALIZED)
         {
-            if (requires_state) resolve_local_interactions_impl<Mode::CENTRALIZED, true>(e);
-            else resolve_local_interactions_impl<Mode::CENTRALIZED, false>(e);
+            if (requires_state)
+                resolve_local_interactions_impl<Mode::CENTRALIZED, true>(e);
+            else
+                resolve_local_interactions_impl<Mode::CENTRALIZED, false>(e);
         }
         else // Mode::NO_OBS
         {
-            if (requires_state) resolve_local_interactions_impl<Mode::NO_OBS, true>(e);
-            else resolve_local_interactions_impl<Mode::NO_OBS, false>(e);
+            if (requires_state)
+                resolve_local_interactions_impl<Mode::NO_OBS, true>(e);
+            else
+                resolve_local_interactions_impl<Mode::NO_OBS, false>(e);
         }
     }
 
@@ -387,7 +401,8 @@ private:
                         if (t.has_agent_seen(a) && !t.has_agent_seen(target_agent))
                         {
                             t.set_agent_seen(target_agent);
-                            if (torch_obs_spatial_base != nullptr) {
+                            if (torch_obs_spatial_base != nullptr)
+                            {
                                 ssize_t map_area = width * height;
                                 ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                 float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
@@ -617,7 +632,7 @@ private:
         float *int_base = torch_state_internal_base + e * (n_agents * 6 + n_pois * 4);
 
         // UNMASKED Terrain already largely static, just update during discovery
-        
+
         // UNMASKED POIs (Any POI not yet saved)
         for (int p = 0; p < n_pois; ++p)
         {
@@ -1073,7 +1088,7 @@ public:
         t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        if (steps_taken % 10000 == 0)
+        if (steps_taken % 1000 == 0)
         {
             std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
             std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
@@ -1099,7 +1114,7 @@ public:
         //     t_reset_time = std::chrono::duration<double>(0);
         //     t_python_overhead = std::chrono::duration<double>(0);
         //     t_total = std::chrono::duration<double>(0);
-        
+
         return;
     }
 };
