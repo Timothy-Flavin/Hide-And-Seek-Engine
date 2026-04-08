@@ -51,6 +51,13 @@ private:
     float *individual_rewards = nullptr;
     uint8_t *env_terminated = nullptr;
     uint8_t *env_truncated = nullptr;
+
+    // Padded buffers to completely prevent false sharing during parallel execution
+    std::vector<float> padded_rewards;
+    std::vector<uint8_t> padded_terminated;
+    std::vector<uint8_t> padded_truncated;
+    int padded_reward_stride;
+    int padded_byte_stride;
     // std::vector<float> global_rewards;
     std::vector<EnvStateView> env_views;
     std::vector<int> type_map;
@@ -187,7 +194,7 @@ private:
                             t.set_global_observed();
                             (*view.undiscovered_remaining)--;
                             // Add reward (assume 'rewards' is an accessible class member or passed ref)
-                            individual_rewards[e * n_agents + a] += reward_new_tile;
+                            padded_rewards[e * padded_reward_stride + a] += reward_new_tile;
                             newly_global = true;
                         }
 
@@ -269,14 +276,14 @@ private:
                     if (!poi.found)
                     {
                         poi.found = 1;
-                        individual_rewards[e * n_agents + a] += reward_found;
+                        padded_rewards[e * padded_reward_stride + a] += reward_found;
                     }
 
                     // Attempt Rescue
                     if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
                     {
                         poi.saved = 1;
-                        individual_rewards[e * n_agents + a] += reward_saved;
+                        padded_rewards[e * padded_reward_stride + a] += reward_saved;
                     }
 
                     // Update Local Beliefs
@@ -760,6 +767,13 @@ public:
         env_terminated = reinterpret_cast<uint8_t *>(terminated_ptr);
         env_truncated = reinterpret_cast<uint8_t *>(truncated_ptr);
 
+        // Padded strides to align to 256 bytes per env to prevent false sharing
+        padded_reward_stride = std::max(64, static_cast<int>((n_agents * sizeof(float) + 255) / sizeof(float)));
+        padded_byte_stride = 256;
+        padded_rewards.resize(num_envs * padded_reward_stride, 0.0f);
+        padded_terminated.resize(num_envs * padded_byte_stride, 0);
+        padded_truncated.resize(num_envs * padded_byte_stride, 0);
+
         // First-touch initialization for PyTorch tensors to ensure NUMA spreading
         ssize_t spatial_channels = n_tiles + 3 + n_agents;
         ssize_t obs_spatial_stride = (mode == Mode::DECENTRALIZED) ? (n_agents * spatial_channels * map_size) : (spatial_channels * map_size);
@@ -784,6 +798,8 @@ public:
                 env_terminated[e] = 0;
             if (env_truncated)
                 env_truncated[e] = 0;
+            padded_terminated[e * padded_byte_stride] = 0;
+            padded_truncated[e * padded_byte_stride] = 0;
         }
 
         std::mt19937 base_rng(seed);
@@ -856,7 +872,7 @@ public:
 
             for (int step = 0; step < steps_to_take; ++step)
             {
-                if (env_terminated[e] || env_truncated[e])
+                if (padded_terminated[e * padded_byte_stride] || padded_truncated[e * padded_byte_stride])
                     reset_env(e);
 
                 for (int a = 0; a < n_agents; ++a)
@@ -874,8 +890,8 @@ public:
                 bool all_saved = (*env_views[e].poi_left == 0);
                 bool all_out_of_battery = (*env_views[e].agents_left == 0);
                 const bool timeout = current_frames[e] >= max_frames;
-                env_terminated[e] = all_saved || all_out_of_battery;
-                env_truncated[e] = timeout;
+                padded_terminated[e * padded_byte_stride] = all_saved || all_out_of_battery;
+                padded_truncated[e * padded_byte_stride] = timeout;
                 ++current_frames[e];
 
                 if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
@@ -893,8 +909,8 @@ public:
     void reset_env(int env_idx)
     {
         current_frames[env_idx] = 0;
-        env_terminated[env_idx] = false;
-        env_truncated[env_idx] = false;
+        padded_terminated[env_idx * padded_byte_stride] = false;
+        padded_truncated[env_idx * padded_byte_stride] = false;
 
         EnvStateView view = env_views[env_idx];
 
@@ -1038,9 +1054,10 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+            // Clear the 256-byte aligned local thread block instead of hitting the compact pyTorch array
+            std::memset(padded_rewards.data() + e * padded_reward_stride, 0, n_agents * sizeof(float));
 
-            if (env_terminated[e] || env_truncated[e])
+            if (padded_terminated[e * padded_byte_stride] || padded_truncated[e * padded_byte_stride])
                 reset_env(e);
 
             process_agent_movement(e, act_data);
@@ -1051,8 +1068,9 @@ public:
             bool all_saved = (*env_views[e].poi_left == 0);
             bool all_out_of_battery = (*env_views[e].agents_left == 0);
             const bool timeout = current_frames[e] >= max_frames;
-            env_terminated[e] = all_saved || all_out_of_battery;
-            env_truncated[e] = timeout;
+            
+            padded_terminated[e * padded_byte_stride] = all_saved || all_out_of_battery;
+            padded_truncated[e * padded_byte_stride] = timeout;
             ++current_frames[e];
 
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
@@ -1062,6 +1080,17 @@ public:
             if (requires_state)
             {
                 fill_torch_state(e);
+            }
+        }
+
+        // Sequential single-thread collection copies directly into the dense PyTorch contiguous buffers 
+        // to prevent multi-core cache invalidation storms
+        for (int e = 0; e < num_envs; ++e)
+        {
+            env_terminated[e] = padded_terminated[e * padded_byte_stride];
+            env_truncated[e] = padded_truncated[e * padded_byte_stride];
+            for (int a = 0; a < n_agents; ++a) {
+                individual_rewards[e * n_agents + a] = padded_rewards[e * padded_reward_stride + a];
             }
         }
 

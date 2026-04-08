@@ -30,7 +30,7 @@ class SARBatchedGridEnv:
         self.device = device
         self.requires_state = requires_state
         self.render_initialized = False
-        
+
         self.steps_taken = 0
         self.t_py_flatten = 0.0
         self.t_cpp_step = 0.0
@@ -181,7 +181,7 @@ class SARBatchedGridEnv:
         Takes move_actions [num_envs, n_agents, 2] and radio_actions [num_envs, n_agents]
         """
         t0 = time.perf_counter()
-        
+
         # Ensure correct formatting for the pybind arrays. Use reshape(-1) to avoid copying memory!
         move_act = np.asarray(move_actions, dtype=np.float32).reshape(-1)
         radio_act = np.asarray(radio_actions, dtype=np.int32).reshape(-1)
@@ -200,17 +200,17 @@ class SARBatchedGridEnv:
             rewards = rewards.to(self.device)
             terminated = terminated.to(self.device)
             truncated = truncated.to(self.device)
-            
+
         t3 = time.perf_counter()
         obs = self._get_obs_dict()
         t4 = time.perf_counter()
-        
+
         self.steps_taken += 1
-        self.t_py_flatten += (t1 - t0)
-        self.t_cpp_step += (t2 - t1)
-        self.t_py_tensor += (t3 - t2)
-        self.t_py_obs += (t4 - t3)
-        
+        self.t_py_flatten += t1 - t0
+        self.t_cpp_step += t2 - t1
+        self.t_py_tensor += t3 - t2
+        self.t_py_obs += t4 - t3
+
         if self.steps_taken % 10000 == 0:
             print(f"[Python Timing after {self.steps_taken} steps]")
             print(f"  py_flatten_actions: {self.t_py_flatten:.4f} s")

@@ -229,7 +229,7 @@ class EnvironmentArena
 {
 public:
     std::vector<uint8_t> memory;
-    uint8_t* aligned_base;
+    uint8_t *aligned_base;
     size_t env_stride;
     Mode mode;
 
@@ -268,7 +268,7 @@ public:
 
         // Align ONLY the total environment boundary to a 256-byte boundary.
         // This prevents Thread A (Environment 0) and Thread B (Environment 1)
-        // from writing to the same physical L1/L2 cache line (False Sharing) 
+        // from writing to the same physical L1/L2 cache line (False Sharing)
         // or triggering adjacency prefetchers.
         env_stride = (raw_stride + 255) & ~255;
 
@@ -276,13 +276,14 @@ public:
         // We add 255 extra bytes to manually align the origin pointer to a 256-byte boundary
         // since std::vector's default allocator does not guarantee CPU cache line alignment.
         memory.resize(num_envs * env_stride + 255);
-        
-        uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
-        aligned_base = reinterpret_cast<uint8_t*>((raw_ptr + 255) & ~255);
 
-        // First touch policy: Initialize memory in parallel to properly distribute across NUMA nodes
-        #pragma omp parallel for schedule(static)
-        for (int e = 0; e < num_envs; ++e) {
+        uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
+        aligned_base = reinterpret_cast<uint8_t *>((raw_ptr + 255) & ~255);
+
+// First touch policy: Initialize memory in parallel to properly distribute across NUMA nodes
+#pragma omp parallel for schedule(static)
+        for (int e = 0; e < num_envs; ++e)
+        {
             std::memset(aligned_base + (e * env_stride), 0, env_stride);
         }
     }
