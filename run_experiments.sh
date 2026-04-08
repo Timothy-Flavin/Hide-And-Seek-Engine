@@ -3,8 +3,8 @@ set -e
 
 mkdir -p results
 #"ppo" "dqn" "sac"
-for alg in "dqn" "sac"; do
-    for seed in {2..5}; do
+for alg in "ppo" "dqn" "sac"; do
+    for seed in {1..5}; do
         echo "Running $alg with seed $seed (run number $seed)..."
         python cleanrl_${alg}.py \
             --run-number $seed \
