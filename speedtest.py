@@ -9,9 +9,17 @@ import numpy as np
 import torch
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
+rng = np.random.default_rng()
 
+def _random_local_actions(num_envs: int, n_agents: int) -> tuple[np.ndarray, np.ndarray]:
+    # Generating directly into the correct dtype saves a copy/cast cycle
+    move_actions = rng.random((num_envs, n_agents, 2), dtype=np.float32)
+    # Scale and shift: [0, 1) -> [-1, 1)
+    move_actions = move_actions * 2.0 - 1.0
+    radio_actions = rng.integers(0, n_agents, size=(num_envs, n_agents), dtype=np.int32)
+    return move_actions, radio_actions
 
-def _random_local_actions(
+def _random_local_actions_old(
     num_envs: int, n_agents: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Generates split movement and radio actions matching the new C++ API."""
@@ -114,8 +122,8 @@ def run_speedtest(
 
 
 def main():
-    steps = 50_000
-    env_counts = [1, 4, 16, 64, 128, 256]
+    steps = 10_000_000
+    env_counts = [1, 16, 128, 256, 1024]
     agent_counts = list(range(1, 11))
     num_runs = 3
 
@@ -129,9 +137,9 @@ def main():
 
     for env_idx, n_envs in enumerate(env_counts):
         if n_envs == 1:
-            steps = 10000
-        else:
             steps = 50000
+        else:
+            steps = 500000
         for agent_idx, n_agents in enumerate(agent_counts):
             print(f"\n--- Testing {n_envs} envs, {n_agents} agents ---")
             for run_idx in range(num_runs):
