@@ -131,13 +131,17 @@ def main():
     parser.add_argument(
         "--init_mode", type=str, default="parallel_first_touch", choices=["parallel_first_touch", "serial"]
     )
+    parser.add_argument(
+        "--exp_name", type=str, default="", help="Prefix for logging output files"
+    )
     args = parser.parse_args()
 
     mode = args.mode
     requires_state = args.requires_state == "True"
     init_mode = args.init_mode
+    exp_name_prefix = f"{args.exp_name}_" if args.exp_name else ""
 
-    steps = 10_000_000
+    steps = 1_000_000
     env_counts = [1, 16, 128, 256, 1024]
     agent_counts = list(range(1, 11))
     num_runs = 3
@@ -168,7 +172,7 @@ def main():
                 results_matrix[env_idx, agent_idx, run_idx] = fps
 
     state_str = "state" if requires_state else "nostate"
-    base_name = f"speedtest_results_{mode}_{state_str}"
+    base_name = f"{exp_name_prefix}speedtest_results_{mode}_{state_str}"
 
     np.save(os.path.join("laptop_speedtest", f"{base_name}_raw.npy"), results_matrix)
 

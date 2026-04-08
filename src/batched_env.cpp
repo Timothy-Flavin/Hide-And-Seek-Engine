@@ -1079,7 +1079,7 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            if (steps_taken == 0) {
+            if (steps_taken == 0 && e == 0) {
 #pragma omp critical
                 {
                     std::ofstream log("thread_affinity.log", std::ios_base::app);
