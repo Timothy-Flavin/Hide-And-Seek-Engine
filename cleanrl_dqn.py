@@ -23,6 +23,7 @@ class Args:
     run_number: int = 1
     torch_deterministic: bool = True
     cuda: bool = True
+    centralized: bool = True
 
     total_timesteps: int = 10000000
     learning_rate: float = 2.5e-4
@@ -133,16 +134,17 @@ class CustomReplayBuffer:
 
 
 class QNetwork(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5):
+    def __init__(self, spatial_shape, internal_dim, n_agents, centralized=True, num_actions_per_agent=5):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
         self.spatial_shape = spatial_shape
         self.internal_dim = internal_dim
+        self.centralized = centralized
 
         self.encoder = MixedObservationEncoder(
             spatial_shape=spatial_shape,
-            vector_dim=np.prod(internal_dim),
+            vector_dim=np.prod(internal_dim) if centralized else internal_dim[1],
             spatial_hidden_dim=128,
             vector_hidden_dim=32,
             output_dim=256,
@@ -154,7 +156,7 @@ class QNetwork(nn.Module):
                     nn.ReLU(),
                     nn.Linear(128, num_actions_per_agent),
                 )
-                for _ in range(n_agents)
+                for _ in range(n_agents if centralized else 1)
             ]
         )
 
@@ -164,7 +166,14 @@ class QNetwork(nn.Module):
                     nn.Linear(128, 1),
                 )
 
-    def get_action(self, spatial, internal):
+        if centralized:
+            self.get_action = self._get_action_centralized
+            self.forward = self._forward_centralized
+        else:
+            self.get_action = self._get_action_decentralized
+            self.forward = self._forward_decentralized
+
+    def _get_action_centralized(self, spatial, internal):
         B = spatial.shape[0]
         spatial_flat = spatial.view(B, -1)
         internal_flat = internal.view(B, -1)
@@ -174,7 +183,18 @@ class QNetwork(nn.Module):
         adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
         return torch.argmax(adv_values, dim=2)
 
-    def forward(self, spatial, internal):
+    def _get_action_decentralized(self, spatial, internal):
+        B = spatial.shape[0]
+        spatial_flat = spatial.view(B * self.n_agents, -1)
+        internal_flat = internal.view(B * self.n_agents, -1)
+        x = torch.cat([spatial_flat, internal_flat], dim=-1)
+
+        feats = self.encoder(x)
+        adv_values = self.adv_heads[0](feats)
+        adv_values = adv_values.view(B, self.n_agents, self.num_actions_per_agent)
+        return torch.argmax(adv_values, dim=2)
+
+    def _forward_centralized(self, spatial, internal):
         B = spatial.shape[0]
         spatial_flat = spatial.view(B, -1)
         internal_flat = internal.view(B, -1)
@@ -184,6 +204,22 @@ class QNetwork(nn.Module):
 
         v_value = self.v_head(feats) # [B, 1]
         adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
+
+        return v_value, adv_values
+
+    def _forward_decentralized(self, spatial, internal):
+        B = spatial.shape[0]
+        spatial_flat = spatial.view(B * self.n_agents, -1)
+        internal_flat = internal.view(B * self.n_agents, -1)
+        x = torch.cat([spatial_flat, internal_flat], dim=-1)
+
+        feats = self.encoder(x)
+
+        v_value = self.v_head(feats) # [B*n_agents, 1]
+        v_value = v_value.view(B, self.n_agents, 1).sum(dim=1) # Sum over agents for VDN
+
+        adv_values = self.adv_heads[0](feats)
+        adv_values = adv_values.view(B, self.n_agents, self.num_actions_per_agent)
 
         return v_value, adv_values
 
@@ -215,26 +251,27 @@ if __name__ == "__main__":
         tiles_json="test_level/tiles.json",
         agents_json="test_level/agents.json",
         survivors_json="test_level/survivors.json",
-        mode="centralized",
+        mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
     )
 
     n_agents = env.config.n_agents
     spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
+    buffer_spatial_shape = spatial_shape if args.centralized else (n_agents, *spatial_shape)
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
     q_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents).to(device)
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized).to(device)
     )
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents).to(device)
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized).to(device)
     )
     target_network.load_state_dict(q_network.state_dict())
 
     rb = CustomReplayBuffer(
-        args.buffer_size, args.num_envs, n_agents, spatial_shape, internal_dim, device
+        args.buffer_size, args.num_envs, n_agents, buffer_spatial_shape, internal_dim, device
     )
 
     start_time = time.time()
@@ -376,16 +413,17 @@ if __name__ == "__main__":
 
     # Plot episodic returns at the end
     os.makedirs("results", exist_ok=True)
-    np.save(f"results/dqn_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+    base_name = f"dqn_episodic_returns_{'centralized' if args.centralized else 'individual'}_run_{args.run_number}"
+    np.save(f"results/{base_name}.npy", np.array(episodic_returns))
 
     plt.figure()
     plt.plot(episodic_returns)
     plt.xlabel("Episode")
     plt.ylabel("Return")
     plt.title(f"Episodic Returns (Run {args.run_number})")
-    plt.savefig(f"results/dqn_episodic_returns_run_{args.run_number}.png")
+    plt.savefig(f"results/{base_name}.png")
     print(
-        f"End of training. Plotted {len(episodic_returns)} episodes to 'results/dqn_episodic_returns_run_{args.run_number}.png'."
+        f"End of training. Plotted {len(episodic_returns)} episodes to 'results/{base_name}.png'."
     )
 
     # Plot smoothed episodic returns using EMA (0.99)
@@ -398,6 +436,7 @@ if __name__ == "__main__":
         plt.xlabel("Episode")
         plt.ylabel("EMA Return (0.99)")
         plt.title(f"Smoothed Episodic Returns (EMA 0.99) (Run {args.run_number})")
+        plt.savefig(f"results/{base_name}_smoothed.png")
         plt.savefig(f"results/dqn_episodic_returns_ema99_run_{args.run_number}.png")
         print(f"Plotted EMA-smoothed episodic returns to 'results/dqn_episodic_returns_ema99_run_{args.run_number}.png'.")
 

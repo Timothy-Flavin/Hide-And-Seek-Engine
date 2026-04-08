@@ -263,7 +263,7 @@ private:
                         poi.found = 1;
                         individual_rewards[e * n_agents + a] += reward_found;
                     }
-
+ 
                     // Attempt Rescue
                     if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
                     {

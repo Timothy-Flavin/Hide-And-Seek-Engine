@@ -35,6 +35,8 @@ class Args:
     """the entity (team) of wandb's project"""
     run_number: int = 1
     """the run number for this experiment"""
+    centralized: bool = True
+    """whether to use centralized or decentralized execution"""
 
     # Algorithm specific arguments
     total_timesteps: int = 10000000
@@ -153,24 +155,26 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class SoftQNetwork(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5):
+    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
+        self.centralized = centralized
         
         self.encoder = MixedObservationEncoder(
             spatial_shape=spatial_shape,
-            vector_dim=np.prod(internal_dim),
+            vector_dim=np.prod(internal_dim) if centralized else np.prod(internal_dim) // n_agents,
             spatial_hidden_dim=128,
             vector_hidden_dim=32,
             output_dim=256,
         )
+        self.num_adv_heads = n_agents if centralized else 1
         self.adv_heads = nn.ModuleList([
             nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.ReLU(),
                 layer_init(nn.Linear(128, num_actions_per_agent))
-            ) for _ in range(n_agents)
+            ) for _ in range(self.num_adv_heads)
         ])
         
         self.v_head = nn.Sequential(
@@ -179,14 +183,43 @@ class SoftQNetwork(nn.Module):
             layer_init(nn.Linear(128, 1))
         )
 
-    def forward(self, spatial, internal, log_pi=None, alpha=None):
+        if centralized:
+            self.forward = self._forward_centralized
+        else:
+            self.forward = self._forward_decentralized
+
+    def _forward_centralized(self, spatial, internal, log_pi=None, alpha=None):
         B = spatial.shape[0]
-        x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
+        B_eff = B
+            
+        x = torch.cat([spatial.view(B_eff, -1), internal.view(B_eff, -1)], dim=-1)
         feats = self.encoder(x)
         
-        v_value = self.v_head(feats) # [B, 1]
-        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
+        v_value = self.v_head(feats) # [B_eff, 1]
+        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B_eff, num_heads, num_actions]
         
+        if log_pi is not None and alpha is not None:
+            adv_values = adv_values - alpha * log_pi
+            
+        adv_values = adv_values - adv_values.mean(dim=2, keepdim=True)
+        return v_value, adv_values  # [B, 1], [B, n_agents, num_actions]
+
+    def _forward_decentralized(self, spatial, internal, log_pi=None, alpha=None):
+        B = spatial.shape[0]
+        A = spatial.shape[1] if spatial.dim() == 5 else self.n_agents
+        spatial = spatial.view(B * A, *spatial.shape[-3:])
+        internal = internal.view(B * A, -1)
+        B_eff = B * A
+            
+        x = torch.cat([spatial.view(B_eff, -1), internal.view(B_eff, -1)], dim=-1)
+        feats = self.encoder(x)
+        
+        v_value = self.v_head(feats) # [B_eff, 1]
+        adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B_eff, num_heads, num_actions]
+        
+        v_value = v_value.view(B, A, 1).sum(dim=1) # [B, 1]
+        adv_values = adv_values.view(B, A, self.num_actions_per_agent) # [B, n_agents, num_actions]
+            
         if log_pi is not None and alpha is not None:
             adv_values = adv_values - alpha * log_pi
             
@@ -195,31 +228,56 @@ class SoftQNetwork(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5):
+    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
+        self.centralized = centralized
         
         self.encoder = MixedObservationEncoder(
             spatial_shape=spatial_shape,
-            vector_dim=np.prod(internal_dim),
+            vector_dim=np.prod(internal_dim) if centralized else np.prod(internal_dim) // n_agents,
             spatial_hidden_dim=128,
             vector_hidden_dim=32,
             output_dim=256,
         )
+        self.num_actor_heads = n_agents if centralized else 1
         self.actor_heads = nn.ModuleList([
             nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.ReLU(),
                 layer_init(nn.Linear(128, num_actions_per_agent), std=0.01)
-            ) for _ in range(n_agents)
+            ) for _ in range(self.num_actor_heads)
         ])
 
-    def forward(self, spatial, internal):
+        if centralized:
+            self.forward = self._forward_centralized
+        else:
+            self.forward = self._forward_decentralized
+
+    def _forward_centralized(self, spatial, internal):
         B = spatial.shape[0]
-        x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
+        B_eff = B
+            
+        x = torch.cat([spatial.view(B_eff, -1), internal.view(B_eff, -1)], dim=-1)
         feats = self.encoder(x)
         logits = torch.stack([head(feats) for head in self.actor_heads], dim=1)
+            
+        return logits  # [B, n_agents, num_actions]
+
+    def _forward_decentralized(self, spatial, internal):
+        B = spatial.shape[0]
+        A = spatial.shape[1] if spatial.dim() == 5 else self.n_agents
+        spatial = spatial.view(B * A, *spatial.shape[-3:])
+        internal = internal.view(B * A, -1)
+        B_eff = B * A
+            
+        x = torch.cat([spatial.view(B_eff, -1), internal.view(B_eff, -1)], dim=-1)
+        feats = self.encoder(x)
+        logits = torch.stack([head(feats) for head in self.actor_heads], dim=1)
+        
+        logits = logits.view(B, A, self.num_actions_per_agent)
+            
         return logits  # [B, n_agents, num_actions]
 
     def get_action(self, spatial, internal):
@@ -280,21 +338,28 @@ if __name__ == "__main__":
         tiles_json="test_level/tiles.json",
         agents_json="test_level/agents.json",
         survivors_json="test_level/survivors.json",
-        mode="centralized",
+        mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
     )
 
     n_agents = env.config.n_agents
-    spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
-    internal_dim = (env.config.n_agents, env.agent_internal_dim)
+    
+    # After resetting the env, check the actual shapes of observations for buffer init
+    dummy_obs = env._get_obs_dict()
+    spatial_shape = dummy_obs["spatial"].shape[1:]  # either (C, H, W) or (A, C, H, W)
+    internal_dim = dummy_obs["internal"].shape[1:]  # (A, D)
+
+    # For the models, we pass the single-env or single-agent spatial shape
+    single_spatial_shape = spatial_shape if args.centralized else spatial_shape[1:]
+    
     num_actions_per_agent = 5
 
-    actor = torch.compile(Actor(spatial_shape, internal_dim, n_agents, num_actions_per_agent).to(device))
-    qf1 = torch.compile(SoftQNetwork(spatial_shape, internal_dim, n_agents, num_actions_per_agent).to(device))
-    qf2 = torch.compile(SoftQNetwork(spatial_shape, internal_dim, n_agents, num_actions_per_agent).to(device))
-    qf1_target = torch.compile(SoftQNetwork(spatial_shape, internal_dim, n_agents, num_actions_per_agent).to(device))
-    qf2_target = torch.compile(SoftQNetwork(spatial_shape, internal_dim, n_agents, num_actions_per_agent).to(device))
+    actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
+    qf1 = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
+    qf2 = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
+    qf1_target = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
+    qf2_target = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
     
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
@@ -499,4 +564,4 @@ if __name__ == "__main__":
     writer.close()
     
     os.makedirs("results", exist_ok=True)
-    np.save(f"results/sac_central_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+    np.save(f"results/sac_{'centralized' if args.centralized else 'individual'}_run_{args.run_number}.npy", np.array(episodic_returns))

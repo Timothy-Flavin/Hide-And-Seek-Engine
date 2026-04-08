@@ -21,6 +21,8 @@ from MixedObservationEncoder import MixedObservationEncoder
 class Args:
     exp_name: str = "custom_ppo"
     """the name of this experiment"""
+    centralized: bool = True
+    """whether to use centralized or individual PPO"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
@@ -84,42 +86,56 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5):
+    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
+        self.centralized = centralized
         
         self.encoder = MixedObservationEncoder(
             spatial_shape=spatial_shape,
-            vector_dim=np.prod(internal_dim),
+            vector_dim=np.prod(internal_dim) if centralized else internal_dim[1],
             spatial_hidden_dim=128,
             vector_hidden_dim=32,
             output_dim=256,
         )
         
-        # Policy Heads - One per agent
+        # Policy Heads - One per agent or One shared
         self.actor_heads = nn.ModuleList([
             nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.Tanh(),
                 layer_init(nn.Linear(128, num_actions_per_agent), std=0.01)
-            ) for _ in range(n_agents)
+            ) for _ in range(n_agents if centralized else 1)
         ])
         
-        # Value Function Head - Centralized
+        # Value Function Head
         self.critic = nn.Sequential(
             layer_init(nn.Linear(256, 128)),
             nn.Tanh(),
             layer_init(nn.Linear(128, 1), std=1.0)
         )
 
-    def get_value(self, spatial, internal):
+        if centralized:
+            self.get_value = self._get_value_centralized
+            self.get_action_and_value = self._get_action_and_value_centralized
+        else:
+            self.get_value = self._get_value_decentralized
+            self.get_action_and_value = self._get_action_and_value_decentralized
+
+    def _get_value_centralized(self, spatial, internal):
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
         return self.critic(feats)
 
-    def get_action_and_value(self, spatial, internal, action=None):
+    def _get_value_decentralized(self, spatial, internal):
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
+        feats = self.encoder(x)
+        return self.critic(feats).view(B, self.n_agents)
+
+    def _get_action_and_value_centralized(self, spatial, internal, action=None):
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
@@ -131,12 +147,26 @@ class Agent(nn.Module):
         if action is None:
             action = probs.sample() # [B, n_agents]
             
-        # PPO requires scalar logprob and entropy per environment. 
-        # We sum over independent agent logprobs per environment to get joint probabilities.
-        logprob = probs.log_prob(action).sum(dim=1) # [B]
-        entropy = probs.entropy().sum(dim=1) # [B]
+        logprob = probs.log_prob(action) # [B, n_agents]
+        entropy = probs.entropy() # [B, n_agents]
         
-        return action, logprob, entropy, self.critic(feats)
+        return action, logprob, entropy, self.critic(feats).expand(B, self.n_agents)
+
+    def _get_action_and_value_decentralized(self, spatial, internal, action=None):
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
+        feats = self.encoder(x)
+        
+        logits = self.actor_heads[0](feats).view(B, self.n_agents, self.num_actions_per_agent)
+        probs = Categorical(logits=logits)
+        
+        if action is None:
+            action = probs.sample() # [B, n_agents]
+            
+        logprob = probs.log_prob(action) # [B, n_agents]
+        entropy = probs.entropy() # [B, n_agents]
+        
+        return action, logprob, entropy, self.critic(feats).view(B, self.n_agents)
 
 
 ACTION_MAP = np.array(
@@ -188,7 +218,7 @@ if __name__ == "__main__":
         tiles_json="test_level/tiles.json",
         agents_json="test_level/agents.json",
         survivors_json="test_level/survivors.json",
-        mode="centralized",
+        mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
     )
@@ -198,17 +228,22 @@ if __name__ == "__main__":
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
     num_actions_per_agent = 5
 
-    agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent).to(device))
+    agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs_spatial = torch.zeros((args.num_steps, args.num_envs) + spatial_shape).to(device)
-    obs_internal = torch.zeros((args.num_steps, args.num_envs) + internal_dim).to(device)
+    if args.centralized:
+        obs_spatial = torch.zeros((args.num_steps, args.num_envs) + spatial_shape).to(device)
+        obs_internal = torch.zeros((args.num_steps, args.num_envs) + internal_dim).to(device)
+    else:
+        obs_spatial = torch.zeros((args.num_steps, args.num_envs, n_agents) + spatial_shape).to(device)
+        obs_internal = torch.zeros((args.num_steps, args.num_envs, n_agents, env.agent_internal_dim)).to(device)
+    
     actions = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    logprobs = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
+    rewards = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
+    dones = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
+    values = torch.zeros((args.num_steps, args.num_envs, n_agents)).to(device)
 
     # Start the game
     global_step = 0
@@ -235,11 +270,11 @@ if __name__ == "__main__":
             
             obs_spatial[step] = next_spatial
             obs_internal[step] = next_internal
-            dones[step] = next_done
+            dones[step] = next_done.unsqueeze(1).expand(-1, n_agents)
 
             with torch.no_grad():
                 action, logprob, _, value = agent.get_action_and_value(next_spatial, next_internal)
-                values[step] = value.flatten()
+                values[step] = value
             actions[step] = action
             logprobs[step] = logprob
 
@@ -252,7 +287,10 @@ if __name__ == "__main__":
 
             # Sum rewards over all agents for centralized evaluation
             env_rewards = rewards_raw.sum(dim=1) 
-            rewards[step] = env_rewards.view(-1)
+            if args.centralized:
+                rewards[step] = env_rewards.unsqueeze(1).expand(-1, n_agents)
+            else:
+                rewards[step] = rewards_raw
             
             episode_rewards += env_rewards.cpu().numpy()
             episode_lengths += 1
@@ -276,15 +314,19 @@ if __name__ == "__main__":
                 next_internal = next_obs["internal"]
                 
             next_done = torch.logical_or(terminations, truncations).float()
+            dones[step] = next_done.unsqueeze(1).expand(-1, n_agents)
 
         # bootstrap value if not done
         with torch.no_grad():
-            next_value = agent.get_value(next_spatial, next_internal).reshape(1, -1)
+            next_value = agent.get_value(next_spatial, next_internal)
+            if args.centralized:
+                next_value = next_value.expand(-1, n_agents)
+            
             advantages = torch.zeros_like(rewards).to(device)
             lastgaelam = 0
             for t in reversed(range(args.num_steps)):
                 if t == args.num_steps - 1:
-                    nextnonterminal = 1.0 - next_done
+                    nextnonterminal = 1.0 - next_done.unsqueeze(1).expand(-1, n_agents)
                     nextvalues = next_value
                 else:
                     nextnonterminal = 1.0 - dones[t + 1]
@@ -294,13 +336,18 @@ if __name__ == "__main__":
             returns = advantages + values
 
         # flatten the batch
-        b_obs_spatial = obs_spatial.reshape((-1,) + spatial_shape)
-        b_obs_internal = obs_internal.reshape((-1,) + internal_dim)
-        b_logprobs = logprobs.reshape(-1)
+        if args.centralized:
+            b_obs_spatial = obs_spatial.reshape((-1,) + spatial_shape)
+            b_obs_internal = obs_internal.reshape((-1,) + internal_dim)
+        else:
+            b_obs_spatial = obs_spatial.reshape((-1, n_agents) + spatial_shape)
+            b_obs_internal = obs_internal.reshape((-1, n_agents, env.agent_internal_dim))
+        
+        b_logprobs = logprobs.reshape((-1, n_agents))
         b_actions = actions.reshape((-1, n_agents))
-        b_advantages = advantages.reshape(-1)
-        b_returns = returns.reshape(-1)
-        b_values = values.reshape(-1)
+        b_advantages = advantages.reshape((-1, n_agents))
+        b_returns = returns.reshape((-1, n_agents))
+        b_values = values.reshape((-1, n_agents))
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
@@ -336,19 +383,21 @@ if __name__ == "__main__":
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # Value loss
-                newvalue = newvalue.view(-1)
+                newvalue = newvalue.reshape(-1)
+                mb_returns = b_returns[mb_inds].reshape(-1)
+                mb_values = b_values[mb_inds].reshape(-1)
                 if args.clip_vloss:
-                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                    v_clipped = b_values[mb_inds] + torch.clamp(
-                        newvalue - b_values[mb_inds],
+                    v_loss_unclipped = (newvalue - mb_returns) ** 2
+                    v_clipped = mb_values + torch.clamp(
+                        newvalue - mb_values,
                         -args.clip_coef,
                         args.clip_coef,
                     )
-                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                    v_loss_clipped = (v_clipped - mb_returns) ** 2
                     v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
                     v_loss = 0.5 * v_loss_max.mean()
                 else:
-                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+                    v_loss = 0.5 * ((newvalue - mb_returns) ** 2).mean()
 
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
@@ -382,4 +431,5 @@ if __name__ == "__main__":
     writer.close()
     
     os.makedirs("results", exist_ok=True)
-    np.save(f"results/ppo_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+    mode_str = 'centralized' if args.centralized else 'individual'
+    np.save(f"results/ppo_{mode_str}_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
