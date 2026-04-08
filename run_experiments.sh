@@ -8,7 +8,8 @@ for alg in "ppo" "dqn" "sac"; do
         echo "Running $alg with seed $seed (run number $seed)..."
         python cleanrl_${alg}.py \
             --run-number $seed \
-            --total-timesteps 10000000
+            --total-timesteps 10000000 \
+            --no-centralized
     done
 done
 
