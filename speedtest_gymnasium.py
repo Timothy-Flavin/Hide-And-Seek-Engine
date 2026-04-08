@@ -1,5 +1,6 @@
 import argparse
 import os
+
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -174,8 +175,9 @@ def run_speedtest_gymnasium(
 
 def main():
     import matplotlib.pyplot as plt
+
     steps = 50_000
-    env_counts = [1, 4, 16, 32] # Cut down from 128/256 to avoid hitting 16GB RAM limit
+    env_counts = [1, 4, 16, 32]  # Cut down from 128/256 to avoid hitting 16GB RAM limit
     agent_counts = list(range(1, 11))
     num_runs = 3
 
