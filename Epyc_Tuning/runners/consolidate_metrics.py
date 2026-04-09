@@ -11,7 +11,7 @@ for c in configs:
     for i in range(1, 7):
         # sps
         try:
-            with open(f"output_{c}_run_{i}.log", "r") as f:
+            with open(f"../rl_benchmark/output_{c}_run_{i}.log" if c in ["Control", "Test_A", "Test_B", "Test_C"] else f"../numa_bind/output_{c}_run_{i}.log" if c in ["Aligned", "Misaligned"] else f"../best_vs_worst/output_{c}_run_{i}.log", "r") as f:
                 lines = f.readlines()
                 # filter out empty line and grab the SPS
                 sps_lines = [l for l in lines[-15:] if "SPS=" in l]
@@ -23,7 +23,7 @@ for c in configs:
         
         # gpu
         try:
-            with open(f"gpu_util_{c}_run_{i}.log", "r") as f:
+            with open(f"../rl_benchmark/gpu_util_{c}_run_{i}.log" if c in ["Control", "Test_A", "Test_B", "Test_C"] else f"../numa_bind/gpu_util_{c}_run_{i}.log" if c in ["Aligned", "Misaligned"] else f"../best_vs_worst/gpu_util_{c}_run_{i}.log", "r") as f:
                 lines = f.readlines()[5:] # drops 5 lines
                 gpus = [float(x.strip()) for x in lines if x.strip()]
                 if gpus:
