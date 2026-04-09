@@ -413,7 +413,7 @@ if __name__ == "__main__":
 
     # Plot episodic returns at the end
     os.makedirs("results", exist_ok=True)
-    base_name = f"dqn_episodic_returns_{'centralized' if args.centralized else 'individual'}_run_{args.run_number}"
+    base_name = f"dqn_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}"
     np.save(f"results/{base_name}.npy", np.array(episodic_returns))
 
     plt.figure()

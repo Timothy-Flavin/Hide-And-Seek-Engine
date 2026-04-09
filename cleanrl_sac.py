@@ -564,4 +564,4 @@ if __name__ == "__main__":
     writer.close()
     
     os.makedirs("results", exist_ok=True)
-    np.save(f"results/sac_{'centralized' if args.centralized else 'individual'}_run_{args.run_number}.npy", np.array(episodic_returns))
+    np.save(f"results/sac_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))

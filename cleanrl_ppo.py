@@ -431,5 +431,5 @@ if __name__ == "__main__":
     writer.close()
     
     os.makedirs("results", exist_ok=True)
-    mode_str = 'centralized' if args.centralized else 'individual'
+    mode_str = 'centralized' if args.centralized else 'decentralized'
     np.save(f"results/ppo_{mode_str}_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
