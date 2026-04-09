@@ -4,12 +4,12 @@ set -e
 mkdir -p results
 #"ppo" "dqn" "sac"
 for alg in "ppo" "dqn" "sac"; do
-    for seed in {1..5}; do
+    for seed in {1..1}; do
         echo "Running $alg with seed $seed (run number $seed)..."
         python cleanrl_${alg}.py \
             --run-number $seed \
             --total-timesteps 10000000 \
-            --no-centralized
+            --centralized
     done
 done
 
