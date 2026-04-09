@@ -17,7 +17,9 @@
 #include <cstdint>
 #include <chrono>
 #include <fstream>
+#ifndef _WIN32
 #include <sched.h>
+#endif
 #include "env_state.h"
 
 #include <omp.h>
