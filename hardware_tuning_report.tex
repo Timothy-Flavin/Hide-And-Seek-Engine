@@ -106,7 +106,7 @@ Because raw throughput on shared AMD EPYC server nodes contains massive transien
 Setting \texttt{OMP\_WAIT\_POLICY=passive} stops OpenMP threads from spin-waiting, vastly freeing CPU blocks to funnel data to the GPU. Combining this with restricted PyTorch threading completely eliminated context-switch thrashing, bumping throughput by $\sim$1,500 SPS on the global server test.
 
 \textbf{Why are Best and Worst Cases numerically slower globally?} 
-The "Best Case" and "Worst Case" tests purposely restrict the process to 32 logical cores (1 NUMA node) using \texttt{taskset}, compared to the 128 logical cores used in the unstructured tests. While raw SPS is marginally lower (15k vs 17k), the \textit{per-core computational efficiency} is massively optimized. The Best Case achieves nearly the same throughput with 25\% of the hardware footprint and doubles GPU execution density (44.8\% vs 17.4\%). 
+The "Best Case" and "Worst Case" tests purposely restrict the process to 32 logical cores (1 NUMA node) using \texttt{taskset}, compared to the 128 logical cores used in the unstructured tests. While raw SPS is marginally lower (14.2k vs 18.9k), the \textit{per-core computational efficiency} is massively optimized. The Best Case achieves nearly the same throughput with 25\% of the hardware footprint and doubles GPU execution density (44.8\% vs 17.4\%). 
 
 \section{Conclusion and Deployment Recommendations}
 
@@ -114,10 +114,10 @@ Based on the empirical evidence gathered during exhaustive architectural profili
 
 \begin{itemize}
     \item \textbf{Recommendation 1: Absolute Fastest Configuration (Monolithic Execution).} 
-    If executing a single monolithic training script unconstrained globally on a server, allow OS-managed load balancing across all CPU cores (do \textbf{not} pin threads). However, you \textbf{must} map memory via \texttt{parallel\_first\_touch}, limit PyTorch CPU interference (\texttt{torch.set\_num\_threads(1)}), and yield idle OpenMP cores (\texttt{OMP\_WAIT\_POLICY=passive}). Expected bounds: Peak raw SPS ($\sim$17,055).
+    If executing a single monolithic training script unconstrained globally on a server, allow OS-managed load balancing across all CPU cores (do \textbf{not} pin threads). However, you \textbf{must} map memory via \texttt{parallel\_first\_touch}, limit PyTorch CPU interference (\texttt{torch.set\_num\_threads(1)}), and yield idle OpenMP cores (\texttt{OMP\_WAIT\_POLICY=passive}). Expected bounds: Peak raw SPS ($\sim$18,379).
     
     \item \textbf{Recommendation 2: Most Efficient Configuration (Containerized/Slurm Environments).} 
-    For cloud scaling or multi-tenant servers, hardware efficiency supersedes raw global max-outs. Run standard configurations locked to the localized CPU PCIe-complex of the assigned GPU (\texttt{taskset} alignment). Combined with default active waits and 1 Torch thread, this generates massive GPU efficiency (39.5\% vs 30.3\%) preventing PCIe InfiniBand bottlenecks. 4 separate aligned jobs deployed simultaneously on one EPYC server will vastly outperform a single 128-core global job.
+    For cloud scaling or multi-tenant servers, hardware efficiency supersedes raw global max-outs. Run standard configurations locked to the localized CPU PCIe-complex of the assigned GPU (\texttt{taskset} alignment). Combined with default active waits and 1 Torch thread, this generates massive GPU efficiency (38.5\% vs 27.5\%) preventing PCIe InfiniBand bottlenecks. 4 separate aligned jobs deployed simultaneously on one EPYC server will vastly outperform a single 128-core global job.
     
     \item \textbf{Recommendation 3: Surprisingly Bad Configurations (Anti-Patterns).} 
     Do \textbf{not} apply strict OpenMP thread pinning (\texttt{OMP\_PLACES=cores OMP\_PROC\_BIND=true}) on deep-learning bound simulation steps. It cripples branch-heavy dynamic MARL loops by bottlenecking the OS's ability to boost clocks and migrate out of thermal constraints by 2-4x. Likewise, allowing PyTorch threads to govern themselves unconstrained against an active OpenMP backend will create runaway context switching, halving server efficiency.
