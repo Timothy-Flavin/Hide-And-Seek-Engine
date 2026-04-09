@@ -1,0 +1,7376 @@
+Hardware topology:
+Architecture:                       x86_64
+CPU op-mode(s):                     32-bit, 64-bit
+Address sizes:                      43 bits physical, 48 bits virtual
+Byte Order:                         Little Endian
+CPU(s):                             64
+On-line CPU(s) list:                0-63
+Vendor ID:                          AuthenticAMD
+Model name:                         AMD EPYC 7282 16-Core Processor
+CPU family:                         23
+Model:                              49
+Thread(s) per core:                 2
+Core(s) per socket:                 16
+Socket(s):                          2
+Stepping:                           0
+Frequency boost:                    enabled
+CPU max MHz:                        2800.0000
+CPU min MHz:                        1500.0000
+BogoMIPS:                           5589.28
+Flags:                              fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 cqm rdt_a rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local clzero irperf xsaveerptr rdpru wbnoinvd amd_ppin arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif v_spec_ctrl umip rdpid overflow_recov succor smca sme sev sev_es
+Virtualization:                     AMD-V
+L1d cache:                          1 MiB (32 instances)
+L1i cache:                          1 MiB (32 instances)
+L2 cache:                           16 MiB (32 instances)
+L3 cache:                           128 MiB (8 instances)
+NUMA node(s):                       2
+NUMA node0 CPU(s):                  0-15,32-47
+NUMA node1 CPU(s):                  16-31,48-63
+Vulnerability Gather data sampling: Not affected
+Vulnerability Itlb multihit:        Not affected
+Vulnerability L1tf:                 Not affected
+Vulnerability Mds:                  Not affected
+Vulnerability Meltdown:             Not affected
+Vulnerability Mmio stale data:      Not affected
+Vulnerability Retbleed:             Mitigation; untrained return thunk; SMT enabled with STIBP protection
+Vulnerability Spec rstack overflow: Mitigation; Safe RET
+Vulnerability Spec store bypass:    Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:           Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:           Mitigation; Retpolines, IBPB conditional, STIBP always-on, RSB filling, PBRSB-eIBRS Not affected
+Vulnerability Srbds:                Not affected
+Vulnerability Tsx async abort:      Not affected
+Running Control baseline...
+pygame 2.6.1 (SDL 2.28.4, Python 3.11.7)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+
+--- Testing 1 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.1501 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0128 s
+  cpp_engine_step: 0.0653 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0128 s
+  cpp_engine_step: 0.0654 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0125 s
+  cpp_engine_step: 0.0656 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0088 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0127 s
+  cpp_engine_step: 0.0708 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.816 s
+    Env Step:    0.549 s
+    Total:       1.381 s
+  FPS: 36,203.7
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0130 s
+  cpp_engine_step: 0.0652 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0128 s
+  cpp_engine_step: 0.0651 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0128 s
+  cpp_engine_step: 0.0698 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0127 s
+  cpp_engine_step: 0.0625 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0129 s
+  cpp_engine_step: 0.0610 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.810 s
+    Env Step:    0.450 s
+    Total:       1.276 s
+  FPS: 39,195.4
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0610 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0591 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0107 s
+  cpp_engine_step: 0.0532 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0539 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0541 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.717 s
+    Env Step:    0.395 s
+    Total:       1.127 s
+  FPS: 44,359.7
+
+--- Testing 1 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0549 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0551 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0572 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0563 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0562 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.651 s
+    Env Step:    0.382 s
+    Total:       1.046 s
+  FPS: 47,806.5
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0572 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0578 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0566 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.644 s
+    Env Step:    0.386 s
+    Total:       1.042 s
+  FPS: 47,983.4
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0567 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0567 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0570 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0574 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0571 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.642 s
+    Env Step:    0.388 s
+    Total:       1.042 s
+  FPS: 47,990.3
+
+--- Testing 1 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0576 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0575 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0585 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0569 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0569 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.642 s
+    Env Step:    0.390 s
+    Total:       1.044 s
+  FPS: 47,875.2
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0575 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0578 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0575 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0587 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0546 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.645 s
+    Env Step:    0.389 s
+    Total:       1.046 s
+  FPS: 47,781.4
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0553 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0548 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0540 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0547 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.645 s
+    Env Step:    0.379 s
+    Total:       1.037 s
+  FPS: 48,237.0
+
+--- Testing 1 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0551 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0547 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0553 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0548 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.654 s
+    Env Step:    0.378 s
+    Total:       1.044 s
+  FPS: 47,891.7
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0537 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0534 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0535 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0539 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0540 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.647 s
+    Env Step:    0.371 s
+    Total:       1.030 s
+  FPS: 48,526.7
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0550 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0540 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0553 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0535 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0536 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.645 s
+    Env Step:    0.376 s
+    Total:       1.033 s
+  FPS: 48,396.9
+
+--- Testing 1 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0539 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0121 s
+  cpp_engine_step: 0.0571 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0027 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0122 s
+  cpp_engine_step: 0.0576 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0027 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0122 s
+  cpp_engine_step: 0.0575 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0027 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0122 s
+  cpp_engine_step: 0.0577 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0027 s
+
+  Py Wall Clock:
+    Random Acts: 0.693 s
+    Env Step:    0.394 s
+    Total:       1.100 s
+  FPS: 45,469.0
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0027 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0122 s
+  cpp_engine_step: 0.0578 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.0568 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0029 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.0578 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0029 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0564 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.691 s
+    Env Step:    0.394 s
+    Total:       1.098 s
+  FPS: 45,524.7
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0539 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0553 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0595 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0573 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0575 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.640 s
+    Env Step:    0.387 s
+    Total:       1.039 s
+  FPS: 48,140.2
+
+--- Testing 1 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0582 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0573 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0574 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0570 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0573 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0026 s
+
+  Py Wall Clock:
+    Random Acts: 0.644 s
+    Env Step:    0.390 s
+    Total:       1.046 s
+  FPS: 47,823.4
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0568 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0551 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0557 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.639 s
+    Env Step:    0.382 s
+    Total:       1.032 s
+  FPS: 48,431.9
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0556 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0555 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0557 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0564 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.642 s
+    Env Step:    0.383 s
+    Total:       1.038 s
+  FPS: 48,165.0
+
+--- Testing 1 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0554 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.645 s
+    Env Step:    0.383 s
+    Total:       1.040 s
+  FPS: 48,083.7
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0568 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0571 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0568 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0566 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0565 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.648 s
+    Env Step:    0.388 s
+    Total:       1.049 s
+  FPS: 47,679.3
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0583 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0556 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0557 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0109 s
+  cpp_engine_step: 0.0556 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0110 s
+  cpp_engine_step: 0.0554 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.644 s
+    Env Step:    0.383 s
+    Total:       1.040 s
+  FPS: 48,075.2
+
+--- Testing 1 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0568 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0562 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0578 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0566 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0111 s
+  cpp_engine_step: 0.0567 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.644 s
+    Env Step:    0.388 s
+    Total:       1.044 s
+  FPS: 47,906.9
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0560 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0561 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0560 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.647 s
+    Env Step:    0.384 s
+    Total:       1.044 s
+  FPS: 47,904.4
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0560 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0558 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0556 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0556 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.646 s
+    Env Step:    0.383 s
+    Total:       1.041 s
+  FPS: 48,017.0
+
+--- Testing 1 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0571 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0566 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0561 s
+  py_tensor_conversion: 0.0010 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0562 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0571 s
+  py_tensor_conversion: 0.0010 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.651 s
+    Env Step:    0.386 s
+    Total:       1.050 s
+  FPS: 47,620.6
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.0562 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0572 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0559 s
+  py_tensor_conversion: 0.0010 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0560 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.652 s
+    Env Step:    0.386 s
+    Total:       1.051 s
+  FPS: 47,567.9
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0560 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0564 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0586 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0553 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0576 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.654 s
+    Env Step:    0.389 s
+    Total:       1.055 s
+  FPS: 47,382.9
+
+--- Testing 1 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0561 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0561 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0567 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0562 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0561 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.654 s
+    Env Step:    0.386 s
+    Total:       1.053 s
+  FPS: 47,494.1
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0557 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0565 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0563 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0567 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0565 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.652 s
+    Env Step:    0.387 s
+    Total:       1.051 s
+  FPS: 47,570.5
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0560 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0563 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0563 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0565 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0568 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.652 s
+    Env Step:    0.387 s
+    Total:       1.051 s
+  FPS: 47,563.0
+
+--- Testing 16 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0788 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0787 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0802 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.432 s
+    Env Step:    0.313 s
+    Total:       0.752 s
+  FPS: 664,680.0
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0927 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.1017 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.1004 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.432 s
+    Env Step:    0.372 s
+    Total:       0.812 s
+  FPS: 616,081.0
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.1024 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.1011 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0992 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.431 s
+    Env Step:    0.379 s
+    Total:       0.818 s
+  FPS: 611,285.3
+
+--- Testing 16 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.0930 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.1043 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1035 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.454 s
+    Env Step:    0.379 s
+    Total:       0.840 s
+  FPS: 594,963.8
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1016 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1008 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1027 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.458 s
+    Env Step:    0.385 s
+    Total:       0.851 s
+  FPS: 587,885.1
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1019 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1023 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1036 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.455 s
+    Env Step:    0.386 s
+    Total:       0.849 s
+  FPS: 589,062.6
+
+--- Testing 16 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0112 s
+  cpp_engine_step: 0.1204 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1301 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1314 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.482 s
+    Env Step:    0.465 s
+    Total:       0.955 s
+  FPS: 523,353.6
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1208 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1224 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1309 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.485 s
+    Env Step:    0.458 s
+    Total:       0.951 s
+  FPS: 525,892.8
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1233 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1322 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1267 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.489 s
+    Env Step:    0.461 s
+    Total:       0.958 s
+  FPS: 521,947.7
+
+--- Testing 16 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0113 s
+  cpp_engine_step: 0.0906 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1042 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1054 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.490 s
+    Env Step:    0.380 s
+    Total:       0.878 s
+  FPS: 569,651.2
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1015 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1169 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1300 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.499 s
+    Env Step:    0.432 s
+    Total:       0.939 s
+  FPS: 532,660.8
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1194 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1305 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.1311 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.507 s
+    Env Step:    0.465 s
+    Total:       0.980 s
+  FPS: 510,369.6
+
+--- Testing 16 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1268 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1268 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1358 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.525 s
+    Env Step:    0.473 s
+    Total:       1.006 s
+  FPS: 496,832.6
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.1105 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0943 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0939 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+  Py Wall Clock:
+    Random Acts: 0.510 s
+    Env Step:    0.376 s
+    Total:       0.894 s
+  FPS: 559,282.3
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0910 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.0936 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.0987 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0022 s
+
+  Py Wall Clock:
+    Random Acts: 0.507 s
+    Env Step:    0.361 s
+    Total:       0.876 s
+  FPS: 570,739.6
+
+--- Testing 16 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1021 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1094 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1271 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.542 s
+    Env Step:    0.424 s
+    Total:       0.973 s
+  FPS: 513,954.0
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1417 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.1407 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1403 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.551 s
+    Env Step:    0.508 s
+    Total:       1.067 s
+  FPS: 468,755.9
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1438 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1436 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.1438 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+  Py Wall Clock:
+    Random Acts: 0.558 s
+    Env Step:    0.517 s
+    Total:       1.083 s
+  FPS: 461,703.3
+
+--- Testing 16 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1427 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1431 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1440 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+  Py Wall Clock:
+    Random Acts: 0.572 s
+    Env Step:    0.517 s
+    Total:       1.097 s
+  FPS: 455,935.1
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1326 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0027 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1278 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0119 s
+  cpp_engine_step: 0.1467 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+  Py Wall Clock:
+    Random Acts: 0.571 s
+    Env Step:    0.495 s
+    Total:       1.074 s
+  FPS: 465,437.0
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1251 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1437 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0119 s
+  cpp_engine_step: 0.1453 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0027 s
+
+  Py Wall Clock:
+    Random Acts: 0.569 s
+    Env Step:    0.501 s
+    Total:       1.078 s
+  FPS: 464,024.4
+
+--- Testing 16 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0119 s
+  cpp_engine_step: 0.1427 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1288 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0120 s
+  cpp_engine_step: 0.1399 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.585 s
+    Env Step:    0.499 s
+    Total:       1.092 s
+  FPS: 457,672.6
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1370 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1381 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1453 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.582 s
+    Env Step:    0.508 s
+    Total:       1.098 s
+  FPS: 455,280.4
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1443 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1290 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0120 s
+  cpp_engine_step: 0.1414 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0026 s
+
+  Py Wall Clock:
+    Random Acts: 0.582 s
+    Env Step:    0.503 s
+    Total:       1.094 s
+  FPS: 457,177.3
+
+--- Testing 16 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1093 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1076 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0026 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1075 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.500 s
+    Env Step:    0.405 s
+    Total:       0.913 s
+  FPS: 547,360.5
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0114 s
+  cpp_engine_step: 0.1085 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1094 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1090 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+  Py Wall Clock:
+    Random Acts: 0.497 s
+    Env Step:    0.408 s
+    Total:       0.913 s
+  FPS: 547,359.4
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.1082 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1092 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0119 s
+  cpp_engine_step: 0.1118 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.503 s
+    Env Step:    0.411 s
+    Total:       0.923 s
+  FPS: 541,731.0
+
+--- Testing 16 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1163 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0117 s
+  cpp_engine_step: 0.1140 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1186 s
+  py_tensor_conversion: 0.0011 s
+  py_get_obs: 0.0024 s
+
+  Py Wall Clock:
+    Random Acts: 0.533 s
+    Env Step:    0.432 s
+    Total:       0.974 s
+  FPS: 513,466.0
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0115 s
+  cpp_engine_step: 0.1238 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0023 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0116 s
+  cpp_engine_step: 0.1413 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0024 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0118 s
+  cpp_engine_step: 0.1566 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0025 s
+
+  Py Wall Clock:
+    Random Acts: 0.574 s
+    Env Step:    0.510 s
+    Total:       1.092 s
+  FPS: 457,812.6
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0119 s
+  cpp_engine_step: 0.1627 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0029 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0123 s
+  cpp_engine_step: 0.1602 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0123 s
+  cpp_engine_step: 0.1612 s
+  py_tensor_conversion: 0.0012 s
+  py_get_obs: 0.0029 s
+
+  Py Wall Clock:
+    Random Acts: 0.605 s
+    Env Step:    0.576 s
+    Total:       1.190 s
+  FPS: 420,157.5
+
+--- Testing 128 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.067 s
+    Total:       0.138 s
+  FPS: 3,622,058.3
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.065 s
+    Total:       0.137 s
+  FPS: 3,662,115.8
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.066 s
+    Total:       0.137 s
+  FPS: 3,651,582.3
+
+--- Testing 128 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.071 s
+    Total:       0.142 s
+  FPS: 3,519,736.7
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.068 s
+    Env Step:    0.071 s
+    Total:       0.141 s
+  FPS: 3,557,867.4
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.069 s
+    Env Step:    0.071 s
+    Total:       0.141 s
+  FPS: 3,541,457.8
+
+--- Testing 128 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.079 s
+    Total:       0.155 s
+  FPS: 3,221,684.7
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.079 s
+    Total:       0.155 s
+  FPS: 3,217,959.0
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.080 s
+    Total:       0.156 s
+  FPS: 3,200,441.9
+
+--- Testing 128 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.105 s
+    Env Step:    0.084 s
+    Total:       0.189 s
+  FPS: 2,639,040.9
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.105 s
+    Env Step:    0.083 s
+    Total:       0.189 s
+  FPS: 2,638,539.0
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.105 s
+    Env Step:    0.084 s
+    Total:       0.190 s
+  FPS: 2,637,356.4
+
+--- Testing 128 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.091 s
+    Env Step:    0.092 s
+    Total:       0.184 s
+  FPS: 2,718,627.6
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.088 s
+    Env Step:    0.091 s
+    Total:       0.180 s
+  FPS: 2,774,773.2
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.087 s
+    Env Step:    0.091 s
+    Total:       0.179 s
+  FPS: 2,798,243.2
+
+--- Testing 128 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.092 s
+    Total:       0.185 s
+  FPS: 2,695,888.4
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.093 s
+    Env Step:    0.094 s
+    Total:       0.188 s
+  FPS: 2,661,756.8
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.094 s
+    Env Step:    0.094 s
+    Total:       0.189 s
+  FPS: 2,647,300.9
+
+--- Testing 128 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.098 s
+    Env Step:    0.099 s
+    Total:       0.198 s
+  FPS: 2,519,655.5
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.098 s
+    Env Step:    0.099 s
+    Total:       0.199 s
+  FPS: 2,518,290.7
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.098 s
+    Env Step:    0.100 s
+    Total:       0.199 s
+  FPS: 2,516,366.7
+
+--- Testing 128 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.104 s
+    Env Step:    0.103 s
+    Total:       0.207 s
+  FPS: 2,411,562.8
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.105 s
+    Env Step:    0.103 s
+    Total:       0.210 s
+  FPS: 2,383,148.3
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.106 s
+    Env Step:    0.106 s
+    Total:       0.213 s
+  FPS: 2,348,229.7
+
+--- Testing 128 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.115 s
+    Env Step:    0.114 s
+    Total:       0.230 s
+  FPS: 2,174,272.7
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.112 s
+    Env Step:    0.112 s
+    Total:       0.225 s
+  FPS: 2,220,465.5
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.115 s
+    Env Step:    0.114 s
+    Total:       0.230 s
+  FPS: 2,171,899.7
+
+--- Testing 128 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.121 s
+    Env Step:    0.121 s
+    Total:       0.243 s
+  FPS: 2,058,098.2
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.121 s
+    Env Step:    0.120 s
+    Total:       0.242 s
+  FPS: 2,068,287.1
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.120 s
+    Env Step:    0.119 s
+    Total:       0.239 s
+  FPS: 2,087,653.4
+
+--- Testing 256 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.033 s
+    Env Step:    0.042 s
+    Total:       0.076 s
+  FPS: 6,582,224.1
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.033 s
+    Env Step:    0.043 s
+    Total:       0.077 s
+  FPS: 6,534,781.6
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.033 s
+    Env Step:    0.041 s
+    Total:       0.075 s
+  FPS: 6,655,576.9
+
+--- Testing 256 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.041 s
+    Env Step:    0.050 s
+    Total:       0.091 s
+  FPS: 5,486,046.4
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.041 s
+    Env Step:    0.050 s
+    Total:       0.091 s
+  FPS: 5,471,543.9
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.041 s
+    Env Step:    0.050 s
+    Total:       0.091 s
+  FPS: 5,480,625.3
+
+--- Testing 256 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.050 s
+    Env Step:    0.060 s
+    Total:       0.110 s
+  FPS: 4,534,689.2
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.047 s
+    Env Step:    0.059 s
+    Total:       0.106 s
+  FPS: 4,726,699.3
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.047 s
+    Env Step:    0.059 s
+    Total:       0.107 s
+  FPS: 4,683,409.0
+
+--- Testing 256 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.053 s
+    Env Step:    0.063 s
+    Total:       0.117 s
+  FPS: 4,267,674.1
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.055 s
+    Env Step:    0.063 s
+    Total:       0.118 s
+  FPS: 4,222,780.9
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.054 s
+    Env Step:    0.063 s
+    Total:       0.118 s
+  FPS: 4,228,891.4
+
+--- Testing 256 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.059 s
+    Env Step:    0.070 s
+    Total:       0.130 s
+  FPS: 3,852,949.9
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.060 s
+    Env Step:    0.070 s
+    Total:       0.131 s
+  FPS: 3,825,241.8
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.060 s
+    Env Step:    0.070 s
+    Total:       0.130 s
+  FPS: 3,839,680.5
+
+--- Testing 256 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.063 s
+    Env Step:    0.075 s
+    Total:       0.138 s
+  FPS: 3,610,855.6
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.063 s
+    Env Step:    0.074 s
+    Total:       0.137 s
+  FPS: 3,640,503.7
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.063 s
+    Env Step:    0.073 s
+    Total:       0.137 s
+  FPS: 3,653,295.6
+
+--- Testing 256 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.069 s
+    Env Step:    0.080 s
+    Total:       0.149 s
+  FPS: 3,357,423.9
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.069 s
+    Env Step:    0.081 s
+    Total:       0.150 s
+  FPS: 3,329,641.4
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.068 s
+    Env Step:    0.079 s
+    Total:       0.148 s
+  FPS: 3,376,596.8
+
+--- Testing 256 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.076 s
+    Env Step:    0.086 s
+    Total:       0.162 s
+  FPS: 3,080,514.6
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.076 s
+    Env Step:    0.082 s
+    Total:       0.158 s
+  FPS: 3,157,240.7
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.082 s
+    Total:       0.158 s
+  FPS: 3,158,979.5
+
+--- Testing 256 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.080 s
+    Env Step:    0.091 s
+    Total:       0.171 s
+  FPS: 2,921,071.1
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.079 s
+    Env Step:    0.094 s
+    Total:       0.173 s
+  FPS: 2,887,302.7
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.079 s
+    Env Step:    0.093 s
+    Total:       0.173 s
+  FPS: 2,887,653.4
+
+--- Testing 256 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.088 s
+    Env Step:    0.098 s
+    Total:       0.187 s
+  FPS: 2,678,701.8
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.087 s
+    Env Step:    0.096 s
+    Total:       0.183 s
+  FPS: 2,734,894.7
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.087 s
+    Env Step:    0.097 s
+    Total:       0.184 s
+  FPS: 2,710,661.7
+
+--- Testing 1024 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.011 s
+    Env Step:    0.025 s
+    Total:       0.036 s
+  FPS: 13,849,191.8
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.013 s
+    Env Step:    0.026 s
+    Total:       0.039 s
+  FPS: 12,691,553.0
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.012 s
+    Env Step:    0.025 s
+    Total:       0.037 s
+  FPS: 13,358,873.7
+
+--- Testing 1024 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.020 s
+    Env Step:    0.030 s
+    Total:       0.050 s
+  FPS: 9,963,096.3
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.020 s
+    Env Step:    0.030 s
+    Total:       0.050 s
+  FPS: 10,013,031.2
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.019 s
+    Env Step:    0.030 s
+    Total:       0.050 s
+  FPS: 9,996,243.9
+
+--- Testing 1024 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.039 s
+    Total:       0.064 s
+  FPS: 7,831,159.2
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.040 s
+    Total:       0.065 s
+  FPS: 7,711,231.8
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.039 s
+    Total:       0.064 s
+  FPS: 7,773,629.9
+
+--- Testing 1024 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.030 s
+    Env Step:    0.043 s
+    Total:       0.074 s
+  FPS: 6,760,184.5
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.031 s
+    Env Step:    0.043 s
+    Total:       0.074 s
+  FPS: 6,797,863.9
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.030 s
+    Env Step:    0.044 s
+    Total:       0.074 s
+  FPS: 6,720,608.5
+
+--- Testing 1024 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.035 s
+    Env Step:    0.049 s
+    Total:       0.085 s
+  FPS: 5,895,770.5
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.036 s
+    Env Step:    0.049 s
+    Total:       0.085 s
+  FPS: 5,909,515.4
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.035 s
+    Env Step:    0.048 s
+    Total:       0.083 s
+  FPS: 6,024,420.0
+
+--- Testing 1024 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.041 s
+    Env Step:    0.050 s
+    Total:       0.091 s
+  FPS: 5,501,575.4
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.041 s
+    Env Step:    0.048 s
+    Total:       0.089 s
+  FPS: 5,597,168.1
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.041 s
+    Env Step:    0.048 s
+    Total:       0.089 s
+  FPS: 5,604,761.2
+
+--- Testing 1024 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.046 s
+    Env Step:    0.056 s
+    Total:       0.102 s
+  FPS: 4,881,332.2
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.046 s
+    Env Step:    0.054 s
+    Total:       0.100 s
+  FPS: 5,005,112.9
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.046 s
+    Env Step:    0.053 s
+    Total:       0.100 s
+  FPS: 5,020,705.7
+
+--- Testing 1024 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.052 s
+    Env Step:    0.061 s
+    Total:       0.113 s
+  FPS: 4,428,539.6
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.052 s
+    Env Step:    0.058 s
+    Total:       0.110 s
+  FPS: 4,537,604.9
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.053 s
+    Env Step:    0.059 s
+    Total:       0.112 s
+  FPS: 4,473,337.5
+
+--- Testing 1024 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.060 s
+    Env Step:    0.078 s
+    Total:       0.139 s
+  FPS: 3,604,804.8
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.060 s
+    Env Step:    0.080 s
+    Total:       0.140 s
+  FPS: 3,561,525.0
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.060 s
+    Env Step:    0.082 s
+    Total:       0.142 s
+  FPS: 3,527,383.0
+
+--- Testing 1024 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.066 s
+    Env Step:    0.080 s
+    Total:       0.146 s
+  FPS: 3,431,922.2
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.066 s
+    Env Step:    0.078 s
+    Total:       0.144 s
+  FPS: 3,474,302.6
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.065 s
+    Env Step:    0.075 s
+    Total:       0.140 s
+  FPS: 3,558,489.7
+
+Speedtest complete. Plot saved to laptop_speedtest/control_speedtest_results_centralized_state.png and raw arrays to control_speedtest_results_centralized_state_raw.npy
+Running with Thread Pinning...
+pygame 2.6.1 (SDL 2.28.4, Python 3.11.7)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+
+--- Testing 1 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0275 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0130 s
+  cpp_engine_step: 0.0275 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0130 s
+  cpp_engine_step: 0.0271 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0130 s
+  cpp_engine_step: 0.0273 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0184 s
+  cpp_engine_step: 0.0276 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.742 s
+    Env Step:    0.270 s
+    Total:       1.029 s
+  FPS: 48,598.5
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0273 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0273 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0276 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0276 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0279 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.743 s
+    Env Step:    0.266 s
+    Total:       1.025 s
+  FPS: 48,792.0
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0270 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0273 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0276 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0277 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0276 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.742 s
+    Env Step:    0.265 s
+    Total:       1.024 s
+  FPS: 48,842.9
+
+--- Testing 1 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0284 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0292 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0284 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.741 s
+    Env Step:    0.270 s
+    Total:       1.027 s
+  FPS: 48,664.1
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0289 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0283 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.738 s
+    Env Step:    0.272 s
+    Total:       1.027 s
+  FPS: 48,677.0
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0285 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0285 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0285 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0286 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0284 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.740 s
+    Env Step:    0.269 s
+    Total:       1.025 s
+  FPS: 48,763.1
+
+--- Testing 1 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0302 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0302 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0300 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0301 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0301 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.739 s
+    Env Step:    0.278 s
+    Total:       1.033 s
+  FPS: 48,385.7
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0303 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0303 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0301 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0301 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0300 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.740 s
+    Env Step:    0.279 s
+    Total:       1.035 s
+  FPS: 48,305.3
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0302 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0299 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0300 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0308 s
+  py_tensor_conversion: 0.0013 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0405 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.745 s
+    Env Step:    0.290 s
+    Total:       1.051 s
+  FPS: 47,561.8
+
+--- Testing 1 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0317 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0315 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0131 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.742 s
+    Env Step:    0.286 s
+    Total:       1.045 s
+  FPS: 47,853.5
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.743 s
+    Env Step:    0.288 s
+    Total:       1.048 s
+  FPS: 47,731.2
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0317 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0317 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0315 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0315 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.741 s
+    Env Step:    0.287 s
+    Total:       1.044 s
+  FPS: 47,883.4
+
+--- Testing 1 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0329 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0329 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0329 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0132 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.742 s
+    Env Step:    0.293 s
+    Total:       1.051 s
+  FPS: 47,577.8
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0334 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0332 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0334 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0334 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0334 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.750 s
+    Env Step:    0.298 s
+    Total:       1.064 s
+  FPS: 47,010.1
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0333 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0333 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0333 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0349 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0133 s
+  cpp_engine_step: 0.0333 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.746 s
+    Env Step:    0.297 s
+    Total:       1.059 s
+  FPS: 47,199.3
+
+--- Testing 1 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0347 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0348 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0348 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0348 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0136 s
+  cpp_engine_step: 0.0347 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.750 s
+    Env Step:    0.305 s
+    Total:       1.071 s
+  FPS: 46,670.7
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0349 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0136 s
+  cpp_engine_step: 0.0345 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0347 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0346 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0348 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.750 s
+    Env Step:    0.303 s
+    Total:       1.069 s
+  FPS: 46,773.3
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0136 s
+  cpp_engine_step: 0.0350 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0134 s
+  cpp_engine_step: 0.0346 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0135 s
+  cpp_engine_step: 0.0347 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0136 s
+  cpp_engine_step: 0.0348 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0349 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.750 s
+    Env Step:    0.304 s
+    Total:       1.070 s
+  FPS: 46,736.0
+
+--- Testing 1 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0361 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0361 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0360 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0359 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.746 s
+    Env Step:    0.311 s
+    Total:       1.073 s
+  FPS: 46,594.8
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0363 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0363 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0363 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.747 s
+    Env Step:    0.313 s
+    Total:       1.077 s
+  FPS: 46,439.9
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0364 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0363 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.749 s
+    Env Step:    0.313 s
+    Total:       1.078 s
+  FPS: 46,387.0
+
+--- Testing 1 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0377 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.749 s
+    Env Step:    0.320 s
+    Total:       1.086 s
+  FPS: 46,045.4
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.0379 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0378 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0377 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0377 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.751 s
+    Env Step:    0.321 s
+    Total:       1.088 s
+  FPS: 45,944.6
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.0376 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0374 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0372 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0375 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.750 s
+    Env Step:    0.320 s
+    Total:       1.086 s
+  FPS: 46,049.8
+
+--- Testing 1 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0393 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0394 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0391 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0391 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0392 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.754 s
+    Env Step:    0.330 s
+    Total:       1.100 s
+  FPS: 45,443.0
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0392 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0390 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0391 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0391 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0392 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.753 s
+    Env Step:    0.332 s
+    Total:       1.100 s
+  FPS: 45,439.0
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0394 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0393 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.0394 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0393 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0396 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.756 s
+    Env Step:    0.332 s
+    Total:       1.104 s
+  FPS: 45,285.1
+
+--- Testing 1 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0409 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0409 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0406 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0407 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0406 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.754 s
+    Env Step:    0.339 s
+    Total:       1.111 s
+  FPS: 45,022.5
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0414 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0410 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0413 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0411 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0411 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.755 s
+    Env Step:    0.340 s
+    Total:       1.112 s
+  FPS: 44,965.8
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0410 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0409 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0407 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0408 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0408 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.753 s
+    Env Step:    0.340 s
+    Total:       1.110 s
+  FPS: 45,041.8
+
+--- Testing 16 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0553 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0550 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0549 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.487 s
+    Env Step:    0.256 s
+    Total:       0.753 s
+  FPS: 664,123.6
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0550 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0549 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0552 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.491 s
+    Env Step:    0.258 s
+    Total:       0.759 s
+  FPS: 659,076.6
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0555 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0549 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0552 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.492 s
+    Env Step:    0.258 s
+    Total:       0.760 s
+  FPS: 658,277.4
+
+--- Testing 16 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0710 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0711 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0710 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.506 s
+    Env Step:    0.310 s
+    Total:       0.827 s
+  FPS: 604,870.3
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0706 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0710 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0711 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.504 s
+    Env Step:    0.309 s
+    Total:       0.823 s
+  FPS: 607,394.2
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0707 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0705 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0707 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.505 s
+    Env Step:    0.308 s
+    Total:       0.823 s
+  FPS: 607,166.2
+
+--- Testing 16 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0864 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0857 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0860 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.514 s
+    Env Step:    0.356 s
+    Total:       0.881 s
+  FPS: 567,600.3
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0860 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0860 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0862 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.514 s
+    Env Step:    0.357 s
+    Total:       0.881 s
+  FPS: 567,369.0
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0870 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0873 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0866 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.522 s
+    Env Step:    0.361 s
+    Total:       0.893 s
+  FPS: 559,648.4
+
+--- Testing 16 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1014 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.1015 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1015 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.527 s
+    Env Step:    0.406 s
+    Total:       0.944 s
+  FPS: 529,865.3
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1018 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1010 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.1014 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.528 s
+    Env Step:    0.406 s
+    Total:       0.945 s
+  FPS: 529,013.0
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1018 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1014 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1017 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.526 s
+    Env Step:    0.407 s
+    Total:       0.943 s
+  FPS: 530,130.7
+
+--- Testing 16 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1169 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1166 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1168 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.535 s
+    Env Step:    0.454 s
+    Total:       0.999 s
+  FPS: 500,531.5
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1172 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1171 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1171 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.535 s
+    Env Step:    0.455 s
+    Total:       1.001 s
+  FPS: 499,746.2
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1170 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1166 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1169 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.535 s
+    Env Step:    0.454 s
+    Total:       0.999 s
+  FPS: 500,302.3
+
+--- Testing 16 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.1325 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.1323 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1323 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.547 s
+    Env Step:    0.501 s
+    Total:       1.059 s
+  FPS: 472,258.1
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1322 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1319 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.1321 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.547 s
+    Env Step:    0.500 s
+    Total:       1.058 s
+  FPS: 472,605.3
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1324 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1317 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.1317 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.545 s
+    Env Step:    0.499 s
+    Total:       1.054 s
+  FPS: 474,180.9
+
+--- Testing 16 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1475 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1467 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1466 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.554 s
+    Env Step:    0.546 s
+    Total:       1.112 s
+  FPS: 449,685.8
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1474 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1465 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1473 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.559 s
+    Env Step:    0.547 s
+    Total:       1.117 s
+  FPS: 447,787.1
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1472 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1465 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1469 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.560 s
+    Env Step:    0.546 s
+    Total:       1.117 s
+  FPS: 447,454.5
+
+--- Testing 16 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1618 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1617 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1615 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.576 s
+    Env Step:    0.594 s
+    Total:       1.181 s
+  FPS: 423,327.0
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1618 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1613 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1616 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.571 s
+    Env Step:    0.593 s
+    Total:       1.174 s
+  FPS: 425,821.0
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1617 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1615 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1611 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.571 s
+    Env Step:    0.592 s
+    Total:       1.174 s
+  FPS: 425,817.6
+
+--- Testing 16 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1788 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1786 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1784 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0039 s
+
+  Py Wall Clock:
+    Random Acts: 0.591 s
+    Env Step:    0.647 s
+    Total:       1.249 s
+  FPS: 400,336.5
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1778 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1777 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.1774 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.589 s
+    Env Step:    0.644 s
+    Total:       1.244 s
+  FPS: 401,825.5
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1788 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1783 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1785 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.594 s
+    Env Step:    0.646 s
+    Total:       1.251 s
+  FPS: 399,754.1
+
+--- Testing 16 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1937 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.1930 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.1925 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.599 s
+    Env Step:    0.691 s
+    Total:       1.301 s
+  FPS: 384,242.5
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1931 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1925 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1920 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0038 s
+
+  Py Wall Clock:
+    Random Acts: 0.597 s
+    Env Step:    0.690 s
+    Total:       1.298 s
+  FPS: 385,321.8
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.1932 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.1924 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0039 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.1929 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0039 s
+
+  Py Wall Clock:
+    Random Acts: 0.600 s
+    Env Step:    0.691 s
+    Total:       1.302 s
+  FPS: 384,108.6
+
+--- Testing 128 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.076 s
+    Env Step:    0.117 s
+    Total:       0.195 s
+  FPS: 2,569,103.3
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.076 s
+    Env Step:    0.117 s
+    Total:       0.194 s
+  FPS: 2,571,364.8
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.076 s
+    Env Step:    0.118 s
+    Total:       0.196 s
+  FPS: 2,556,748.8
+
+--- Testing 128 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.090 s
+    Env Step:    0.170 s
+    Total:       0.262 s
+  FPS: 1,909,981.5
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.091 s
+    Env Step:    0.171 s
+    Total:       0.264 s
+  FPS: 1,894,647.2
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.091 s
+    Env Step:    0.171 s
+    Total:       0.263 s
+  FPS: 1,901,305.4
+
+--- Testing 128 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.099 s
+    Env Step:    0.225 s
+    Total:       0.325 s
+  FPS: 1,539,135.5
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.099 s
+    Env Step:    0.222 s
+    Total:       0.323 s
+  FPS: 1,549,758.6
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.099 s
+    Env Step:    0.223 s
+    Total:       0.323 s
+  FPS: 1,545,735.6
+
+--- Testing 128 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.108 s
+    Env Step:    0.275 s
+    Total:       0.384 s
+  FPS: 1,301,395.7
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.108 s
+    Env Step:    0.274 s
+    Total:       0.383 s
+  FPS: 1,304,004.5
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.107 s
+    Env Step:    0.274 s
+    Total:       0.383 s
+  FPS: 1,305,568.1
+
+--- Testing 128 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.115 s
+    Env Step:    0.329 s
+    Total:       0.446 s
+  FPS: 1,121,925.4
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.115 s
+    Env Step:    0.329 s
+    Total:       0.445 s
+  FPS: 1,122,413.7
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.115 s
+    Env Step:    0.329 s
+    Total:       0.446 s
+  FPS: 1,122,052.8
+
+--- Testing 128 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.123 s
+    Env Step:    0.381 s
+    Total:       0.506 s
+  FPS: 988,587.0
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.123 s
+    Env Step:    0.382 s
+    Total:       0.506 s
+  FPS: 987,445.0
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.122 s
+    Env Step:    0.381 s
+    Total:       0.505 s
+  FPS: 989,061.1
+
+--- Testing 128 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.130 s
+    Env Step:    0.441 s
+    Total:       0.572 s
+  FPS: 873,648.9
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.130 s
+    Env Step:    0.432 s
+    Total:       0.564 s
+  FPS: 886,815.5
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.130 s
+    Env Step:    0.431 s
+    Total:       0.563 s
+  FPS: 888,023.7
+
+--- Testing 128 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.136 s
+    Env Step:    0.482 s
+    Total:       0.620 s
+  FPS: 806,143.7
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.136 s
+    Env Step:    0.482 s
+    Total:       0.620 s
+  FPS: 806,751.1
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.136 s
+    Env Step:    0.482 s
+    Total:       0.620 s
+  FPS: 806,139.6
+
+--- Testing 128 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.143 s
+    Env Step:    0.532 s
+    Total:       0.676 s
+  FPS: 739,491.9
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.143 s
+    Env Step:    0.532 s
+    Total:       0.676 s
+  FPS: 739,650.3
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.143 s
+    Env Step:    0.531 s
+    Total:       0.676 s
+  FPS: 739,877.2
+
+--- Testing 128 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.150 s
+    Env Step:    0.581 s
+    Total:       0.733 s
+  FPS: 682,142.1
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.150 s
+    Env Step:    0.582 s
+    Total:       0.734 s
+  FPS: 681,497.3
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.151 s
+    Env Step:    0.583 s
+    Total:       0.736 s
+  FPS: 679,033.3
+
+--- Testing 256 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.045 s
+    Env Step:    0.122 s
+    Total:       0.167 s
+  FPS: 2,986,178.7
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.045 s
+    Env Step:    0.122 s
+    Total:       0.168 s
+  FPS: 2,980,723.7
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.045 s
+    Env Step:    0.121 s
+    Total:       0.167 s
+  FPS: 2,997,302.8
+
+--- Testing 256 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.055 s
+    Env Step:    0.177 s
+    Total:       0.233 s
+  FPS: 2,147,315.2
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.055 s
+    Env Step:    0.176 s
+    Total:       0.232 s
+  FPS: 2,156,054.0
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.055 s
+    Env Step:    0.176 s
+    Total:       0.233 s
+  FPS: 2,150,288.9
+
+--- Testing 256 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.062 s
+    Env Step:    0.230 s
+    Total:       0.293 s
+  FPS: 1,706,689.5
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.062 s
+    Env Step:    0.231 s
+    Total:       0.294 s
+  FPS: 1,702,822.9
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.062 s
+    Env Step:    0.230 s
+    Total:       0.292 s
+  FPS: 1,709,992.8
+
+--- Testing 256 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.069 s
+    Env Step:    0.281 s
+    Total:       0.351 s
+  FPS: 1,426,125.4
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.069 s
+    Env Step:    0.281 s
+    Total:       0.351 s
+  FPS: 1,425,183.5
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.069 s
+    Env Step:    0.281 s
+    Total:       0.351 s
+  FPS: 1,424,958.8
+
+--- Testing 256 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.336 s
+    Total:       0.412 s
+  FPS: 1,212,643.1
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.076 s
+    Env Step:    0.336 s
+    Total:       0.413 s
+  FPS: 1,211,449.0
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.338 s
+    Total:       0.414 s
+  FPS: 1,206,626.4
+
+--- Testing 256 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.082 s
+    Env Step:    0.387 s
+    Total:       0.470 s
+  FPS: 1,064,147.9
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.082 s
+    Env Step:    0.388 s
+    Total:       0.471 s
+  FPS: 1,061,503.5
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.082 s
+    Env Step:    0.387 s
+    Total:       0.470 s
+  FPS: 1,064,029.3
+
+--- Testing 256 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.089 s
+    Env Step:    0.438 s
+    Total:       0.528 s
+  FPS: 947,560.4
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.089 s
+    Env Step:    0.439 s
+    Total:       0.528 s
+  FPS: 947,024.6
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.089 s
+    Env Step:    0.438 s
+    Total:       0.528 s
+  FPS: 947,348.6
+
+--- Testing 256 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.096 s
+    Env Step:    0.492 s
+    Total:       0.589 s
+  FPS: 848,866.6
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.096 s
+    Env Step:    0.492 s
+    Total:       0.589 s
+  FPS: 848,741.5
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.096 s
+    Env Step:    0.492 s
+    Total:       0.589 s
+  FPS: 848,988.1
+
+--- Testing 256 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.102 s
+    Env Step:    0.547 s
+    Total:       0.650 s
+  FPS: 769,332.0
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.102 s
+    Env Step:    0.547 s
+    Total:       0.650 s
+  FPS: 769,624.7
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.102 s
+    Env Step:    0.546 s
+    Total:       0.649 s
+  FPS: 770,815.2
+
+--- Testing 256 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.110 s
+    Env Step:    0.598 s
+    Total:       0.708 s
+  FPS: 706,010.1
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.110 s
+    Env Step:    0.599 s
+    Total:       0.710 s
+  FPS: 703,974.1
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.110 s
+    Env Step:    0.598 s
+    Total:       0.708 s
+  FPS: 706,002.5
+
+--- Testing 1024 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.015 s
+    Env Step:    0.118 s
+    Total:       0.133 s
+  FPS: 3,754,983.9
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.015 s
+    Env Step:    0.118 s
+    Total:       0.134 s
+  FPS: 3,742,310.5
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.015 s
+    Env Step:    0.118 s
+    Total:       0.134 s
+  FPS: 3,734,739.8
+
+--- Testing 1024 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.184 s
+    Total:       0.209 s
+  FPS: 2,389,298.6
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.184 s
+    Total:       0.209 s
+  FPS: 2,388,123.9
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.184 s
+    Total:       0.209 s
+  FPS: 2,389,626.3
+
+--- Testing 1024 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.032 s
+    Env Step:    0.252 s
+    Total:       0.284 s
+  FPS: 1,761,772.6
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.032 s
+    Env Step:    0.253 s
+    Total:       0.284 s
+  FPS: 1,756,544.1
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.032 s
+    Env Step:    0.252 s
+    Total:       0.284 s
+  FPS: 1,758,409.5
+
+--- Testing 1024 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.040 s
+    Env Step:    0.328 s
+    Total:       0.368 s
+  FPS: 1,356,829.1
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.040 s
+    Env Step:    0.328 s
+    Total:       0.368 s
+  FPS: 1,357,353.0
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.040 s
+    Env Step:    0.327 s
+    Total:       0.367 s
+  FPS: 1,360,737.0
+
+--- Testing 1024 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.049 s
+    Env Step:    0.406 s
+    Total:       0.455 s
+  FPS: 1,098,994.9
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.048 s
+    Env Step:    0.403 s
+    Total:       0.452 s
+  FPS: 1,105,547.1
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.049 s
+    Env Step:    0.407 s
+    Total:       0.455 s
+  FPS: 1,097,386.2
+
+--- Testing 1024 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.057 s
+    Env Step:    0.491 s
+    Total:       0.548 s
+  FPS: 911,152.4
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.057 s
+    Env Step:    0.490 s
+    Total:       0.548 s
+  FPS: 911,646.2
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.057 s
+    Env Step:    0.491 s
+    Total:       0.549 s
+  FPS: 910,862.6
+
+--- Testing 1024 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.066 s
+    Env Step:    0.579 s
+    Total:       0.646 s
+  FPS: 773,838.8
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.066 s
+    Env Step:    0.581 s
+    Total:       0.648 s
+  FPS: 771,752.1
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.066 s
+    Env Step:    0.578 s
+    Total:       0.644 s
+  FPS: 775,464.8
+
+--- Testing 1024 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.674 s
+    Total:       0.750 s
+  FPS: 666,676.7
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.077 s
+    Env Step:    0.674 s
+    Total:       0.752 s
+  FPS: 664,901.5
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.675 s
+    Total:       0.751 s
+  FPS: 665,540.3
+
+--- Testing 1024 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.083 s
+    Env Step:    0.740 s
+    Total:       0.823 s
+  FPS: 606,873.0
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.083 s
+    Env Step:    0.736 s
+    Total:       0.819 s
+  FPS: 609,876.3
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.123 s
+    Env Step:    1.201 s
+    Total:       1.325 s
+  FPS: 377,176.5
+
+--- Testing 1024 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.125 s
+    Env Step:    1.214 s
+    Total:       1.340 s
+  FPS: 372,975.0
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.825 s
+    Total:       0.917 s
+  FPS: 544,837.4
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.823 s
+    Total:       0.915 s
+  FPS: 546,160.1
+
+Speedtest complete. Plot saved to laptop_speedtest/pinned_speedtest_results_centralized_state.png and raw arrays to pinned_speedtest_results_centralized_state_raw.npy
+Running Serial Init (No First Touch)...
+pygame 2.6.1 (SDL 2.28.4, Python 3.11.7)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+
+--- Testing 1 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0272 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.0268 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0267 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0266 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0197 s
+  cpp_engine_step: 0.0267 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.771 s
+    Env Step:    0.272 s
+    Total:       1.060 s
+  FPS: 47,166.8
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0267 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0265 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0267 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0140 s
+  cpp_engine_step: 0.0264 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0057 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0265 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.769 s
+    Env Step:    0.266 s
+    Total:       1.052 s
+  FPS: 47,544.5
+Testing 1 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.0265 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0138 s
+  cpp_engine_step: 0.0264 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0263 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0137 s
+  cpp_engine_step: 0.0262 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0139 s
+  cpp_engine_step: 0.0261 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.768 s
+    Env Step:    0.262 s
+    Total:       1.046 s
+  FPS: 47,806.8
+
+--- Testing 1 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0281 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0282 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0280 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0279 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.771 s
+    Env Step:    0.273 s
+    Total:       1.061 s
+  FPS: 47,133.2
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0278 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0029 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0278 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0278 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0141 s
+  cpp_engine_step: 0.0279 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0279 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.772 s
+    Env Step:    0.271 s
+    Total:       1.059 s
+  FPS: 47,216.6
+Testing 2 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0280 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0281 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0284 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0283 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0142 s
+  cpp_engine_step: 0.0280 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.776 s
+    Env Step:    0.273 s
+    Total:       1.065 s
+  FPS: 46,955.5
+
+--- Testing 1 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0297 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0297 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0304 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.771 s
+    Env Step:    0.282 s
+    Total:       1.069 s
+  FPS: 46,788.7
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0297 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0295 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.775 s
+    Env Step:    0.282 s
+    Total:       1.073 s
+  FPS: 46,601.6
+Testing 3 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0295 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0029 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0295 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0296 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0306 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.775 s
+    Env Step:    0.282 s
+    Total:       1.073 s
+  FPS: 46,601.7
+
+--- Testing 1 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0316 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0315 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0315 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.774 s
+    Env Step:    0.293 s
+    Total:       1.083 s
+  FPS: 46,171.2
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0314 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0311 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0312 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.777 s
+    Env Step:    0.291 s
+    Total:       1.084 s
+  FPS: 46,120.4
+Testing 4 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0314 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0313 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0311 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.775 s
+    Env Step:    0.291 s
+    Total:       1.082 s
+  FPS: 46,200.6
+
+--- Testing 1 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.775 s
+    Env Step:    0.301 s
+    Total:       1.092 s
+  FPS: 45,774.9
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0333 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0332 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0332 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0332 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.781 s
+    Env Step:    0.301 s
+    Total:       1.098 s
+  FPS: 45,526.5
+Testing 5 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0333 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0335 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0328 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0339 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0330 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.780 s
+    Env Step:    0.302 s
+    Total:       1.097 s
+  FPS: 45,580.0
+
+--- Testing 1 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0345 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0343 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0345 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0342 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0342 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.775 s
+    Env Step:    0.308 s
+    Total:       1.099 s
+  FPS: 45,486.8
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0345 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0345 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0344 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0343 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0343 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.776 s
+    Env Step:    0.307 s
+    Total:       1.100 s
+  FPS: 45,465.5
+Testing 6 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0347 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0454 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0347 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0345 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0352 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.790 s
+    Env Step:    0.321 s
+    Total:       1.127 s
+  FPS: 44,352.9
+
+--- Testing 1 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0373 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0364 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0364 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0364 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0364 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.785 s
+    Env Step:    0.320 s
+    Total:       1.121 s
+  FPS: 44,606.1
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0360 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0360 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0361 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0360 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.783 s
+    Env Step:    0.317 s
+    Total:       1.117 s
+  FPS: 44,772.1
+Testing 7 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0361 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0360 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0362 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0361 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.780 s
+    Env Step:    0.318 s
+    Total:       1.115 s
+  FPS: 44,825.1
+
+--- Testing 1 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0378 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0377 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0379 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0380 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0380 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.784 s
+    Env Step:    0.325 s
+    Total:       1.126 s
+  FPS: 44,409.4
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0382 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0380 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0381 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0379 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0379 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.784 s
+    Env Step:    0.325 s
+    Total:       1.126 s
+  FPS: 44,422.5
+Testing 8 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0383 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0382 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0383 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0383 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0381 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.788 s
+    Env Step:    0.328 s
+    Total:       1.132 s
+  FPS: 44,168.2
+
+--- Testing 1 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0401 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0397 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0396 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0396 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0396 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.789 s
+    Env Step:    0.334 s
+    Total:       1.139 s
+  FPS: 43,892.5
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0402 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0399 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0398 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0397 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0398 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.793 s
+    Env Step:    0.334 s
+    Total:       1.143 s
+  FPS: 43,744.9
+Testing 9 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0398 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0398 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0394 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0397 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0399 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.795 s
+    Env Step:    0.333 s
+    Total:       1.145 s
+  FPS: 43,677.8
+
+--- Testing 1 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0416 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0417 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0418 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0419 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0413 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+  Py Wall Clock:
+    Random Acts: 0.795 s
+    Env Step:    0.342 s
+    Total:       1.153 s
+  FPS: 43,348.0
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0414 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0410 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.0410 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0412 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0411 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0030 s
+
+  Py Wall Clock:
+    Random Acts: 0.785 s
+    Env Step:    0.339 s
+    Total:       1.140 s
+  FPS: 43,844.5
+Testing 10 agents with 1 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0413 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.0413 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0412 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 40000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.0408 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0031 s
+
+[Python Timing after 50000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.0411 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.789 s
+    Env Step:    0.340 s
+    Total:       1.145 s
+  FPS: 43,649.5
+
+--- Testing 16 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0152 s
+  cpp_engine_step: 0.0549 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0152 s
+  cpp_engine_step: 0.0561 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0548 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.510 s
+    Env Step:    0.260 s
+    Total:       0.781 s
+  FPS: 640,276.5
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0548 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0548 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0547 s
+  py_tensor_conversion: 0.0014 s
+  py_get_obs: 0.0033 s
+
+  Py Wall Clock:
+    Random Acts: 0.509 s
+    Env Step:    0.259 s
+    Total:       0.778 s
+  FPS: 642,804.3
+Testing 1 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0547 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0546 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0550 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0032 s
+
+  Py Wall Clock:
+    Random Acts: 0.511 s
+    Env Step:    0.259 s
+    Total:       0.779 s
+  FPS: 641,549.1
+
+--- Testing 16 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0708 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0151 s
+  cpp_engine_step: 0.0706 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0705 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.525 s
+    Env Step:    0.309 s
+    Total:       0.845 s
+  FPS: 591,947.1
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0711 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0707 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0706 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.528 s
+    Env Step:    0.309 s
+    Total:       0.847 s
+  FPS: 590,264.1
+Testing 2 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0707 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0705 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0708 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.528 s
+    Env Step:    0.310 s
+    Total:       0.849 s
+  FPS: 589,223.5
+
+--- Testing 16 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.0869 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0864 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0862 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.537 s
+    Env Step:    0.358 s
+    Total:       0.906 s
+  FPS: 552,080.8
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.0863 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0863 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0860 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.539 s
+    Env Step:    0.358 s
+    Total:       0.907 s
+  FPS: 551,135.0
+Testing 3 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0149 s
+  cpp_engine_step: 0.0867 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0865 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0150 s
+  cpp_engine_step: 0.0864 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.545 s
+    Env Step:    0.359 s
+    Total:       0.915 s
+  FPS: 546,485.4
+
+--- Testing 16 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1022 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1017 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1014 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.547 s
+    Env Step:    0.406 s
+    Total:       0.964 s
+  FPS: 518,588.0
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1022 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1019 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1015 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.550 s
+    Env Step:    0.406 s
+    Total:       0.967 s
+  FPS: 517,145.3
+Testing 4 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1016 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1018 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1017 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.550 s
+    Env Step:    0.406 s
+    Total:       0.966 s
+  FPS: 517,513.9
+
+--- Testing 16 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1169 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0033 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1169 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0143 s
+  cpp_engine_step: 0.1169 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.558 s
+    Env Step:    0.452 s
+    Total:       1.020 s
+  FPS: 490,040.3
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1177 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1172 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1171 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.556 s
+    Env Step:    0.454 s
+    Total:       1.021 s
+  FPS: 489,818.4
+Testing 5 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1174 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1168 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1172 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.558 s
+    Env Step:    0.453 s
+    Total:       1.021 s
+  FPS: 489,864.6
+
+--- Testing 16 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1321 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1320 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1319 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.569 s
+    Env Step:    0.500 s
+    Total:       1.079 s
+  FPS: 463,185.1
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1320 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1316 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1315 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.566 s
+    Env Step:    0.499 s
+    Total:       1.076 s
+  FPS: 464,856.6
+Testing 6 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1319 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1315 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1322 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.569 s
+    Env Step:    0.500 s
+    Total:       1.080 s
+  FPS: 463,132.8
+
+--- Testing 16 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1472 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1464 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1458 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.577 s
+    Env Step:    0.545 s
+    Total:       1.133 s
+  FPS: 441,255.1
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1487 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1463 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1468 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.579 s
+    Env Step:    0.549 s
+    Total:       1.138 s
+  FPS: 439,209.0
+Testing 7 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1472 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1464 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0144 s
+  cpp_engine_step: 0.1464 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.576 s
+    Env Step:    0.546 s
+    Total:       1.132 s
+  FPS: 441,777.3
+
+--- Testing 16 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1609 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1609 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1609 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0037 s
+
+  Py Wall Clock:
+    Random Acts: 0.594 s
+    Env Step:    0.593 s
+    Total:       1.197 s
+  FPS: 417,641.8
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1616 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1614 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1610 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.594 s
+    Env Step:    0.593 s
+    Total:       1.197 s
+  FPS: 417,641.0
+Testing 8 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1615 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1606 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1610 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.592 s
+    Env Step:    0.592 s
+    Total:       1.194 s
+  FPS: 418,641.0
+
+--- Testing 16 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1777 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1767 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1768 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.611 s
+    Env Step:    0.642 s
+    Total:       1.264 s
+  FPS: 395,657.9
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1775 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1773 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1774 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.609 s
+    Env Step:    0.643 s
+    Total:       1.263 s
+  FPS: 395,920.4
+Testing 9 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0145 s
+  cpp_engine_step: 0.1779 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1778 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1770 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0034 s
+
+  Py Wall Clock:
+    Random Acts: 0.613 s
+    Env Step:    0.644 s
+    Total:       1.268 s
+  FPS: 394,401.5
+
+--- Testing 16 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0146 s
+  cpp_engine_step: 0.1928 s
+  py_tensor_conversion: 0.0017 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1920 s
+  py_tensor_conversion: 0.0017 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1919 s
+  py_tensor_conversion: 0.0017 s
+  py_get_obs: 0.0035 s
+
+  Py Wall Clock:
+    Random Acts: 0.622 s
+    Env Step:    0.690 s
+    Total:       1.323 s
+  FPS: 377,959.3
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1923 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1924 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0035 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1924 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.623 s
+    Env Step:    0.691 s
+    Total:       1.325 s
+  FPS: 377,271.0
+Testing 10 agents with 16 parallel envs...
+[Python Timing after 10000 steps]
+  py_flatten_actions: 0.0148 s
+  cpp_engine_step: 0.1926 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0037 s
+
+[Python Timing after 20000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1920 s
+  py_tensor_conversion: 0.0015 s
+  py_get_obs: 0.0036 s
+
+[Python Timing after 30000 steps]
+  py_flatten_actions: 0.0147 s
+  cpp_engine_step: 0.1919 s
+  py_tensor_conversion: 0.0016 s
+  py_get_obs: 0.0036 s
+
+  Py Wall Clock:
+    Random Acts: 0.622 s
+    Env Step:    0.690 s
+    Total:       1.323 s
+  FPS: 377,813.1
+
+--- Testing 128 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.078 s
+    Env Step:    0.115 s
+    Total:       0.195 s
+  FPS: 2,568,716.7
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.079 s
+    Env Step:    0.116 s
+    Total:       0.196 s
+  FPS: 2,551,815.1
+Testing 1 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.078 s
+    Env Step:    0.116 s
+    Total:       0.195 s
+  FPS: 2,563,452.7
+
+--- Testing 128 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.093 s
+    Env Step:    0.169 s
+    Total:       0.263 s
+  FPS: 1,900,364.8
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.168 s
+    Total:       0.262 s
+  FPS: 1,909,732.5
+Testing 2 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.093 s
+    Env Step:    0.168 s
+    Total:       0.262 s
+  FPS: 1,905,760.7
+
+--- Testing 128 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.101 s
+    Env Step:    0.220 s
+    Total:       0.323 s
+  FPS: 1,546,042.4
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.102 s
+    Env Step:    0.221 s
+    Total:       0.324 s
+  FPS: 1,543,829.4
+Testing 3 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.102 s
+    Env Step:    0.221 s
+    Total:       0.324 s
+  FPS: 1,543,565.8
+
+--- Testing 128 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.110 s
+    Env Step:    0.272 s
+    Total:       0.384 s
+  FPS: 1,303,450.8
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.110 s
+    Env Step:    0.273 s
+    Total:       0.384 s
+  FPS: 1,302,144.2
+Testing 4 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.110 s
+    Env Step:    0.274 s
+    Total:       0.386 s
+  FPS: 1,296,417.0
+
+--- Testing 128 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.118 s
+    Env Step:    0.327 s
+    Total:       0.446 s
+  FPS: 1,119,981.1
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.117 s
+    Env Step:    0.327 s
+    Total:       0.446 s
+  FPS: 1,120,736.0
+Testing 5 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.117 s
+    Env Step:    0.328 s
+    Total:       0.447 s
+  FPS: 1,118,674.4
+
+--- Testing 128 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.125 s
+    Env Step:    0.380 s
+    Total:       0.507 s
+  FPS: 987,087.4
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.126 s
+    Env Step:    0.380 s
+    Total:       0.508 s
+  FPS: 984,669.3
+Testing 6 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.127 s
+    Env Step:    0.385 s
+    Total:       0.513 s
+  FPS: 975,065.1
+
+--- Testing 128 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.133 s
+    Env Step:    0.431 s
+    Total:       0.565 s
+  FPS: 884,329.9
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.133 s
+    Env Step:    0.432 s
+    Total:       0.567 s
+  FPS: 881,616.6
+Testing 7 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.133 s
+    Env Step:    0.430 s
+    Total:       0.564 s
+  FPS: 885,869.6
+
+--- Testing 128 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.140 s
+    Env Step:    0.484 s
+    Total:       0.626 s
+  FPS: 798,484.0
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.140 s
+    Env Step:    0.483 s
+    Total:       0.625 s
+  FPS: 800,024.1
+Testing 8 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.140 s
+    Env Step:    0.485 s
+    Total:       0.627 s
+  FPS: 798,002.3
+
+--- Testing 128 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.147 s
+    Env Step:    0.531 s
+    Total:       0.679 s
+  FPS: 736,082.7
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.146 s
+    Env Step:    0.532 s
+    Total:       0.680 s
+  FPS: 735,304.2
+Testing 9 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.146 s
+    Env Step:    0.531 s
+    Total:       0.679 s
+  FPS: 736,478.2
+
+--- Testing 128 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.154 s
+    Env Step:    0.582 s
+    Total:       0.737 s
+  FPS: 678,526.5
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.153 s
+    Env Step:    0.580 s
+    Total:       0.735 s
+  FPS: 679,936.8
+Testing 10 agents with 128 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.153 s
+    Env Step:    0.579 s
+    Total:       0.734 s
+  FPS: 681,330.4
+
+--- Testing 256 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.046 s
+    Env Step:    0.121 s
+    Total:       0.168 s
+  FPS: 2,974,871.4
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.046 s
+    Env Step:    0.132 s
+    Total:       0.179 s
+  FPS: 2,798,573.7
+Testing 1 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.046 s
+    Env Step:    0.122 s
+    Total:       0.169 s
+  FPS: 2,966,408.2
+
+--- Testing 256 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.056 s
+    Env Step:    0.175 s
+    Total:       0.232 s
+  FPS: 2,159,441.8
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.056 s
+    Env Step:    0.175 s
+    Total:       0.231 s
+  FPS: 2,161,834.1
+Testing 2 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.056 s
+    Env Step:    0.175 s
+    Total:       0.231 s
+  FPS: 2,160,870.2
+
+--- Testing 256 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.063 s
+    Env Step:    0.229 s
+    Total:       0.293 s
+  FPS: 1,707,675.9
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.063 s
+    Env Step:    0.229 s
+    Total:       0.292 s
+  FPS: 1,709,356.6
+Testing 3 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.063 s
+    Env Step:    0.230 s
+    Total:       0.294 s
+  FPS: 1,701,582.7
+
+--- Testing 256 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.281 s
+    Total:       0.352 s
+  FPS: 1,421,917.1
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.281 s
+    Total:       0.351 s
+  FPS: 1,424,162.5
+Testing 4 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.070 s
+    Env Step:    0.282 s
+    Total:       0.353 s
+  FPS: 1,417,290.8
+
+--- Testing 256 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.077 s
+    Env Step:    0.336 s
+    Total:       0.414 s
+  FPS: 1,208,587.8
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.077 s
+    Env Step:    0.336 s
+    Total:       0.414 s
+  FPS: 1,208,494.9
+Testing 5 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.077 s
+    Env Step:    0.335 s
+    Total:       0.413 s
+  FPS: 1,209,445.5
+
+--- Testing 256 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.084 s
+    Env Step:    0.388 s
+    Total:       0.473 s
+  FPS: 1,057,081.8
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.084 s
+    Env Step:    0.388 s
+    Total:       0.472 s
+  FPS: 1,058,858.3
+Testing 6 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.084 s
+    Env Step:    0.389 s
+    Total:       0.473 s
+  FPS: 1,056,899.6
+
+--- Testing 256 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.090 s
+    Env Step:    0.438 s
+    Total:       0.529 s
+  FPS: 944,510.5
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.090 s
+    Env Step:    0.439 s
+    Total:       0.530 s
+  FPS: 943,564.0
+Testing 7 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.090 s
+    Env Step:    0.438 s
+    Total:       0.529 s
+  FPS: 945,807.7
+
+--- Testing 256 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.097 s
+    Env Step:    0.491 s
+    Total:       0.590 s
+  FPS: 848,082.1
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.097 s
+    Env Step:    0.490 s
+    Total:       0.588 s
+  FPS: 850,052.1
+Testing 8 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.097 s
+    Env Step:    0.491 s
+    Total:       0.589 s
+  FPS: 849,382.7
+
+--- Testing 256 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.104 s
+    Env Step:    0.548 s
+    Total:       0.653 s
+  FPS: 765,790.7
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.104 s
+    Env Step:    0.547 s
+    Total:       0.652 s
+  FPS: 767,133.0
+Testing 9 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.104 s
+    Env Step:    0.548 s
+    Total:       0.652 s
+  FPS: 766,594.0
+
+--- Testing 256 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.111 s
+    Env Step:    0.602 s
+    Total:       0.715 s
+  FPS: 699,744.2
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.111 s
+    Env Step:    0.599 s
+    Total:       0.710 s
+  FPS: 703,805.3
+Testing 10 agents with 256 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.111 s
+    Env Step:    0.599 s
+    Total:       0.711 s
+  FPS: 703,207.0
+
+--- Testing 1024 envs, 1 agents (centralized, state=True) ---
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.016 s
+    Env Step:    0.116 s
+    Total:       0.132 s
+  FPS: 3,786,702.5
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.016 s
+    Env Step:    0.116 s
+    Total:       0.132 s
+  FPS: 3,784,371.2
+Testing 1 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.016 s
+    Env Step:    0.117 s
+    Total:       0.133 s
+  FPS: 3,766,032.6
+
+--- Testing 1024 envs, 2 agents (centralized, state=True) ---
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.183 s
+    Total:       0.208 s
+  FPS: 2,404,364.0
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.182 s
+    Total:       0.207 s
+  FPS: 2,408,263.1
+Testing 2 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.025 s
+    Env Step:    0.183 s
+    Total:       0.208 s
+  FPS: 2,405,853.8
+
+--- Testing 1024 envs, 3 agents (centralized, state=True) ---
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.032 s
+    Env Step:    0.250 s
+    Total:       0.282 s
+  FPS: 1,773,595.0
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.032 s
+    Env Step:    0.249 s
+    Total:       0.282 s
+  FPS: 1,774,189.6
+Testing 3 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.032 s
+    Env Step:    0.250 s
+    Total:       0.282 s
+  FPS: 1,772,104.7
+
+--- Testing 1024 envs, 4 agents (centralized, state=True) ---
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.040 s
+    Env Step:    0.323 s
+    Total:       0.362 s
+  FPS: 1,378,898.1
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.040 s
+    Env Step:    0.322 s
+    Total:       0.362 s
+  FPS: 1,378,717.5
+Testing 4 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.040 s
+    Env Step:    0.323 s
+    Total:       0.362 s
+  FPS: 1,378,813.0
+
+--- Testing 1024 envs, 5 agents (centralized, state=True) ---
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.049 s
+    Env Step:    0.403 s
+    Total:       0.452 s
+  FPS: 1,105,311.4
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.048 s
+    Env Step:    0.400 s
+    Total:       0.449 s
+  FPS: 1,113,223.4
+Testing 5 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.048 s
+    Env Step:    0.399 s
+    Total:       0.448 s
+  FPS: 1,115,682.3
+
+--- Testing 1024 envs, 6 agents (centralized, state=True) ---
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.057 s
+    Env Step:    0.488 s
+    Total:       0.546 s
+  FPS: 915,944.4
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.057 s
+    Env Step:    0.490 s
+    Total:       0.547 s
+  FPS: 913,282.8
+Testing 6 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.057 s
+    Env Step:    0.487 s
+    Total:       0.545 s
+  FPS: 917,731.4
+
+--- Testing 1024 envs, 7 agents (centralized, state=True) ---
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.066 s
+    Env Step:    0.575 s
+    Total:       0.642 s
+  FPS: 778,948.9
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.067 s
+    Env Step:    0.578 s
+    Total:       0.645 s
+  FPS: 774,913.8
+Testing 7 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.067 s
+    Env Step:    0.576 s
+    Total:       0.643 s
+  FPS: 777,715.4
+
+--- Testing 1024 envs, 8 agents (centralized, state=True) ---
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.668 s
+    Total:       0.743 s
+  FPS: 672,815.7
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.664 s
+    Total:       0.739 s
+  FPS: 676,496.3
+Testing 8 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.075 s
+    Env Step:    0.666 s
+    Total:       0.741 s
+  FPS: 674,497.5
+
+--- Testing 1024 envs, 9 agents (centralized, state=True) ---
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.084 s
+    Env Step:    0.741 s
+    Total:       0.825 s
+  FPS: 605,346.8
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.084 s
+    Env Step:    0.743 s
+    Total:       0.827 s
+  FPS: 604,188.5
+Testing 9 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.084 s
+    Env Step:    0.744 s
+    Total:       0.828 s
+  FPS: 603,637.5
+
+--- Testing 1024 envs, 10 agents (centralized, state=True) ---
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.829 s
+    Total:       0.921 s
+  FPS: 542,402.6
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.826 s
+    Total:       0.918 s
+  FPS: 544,082.6
+Testing 10 agents with 1024 parallel envs...
+  Py Wall Clock:
+    Random Acts: 0.092 s
+    Env Step:    0.826 s
+    Total:       0.918 s
+  FPS: 544,437.4
+
+Speedtest complete. Plot saved to laptop_speedtest/serial_speedtest_results_centralized_state.png and raw arrays to serial_speedtest_results_centralized_state_raw.npy

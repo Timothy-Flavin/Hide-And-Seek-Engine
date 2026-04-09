@@ -54,20 +54,20 @@ class CustomReplayBuffer:
         self.n_agents = n_agents
         self.device = device
 
-        self.spatial_obs = torch.zeros(
+        self.spatial_obs = torch.empty(
             (capacity, *spatial_shape), dtype=torch.float32, pin_memory=True
         ).contiguous()
-        self.internal_obs = torch.zeros(
+        self.internal_obs = torch.empty(
             (capacity, *internal_dim), dtype=torch.float32, pin_memory=True
         ).contiguous()
 
-        self.next_spatial_obs = torch.zeros_like(self.spatial_obs).contiguous()
-        self.next_internal_obs = torch.zeros_like(self.internal_obs).contiguous()
+        self.next_spatial_obs = torch.empty_like(self.spatial_obs).contiguous()
+        self.next_internal_obs = torch.empty_like(self.internal_obs).contiguous()
 
-        self.actions = torch.zeros((capacity, n_agents), dtype=torch.int64).contiguous()
+        self.actions = torch.empty((capacity, n_agents), dtype=torch.int64).contiguous()
         # Summed reward across agents per env for VDN
-        self.rewards = torch.zeros((capacity, 1), dtype=torch.float32).contiguous()
-        self.dones = torch.zeros((capacity, 1), dtype=torch.float32).contiguous()
+        self.rewards = torch.empty((capacity, 1), dtype=torch.float32).contiguous()
+        self.dones = torch.empty((capacity, 1), dtype=torch.float32).contiguous()
 
         self.pos = 0
         self.size = 0

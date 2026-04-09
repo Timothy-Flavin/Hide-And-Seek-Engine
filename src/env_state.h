@@ -238,7 +238,7 @@ public:
     int n_tile_types;
     int map_area;
 
-    EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types, Mode mode_value)
+    EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types, Mode mode_value, int init_mode)
         : n_agents(num_agents),
           n_pois(num_pois),
           n_tile_types(num_tile_types),
@@ -280,11 +280,15 @@ public:
         uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
         aligned_base = reinterpret_cast<uint8_t *>((raw_ptr + 255) & ~255);
 
-// First touch policy: Initialize memory in parallel to properly distribute across NUMA nodes
+        if (init_mode == 1) {
+            std::memset(aligned_base, 0, num_envs * env_stride);
+        } else {
+            // First touch policy: Initialize memory in parallel to properly distribute across NUMA nodes
 #pragma omp parallel for schedule(static)
-        for (int e = 0; e < num_envs; ++e)
-        {
-            std::memset(aligned_base + (e * env_stride), 0, env_stride);
+            for (int e = 0; e < num_envs; ++e)
+            {
+                std::memset(aligned_base + (e * env_stride), 0, env_stride);
+            }
         }
     }
 

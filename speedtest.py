@@ -55,6 +55,7 @@ def run_speedtest(
     assets: dict[str, str],
     mode: str,
     requires_state: bool,
+    init_mode: str,
 ) -> float:
     print(f"Testing {num_agents} agents with {num_envs} parallel envs...")
 
@@ -69,6 +70,7 @@ def run_speedtest(
         survivors_json=assets["survivors_json"],
         mode=mode,
         requires_state=requires_state,
+        init_mode=init_mode,
     )
     # env.reset()
 
@@ -126,12 +128,20 @@ def main():
     parser.add_argument(
         "--requires_state", type=str, default="False", choices=["True", "False"]
     )
+    parser.add_argument(
+        "--init_mode", type=str, default="parallel_first_touch", choices=["parallel_first_touch", "serial"]
+    )
+    parser.add_argument(
+        "--exp_name", type=str, default="", help="Prefix for logging output files"
+    )
     args = parser.parse_args()
 
     mode = args.mode
     requires_state = args.requires_state == "True"
+    init_mode = args.init_mode
+    exp_name_prefix = f"{args.exp_name}_" if args.exp_name else ""
 
-    steps = 10_000_000
+    steps = 1_000_000
     env_counts = [1, 16, 128, 256, 1024]
     agent_counts = list(range(1, 11))
     num_runs = 3
@@ -144,7 +154,7 @@ def main():
 
     results_matrix = np.zeros((len(env_counts), len(agent_counts), num_runs))
 
-    os.makedirs("laptop_speedtest", exist_ok=True)
+    os.makedirs("Epyc_Tuning/env_configs", exist_ok=True)
 
     for env_idx, n_envs in enumerate(env_counts):
         if n_envs == 1:
@@ -157,14 +167,14 @@ def main():
             )
             for run_idx in range(num_runs):
                 fps = run_speedtest(
-                    n_envs, n_agents, steps, assets, mode, requires_state
+                    n_envs, n_agents, steps, assets, mode, requires_state, init_mode
                 )
                 results_matrix[env_idx, agent_idx, run_idx] = fps
 
     state_str = "state" if requires_state else "nostate"
-    base_name = f"speedtest_results_{mode}_{state_str}"
+    base_name = f"{exp_name_prefix}speedtest_results_{mode}_{state_str}"
 
-    np.save(os.path.join("laptop_speedtest", f"{base_name}_raw.npy"), results_matrix)
+    np.save(os.path.join("Epyc_Tuning/env_configs", f"{base_name}_raw.npy"), results_matrix)
 
     # Plotting
     plt.figure(figsize=(10, 6))
@@ -192,7 +202,7 @@ def main():
     plt.legend()
     plt.grid(True)
 
-    plot_path = os.path.join("laptop_speedtest", f"{base_name}.png")
+    plot_path = os.path.join("Epyc_Tuning/env_configs", f"{base_name}.png")
     plt.savefig(plot_path)
     print(
         f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to {base_name}_raw.npy"

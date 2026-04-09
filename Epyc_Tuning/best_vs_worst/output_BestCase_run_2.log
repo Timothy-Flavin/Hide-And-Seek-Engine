@@ -1,0 +1,13 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.11.7)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+global_step=16384, SPS=11440
+global_step=32768, SPS=14359
+global_step=49152, SPS=15630
+global_step=65536, SPS=16284
+Traceback (most recent call last):
+  File "/home/tflavin/Hide-And-Seek-Engine/cleanrl_ppo.py", line 289, in <module>
+    next_obs, rewards_raw, terminations, truncations, infos = env.step(move_actions, radio_actions)
+                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tflavin/anaconda3/lib/python3.11/site-packages/hide_and_seek_engine/env_wrapper.py", line 194, in step
+    self.env.step(move_act, radio_act)
+KeyboardInterrupt
