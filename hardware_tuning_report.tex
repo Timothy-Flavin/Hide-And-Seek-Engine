@@ -66,7 +66,7 @@ Combining a parallel C++ pipeline with PyTorch inherently induces thread thrashi
 Because raw throughput on shared AMD EPYC server nodes contains massive transient variance, individual performance metrics are frequently untrustworthy. To correct this, we standardized our hardware benchmarks utilizing a precise loop methodology:
 \begin{enumerate}
     \item \textbf{Length:} Every environment training simulation was explicitly standardized to \textbf{1,000,000 algorithmic steps}.
-    \item \textbf{Iteration:} Every hardware configuration was executed identically \textbf{three (3) times}.
+    \item \textbf{Iteration:} Every hardware configuration was executed identically \textbf{six (6) times}.
     \item \textbf{Burn-in Phase Filter:} The initial 5 seconds of \texttt{nvidia-smi} GPU utilization logging were cleanly dropped using \texttt{tail -n +6} to avoid incorporating initialization and memory allocation latency into hardware efficiency mappings. 
     \item \textbf{Statistical Aggregation:} Results were computed via a Python consolidation script measuring the \textbf{Mean $\pm$ Standard Deviation} of Steps Per Second (SPS) and GPU utilization across runs.
 \end{enumerate}
@@ -87,14 +87,14 @@ Because raw throughput on shared AMD EPYC server nodes contains massive transien
 \toprule
 \textbf{Configuration} & \textbf{Wait Policy} & \textbf{Torch Thr.} & \textbf{Affinity} & \textbf{SPS (mean $\pm$ std)} & \textbf{GPU Util (mean $\pm$ std)} \\
 \midrule
-\textbf{Control} (Default settings) & Default & 0 & N/A & 18,313 $\pm$ 453 & 39.7\% $\pm$ 1.0\% \\
-\textbf{Test A} (Thread Limit) & Default & 1 & N/A & 18,856 $\pm$ 131 & 38.5\% $\pm$ 0.9\% \\
-\textbf{Test B} (Yield Cores) & Passive & 0 & N/A & 17,775 $\pm$ 139 & 38.1\% $\pm$ 0.7\% \\
-\textbf{Test C} (Limit + Yield) & Passive & 1 & N/A & 18,909 $\pm$ 230 & 38.5\% $\pm$ 0.7\% \\
-\textbf{Aligned} (PCIe nodes) & Default & 1 & Aligned & 18,853 $\pm$ 176 & 38.2\% $\pm$ 0.3\% \\
-\textbf{Misaligned} (Cross-Fabric) & Default & 1 & Misaligned & 18,079 $\pm$ 151 & 39.6\% $\pm$ 0.7\% \\
-\textbf{BEST SCENARIO} (Aligned) & Default & 1 & Aligned & \textbf{18,853 $\pm$ 176} & \textbf{38.2\% $\pm$ 0.3\%} \\
-\textbf{WORST SCENARIO} (Misaligned) & Passive & 0 & Misaligned & 15,937 $\pm$ 453 & 46.3\% $\pm$ 16.0\% \\
+\textbf{Control} (Default settings) & Default & 0 & N/A & 18,379 $\pm$ 421 & 40.3\% $\pm$ 0.9\% \\
+\textbf{Test A} (Thread Limit) & Default & 1 & N/A & 18,829 $\pm$ 123 & 38.5\% $\pm$ 0.7\% \\
+\textbf{Test B} (Yield Cores) & Passive & 0 & N/A & 17,719 $\pm$ 173 & 37.3\% $\pm$ 1.1\% \\
+\textbf{Test C} (Limit + Yield) & Passive & 1 & N/A & \textbf{18,904 $\pm$ 168} & 38.4\% $\pm$ 0.7\% \\
+\textbf{Aligned} (PCIe nodes) & Default & 1 & Aligned & 18,889 $\pm$ 163 & 38.5\% $\pm$ 0.8\% \\
+\textbf{Misaligned} (Cross-Fabric) & Default & 1 & Misaligned & 18,133 $\pm$ 166 & 39.1\% $\pm$ 0.8\% \\
+\textbf{BEST SCENARIO} (Aligned + Test C) & Passive & 1 & Aligned & \textbf{18,904 $\pm$ 168} & 38.4\% $\pm$ 0.7\% \\
+\textbf{WORST SCENARIO} (Misaligned) & Default & 0 & Misaligned & 14,221 $\pm$ 1726 & 27.5\% $\pm$ 9.1\% \\
 \bottomrule
 \end{tabular}
 \caption{Hardware Optimization Result Matrix (*Note: Best/Worst scenarios ran on constrained 32-core subsets, demonstrating extreme per-core scaling efficiency).}

@@ -1,7 +1,7 @@
 import numpy as np
 import glob
 
-configs = ["Control", "Test_A", "Test_B", "Test_C", "Aligned", "Misaligned"]
+configs = ["Control", "Test_A", "Test_B", "Test_C", "Aligned", "Misaligned", "BestCase", "WorstCase"]
 
 print("Config | Mean SPS | Std SPS | Mean GPU | Std GPU")
 print("-" * 60)
@@ -13,8 +13,11 @@ for c in configs:
         try:
             with open(f"output_{c}_run_{i}.log", "r") as f:
                 lines = f.readlines()
-                sps_line = [l for l in lines[-10:] if "SPS=" in l][-1]
-                sps_vals.append(float(sps_line.split("SPS=")[1].strip()))
+                # filter out empty line and grab the SPS
+                sps_lines = [l for l in lines[-15:] if "SPS=" in l]
+                if sps_lines:
+                    sps_line = sps_lines[-1]
+                    sps_vals.append(float(sps_line.split("SPS=")[1].strip()))
         except:
             pass
         
