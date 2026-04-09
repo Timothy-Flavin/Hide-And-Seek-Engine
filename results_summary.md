@@ -15,20 +15,20 @@
 
 ## Phase 2: PyTorch + C++ Integration Benchmarks
 **Objective**: Measure end-to-end RL loop throughput.
-**Setup**: 100,000 steps testing using `cleanrl_ppo.py`.
+**Methodology**: To ensure trustworthy results due to high variance across node clusters, each hardware configuration was executed for **1,000,000 global steps**. Furthermore, each test was run **3 separate times**, and the first 5 seconds of GPU metrics during the initialization/burn-in phase were discarded. The reported throughput and utilization reflect the **mean $\pm$ standard deviation** across these 3 runs via the `consolidate_metrics.py` script.
 
 ### Hardware Optimization Result Matrix
 
-| Configuration Configuration                                          | OMP Wait Policy | Torch Threads | NUMA Alignment | Throughput (SPS) | Avg GPU Utilization |
-| :------------------------------------------------------------------- | :-------------: | :-----------: | :------------- | :--------------: | :-----------------: |
-| **Control** (Default settings)                                       |     Default     |       0       | N/A            |    **15,537**    |      **13.0%**      |
-| **Test A** (Thread Limit)                                            |     Default     |       1       | N/A            |    **15,800**    |      **13.7%**      |
-| **Test B** (Yield Cores)                                             |     Passive     |       0       | N/A            |    **15,830**    |      **20.0%**      |
-| **Test C** (Combined Thread Limit + Yield)                           |     Passive     |       1       | N/A            |    **17,055**    |      **17.2%**      |
-| **Aligned** (Bound to GPUs local PCIe CPU cores)                     |     Default     |       1       | Aligned        |    **16,656**    |      *(N/A)*        |
-| **Misaligned** (Bound across QPI/Infinity Fabric farthest from GPU)  |     Default     |       1       | Misaligned     |    **16,389**    |      *(N/A)*        |
-| 🏆 **BEST SECENARIO** (Aligned CPUs + Combination Test C)             |     Passive     |       1       | Aligned        |    **14,840***   |      **44.8%**      |
-| 🐌 **WORST SCENARIO** (Misaligned CPUs + Control Settings)            |     Default     |       0       | Misaligned     |    **14,186***   |      **17.4%**      |
+| Configuration Scenario | OMP Wait Policy | Torch Threads | NUMA Alignment | Throughput (SPS) | Avg GPU Utilization |
+| :--- | :---: | :---: | :--- | :---: | :---: |
+| **Control** (Default settings) | Default | 0 | N/A | **18,313 ± 453.3** | **39.7% ± 1.0%** |
+| **Test A** (Thread Limit) | Default | 1 | N/A | **18,856 ± 131.9** | **38.5% ± 0.9%** |
+| **Test B** (Yield Cores) | Passive | 0 | N/A | **17,775 ± 139.0** | **38.1% ± 0.7%** |
+| **Test C** (Combined Thread Limit + Yield) | Passive | 1 | N/A | **18,909 ± 230.5** | **38.5% ± 0.7%** |
+| **Aligned** (Bound to GPUs local PCIe CPU cores) | Default | 1 | Aligned | **18,853 ± 176.7** | **38.2% ± 0.3%** |
+| **Misaligned** (Bound across Fabric farthest from GPU) | Default | 1 | Misaligned | **18,079 ± 151.0** | **39.6% ± 0.7%** |
+| 🏆 **BEST SCENARIO** (Aligned CPUs + Test A) | Default | 1 | Aligned | **18,853 ± 176.7** | **38.2% ± 0.3%** |
+| 🐌 **WORST SCENARIO** (Misaligned CPUs + Test B) | Passive | 0 | Misaligned | **15,937 ± 453.2** | **46.3% ± 16.0%** |
 
 *\* Absolute numbers between testing batches depend on simultaneous background server node limits however relative gaps and GPU saturation remains consistent mapping alignment + threading yields*
 

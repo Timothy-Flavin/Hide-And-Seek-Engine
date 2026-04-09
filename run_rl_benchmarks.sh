@@ -1,5 +1,5 @@
 #!/bin/bash
-TOTAL_STEPS=100000
+TOTAL_STEPS=1000000
 
 run_benchmark() {
     local name="$1"
@@ -13,15 +13,19 @@ run_benchmark() {
         unset OMP_WAIT_POLICY
     fi
     
-    # Monitor GPU usage
-    nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits -l 1 > "gpu_util_${name}.log" &
-    NVIDIA_PID=$!
-    
-    python cleanrl_ppo.py --total-timesteps=$TOTAL_STEPS --torch-threads=$torch_threads
-    
-    kill $NVIDIA_PID
-    avg_gpu=$(awk '{ total += $1; count++ } END { print total/count }' gpu_util_${name}.log)
-    echo "Avg GPU Utilization for $name: ${avg_gpu}%"
+    for i in {4..6}; do
+        echo "  Run $i..."
+        # Monitor GPU usage
+        nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits -l 1 > "gpu_util_${name}_run_${i}.log" &
+        NVIDIA_PID=$!
+        
+        python cleanrl_ppo.py --total-timesteps=$TOTAL_STEPS --torch-threads=$torch_threads > "output_${name}_run_${i}.log" 2>&1
+        
+        kill $NVIDIA_PID 2>/dev/null
+        avg_gpu=$(tail -n +6 "gpu_util_${name}_run_${i}.log" | awk '{ total += $1; count++ } END { print (count > 0 ? total/count : 0) }')
+        sps=$(tail -n 10 "output_${name}_run_${i}.log" | grep "SPS=" | tail -n 1 | awk -F'SPS=' '{print $2}')
+        echo "  End Run $i: SPS=$sps, GPU=${avg_gpu}%"
+    done
     echo "----------------------------------------"
 }
 
