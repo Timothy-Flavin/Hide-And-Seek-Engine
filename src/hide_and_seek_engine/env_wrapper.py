@@ -30,7 +30,7 @@ class SARBatchedGridEnv:
         self.device = device
         self.requires_state = requires_state
         self.render_initialized = False
-        
+
         self.steps_taken = 0
         self.t_py_flatten = 0.0
         self.t_cpp_step = 0.0
@@ -50,7 +50,7 @@ class SARBatchedGridEnv:
         # 2. Allocate contiguous PyTorch memory for zero-copy C++ updates
         # Pinned memory ensures fast transfer if the user later shifts these to a GPU
         if self.mode_val == 0:  # DECENTRALIZED
-            self.obs_spatial = torch.zeros(
+            self.obs_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.config.n_agents,
@@ -61,13 +61,13 @@ class SARBatchedGridEnv:
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.obs_internal = torch.zeros(
+            self.obs_internal = torch.empty(
                 (self.num_envs, self.config.n_agents, self.agent_internal_dim),
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
         else:  # CENTRALIZED or NO_OBS
-            self.obs_spatial = torch.zeros(
+            self.obs_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.spatial_channels,
@@ -77,14 +77,14 @@ class SARBatchedGridEnv:
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.obs_internal = torch.zeros(
+            self.obs_internal = torch.empty(
                 (self.num_envs, self.config.n_agents, self.agent_internal_dim),
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
 
         if self.requires_state:
-            self.state_spatial = torch.zeros(
+            self.state_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.spatial_channels,
@@ -94,7 +94,7 @@ class SARBatchedGridEnv:
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.state_internal = torch.zeros(
+            self.state_internal = torch.empty(
                 (self.num_envs, self.config.n_agents * 6 + self.config.n_pois * 4),
                 dtype=torch.float32,
                 pin_memory=True,
@@ -103,17 +103,17 @@ class SARBatchedGridEnv:
             self.state_spatial = torch.empty(0)
             self.state_internal = torch.empty(0)
 
-        self.rewards = torch.zeros(
+        self.rewards = torch.empty(
             (self.num_envs, self.config.n_agents),
             dtype=torch.float32,
             pin_memory=True,
         ).contiguous()
-        self.terminated = torch.zeros(
+        self.terminated = torch.empty(
             (self.num_envs,),
             dtype=torch.bool,
             pin_memory=True,
         ).contiguous()
-        self.truncated = torch.zeros(
+        self.truncated = torch.empty(
             (self.num_envs,),
             dtype=torch.bool,
             pin_memory=True,
@@ -181,7 +181,7 @@ class SARBatchedGridEnv:
         Takes move_actions [num_envs, n_agents, 2] and radio_actions [num_envs, n_agents]
         """
         t0 = time.perf_counter()
-        
+
         # Ensure correct formatting for the pybind arrays. Use reshape(-1) to avoid copying memory!
         move_act = np.asarray(move_actions, dtype=np.float32).reshape(-1)
         radio_act = np.asarray(radio_actions, dtype=np.int32).reshape(-1)
@@ -200,17 +200,17 @@ class SARBatchedGridEnv:
             rewards = rewards.to(self.device)
             terminated = terminated.to(self.device)
             truncated = truncated.to(self.device)
-            
+
         t3 = time.perf_counter()
         obs = self._get_obs_dict()
         t4 = time.perf_counter()
-        
+
         self.steps_taken += 1
-        self.t_py_flatten += (t1 - t0)
-        self.t_cpp_step += (t2 - t1)
-        self.t_py_tensor += (t3 - t2)
-        self.t_py_obs += (t4 - t3)
-        
+        self.t_py_flatten += t1 - t0
+        self.t_cpp_step += t2 - t1
+        self.t_py_tensor += t3 - t2
+        self.t_py_obs += t4 - t3
+
         if self.steps_taken % 10000 == 0:
             print(f"[Python Timing after {self.steps_taken} steps]")
             print(f"  py_flatten_actions: {self.t_py_flatten:.4f} s")

@@ -51,6 +51,13 @@ private:
     float *individual_rewards = nullptr;
     uint8_t *env_terminated = nullptr;
     uint8_t *env_truncated = nullptr;
+
+    // Padded buffers to completely prevent false sharing during parallel execution
+    std::vector<float> padded_rewards;
+    std::vector<uint8_t> padded_terminated;
+    std::vector<uint8_t> padded_truncated;
+    int padded_reward_stride;
+    int padded_byte_stride;
     // std::vector<float> global_rewards;
     std::vector<EnvStateView> env_views;
     std::vector<int> type_map;
@@ -187,16 +194,18 @@ private:
                             t.set_global_observed();
                             (*view.undiscovered_remaining)--;
                             // Add reward (assume 'rewards' is an accessible class member or passed ref)
-                            individual_rewards[e * n_agents + a] += reward_new_tile;
+                            padded_rewards[e * padded_reward_stride + a] += reward_new_tile;
                             newly_global = true;
                         }
 
                         // Local observation tracking
                         if constexpr (M == Mode::DECENTRALIZED)
                         {
-                            if (!t.has_agent_seen(a)) {
+                            if (!t.has_agent_seen(a))
+                            {
                                 t.set_agent_seen(a);
-                                if (torch_obs_spatial_base != nullptr) {
+                                if (torch_obs_spatial_base != nullptr)
+                                {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                     float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
@@ -208,8 +217,10 @@ private:
                         }
                         else if constexpr (M == Mode::CENTRALIZED)
                         {
-                            if (newly_global) {
-                                if (torch_obs_spatial_base != nullptr) {
+                            if (newly_global)
+                            {
+                                if (torch_obs_spatial_base != nullptr)
+                                {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                     float *spat_base = torch_obs_spatial_base + e * spatial_stride;
@@ -217,8 +228,10 @@ private:
                                     spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
                                     spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
                                 }
-                                if constexpr (ReqState) {
-                                    if (torch_state_spatial_base != nullptr) {
+                                if constexpr (ReqState)
+                                {
+                                    if (torch_state_spatial_base != nullptr)
+                                    {
                                         ssize_t map_area = width * height;
                                         ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                         float *spat_base = torch_state_spatial_base + e * spatial_stride;
@@ -231,8 +244,10 @@ private:
                         }
                         else if constexpr (M == Mode::NO_OBS)
                         {
-                            if constexpr (ReqState) {
-                                if (newly_global && torch_state_spatial_base != nullptr) {
+                            if constexpr (ReqState)
+                            {
+                                if (newly_global && torch_state_spatial_base != nullptr)
+                                {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                     float *spat_base = torch_state_spatial_base + e * spatial_stride;
@@ -261,14 +276,14 @@ private:
                     if (!poi.found)
                     {
                         poi.found = 1;
-                        individual_rewards[e * n_agents + a] += reward_found;
+                        padded_rewards[e * padded_reward_stride + a] += reward_found;
                     }
- 
+
                     // Attempt Rescue
                     if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
                     {
                         poi.saved = 1;
-                         individual_rewards[e * n_agents + a] += reward_saved;
+                        padded_rewards[e * padded_reward_stride + a] += reward_saved;
                     }
 
                     // Update Local Beliefs
@@ -298,18 +313,24 @@ private:
     {
         if (mode == Mode::DECENTRALIZED)
         {
-            if (requires_state) resolve_local_interactions_impl<Mode::DECENTRALIZED, true>(e);
-            else resolve_local_interactions_impl<Mode::DECENTRALIZED, false>(e);
+            if (requires_state)
+                resolve_local_interactions_impl<Mode::DECENTRALIZED, true>(e);
+            else
+                resolve_local_interactions_impl<Mode::DECENTRALIZED, false>(e);
         }
         else if (mode == Mode::CENTRALIZED)
         {
-            if (requires_state) resolve_local_interactions_impl<Mode::CENTRALIZED, true>(e);
-            else resolve_local_interactions_impl<Mode::CENTRALIZED, false>(e);
+            if (requires_state)
+                resolve_local_interactions_impl<Mode::CENTRALIZED, true>(e);
+            else
+                resolve_local_interactions_impl<Mode::CENTRALIZED, false>(e);
         }
         else // Mode::NO_OBS
         {
-            if (requires_state) resolve_local_interactions_impl<Mode::NO_OBS, true>(e);
-            else resolve_local_interactions_impl<Mode::NO_OBS, false>(e);
+            if (requires_state)
+                resolve_local_interactions_impl<Mode::NO_OBS, true>(e);
+            else
+                resolve_local_interactions_impl<Mode::NO_OBS, false>(e);
         }
     }
 
@@ -387,7 +408,8 @@ private:
                         if (t.has_agent_seen(a) && !t.has_agent_seen(target_agent))
                         {
                             t.set_agent_seen(target_agent);
-                            if (torch_obs_spatial_base != nullptr) {
+                            if (torch_obs_spatial_base != nullptr)
+                            {
                                 ssize_t map_area = width * height;
                                 ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
                                 float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
@@ -617,7 +639,7 @@ private:
         float *int_base = torch_state_internal_base + e * (n_agents * 6 + n_pois * 4);
 
         // UNMASKED Terrain already largely static, just update during discovery
-        
+
         // UNMASKED POIs (Any POI not yet saved)
         for (int p = 0; p < n_pois; ++p)
         {
@@ -745,6 +767,41 @@ public:
         env_terminated = reinterpret_cast<uint8_t *>(terminated_ptr);
         env_truncated = reinterpret_cast<uint8_t *>(truncated_ptr);
 
+        // Padded strides to align to 256 bytes per env to prevent false sharing
+        padded_reward_stride = std::max(64, static_cast<int>((n_agents * sizeof(float) + 255) / sizeof(float)));
+        padded_byte_stride = 256;
+        padded_rewards.resize(num_envs * padded_reward_stride, 0.0f);
+        padded_terminated.resize(num_envs * padded_byte_stride, 0);
+        padded_truncated.resize(num_envs * padded_byte_stride, 0);
+
+        // First-touch initialization for PyTorch tensors to ensure NUMA spreading
+        ssize_t spatial_channels = n_tiles + 3 + n_agents;
+        ssize_t obs_spatial_stride = (mode == Mode::DECENTRALIZED) ? (n_agents * spatial_channels * map_size) : (spatial_channels * map_size);
+        ssize_t obs_internal_stride = n_agents * 6;
+        ssize_t state_spatial_stride = spatial_channels * map_size;
+        ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
+
+#pragma omp parallel for schedule(static)
+        for (int e = 0; e < num_envs; ++e)
+        {
+            if (torch_obs_spatial_base)
+                std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+            if (torch_obs_internal_base)
+                std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
+            if (torch_state_spatial_base && requires_state)
+                std::memset(torch_state_spatial_base + e * state_spatial_stride, 0, state_spatial_stride * sizeof(float));
+            if (torch_state_internal_base && requires_state)
+                std::memset(torch_state_internal_base + e * state_internal_stride, 0, state_internal_stride * sizeof(float));
+            if (individual_rewards)
+                std::memset(individual_rewards + e * n_agents, 0, n_agents * sizeof(float));
+            if (env_terminated)
+                env_terminated[e] = 0;
+            if (env_truncated)
+                env_truncated[e] = 0;
+            padded_terminated[e * padded_byte_stride] = 0;
+            padded_truncated[e * padded_byte_stride] = 0;
+        }
+
         std::mt19937 base_rng(seed);
         for (int i = 0; i < num_envs; ++i)
         {
@@ -815,7 +872,7 @@ public:
 
             for (int step = 0; step < steps_to_take; ++step)
             {
-                if (env_terminated[e] || env_truncated[e])
+                if (padded_terminated[e * padded_byte_stride] || padded_truncated[e * padded_byte_stride])
                     reset_env(e);
 
                 for (int a = 0; a < n_agents; ++a)
@@ -833,8 +890,8 @@ public:
                 bool all_saved = (*env_views[e].poi_left == 0);
                 bool all_out_of_battery = (*env_views[e].agents_left == 0);
                 const bool timeout = current_frames[e] >= max_frames;
-                env_terminated[e] = all_saved || all_out_of_battery;
-                env_truncated[e] = timeout;
+                padded_terminated[e * padded_byte_stride] = all_saved || all_out_of_battery;
+                padded_truncated[e * padded_byte_stride] = timeout;
                 ++current_frames[e];
 
                 if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
@@ -852,8 +909,8 @@ public:
     void reset_env(int env_idx)
     {
         current_frames[env_idx] = 0;
-        env_terminated[env_idx] = false;
-        env_truncated[env_idx] = false;
+        padded_terminated[env_idx * padded_byte_stride] = false;
+        padded_truncated[env_idx * padded_byte_stride] = false;
 
         EnvStateView view = env_views[env_idx];
 
@@ -983,21 +1040,8 @@ public:
             reset_env(e);
     }
 
-    // Timing accumulators
-    inline static std::chrono::duration<double> t_process_movement{0};
-    inline static std::chrono::duration<double> t_resolve_interactions{0};
-    inline static std::chrono::duration<double> t_radio_logs{0};
-    inline static std::chrono::duration<double> t_update_counters{0};
-    inline static std::chrono::duration<double> t_post_processing{0};
-    inline static std::chrono::duration<double> t_fill_torch_obs{0};
-    inline static std::chrono::duration<double> t_fill_torch_state{0};
-    inline static std::chrono::duration<double> t_reset_time{0};
-    inline static std::chrono::duration<double> t_python_overhead{0};
-    inline static std::chrono::duration<double> t_total{0};
-
     void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
-        auto t_step_start = std::chrono::high_resolution_clock::now();
         // action space is box2d[dx, dy], discrete(num radio choices)
         if ((move_actions_array.ndim() != 1) || (radio_actions_array.ndim() != 1))
             throw std::invalid_argument("actions must have shape [E*A*2] for movement and [E*A] for radio");
@@ -1007,100 +1051,51 @@ public:
         const float *act_data = move_actions_array.data();
         const int *radio_act_data = radio_actions_array.data();
 
-        std::memset(individual_rewards, 0, num_envs * n_agents * sizeof(float));
-
-        auto t0 = std::chrono::high_resolution_clock::now();
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            auto t_reset_s = std::chrono::high_resolution_clock::now();
-            if (env_terminated[e] || env_truncated[e])
+            // Clear the 256-byte aligned local thread block instead of hitting the compact pyTorch array
+            std::memset(padded_rewards.data() + e * padded_reward_stride, 0, n_agents * sizeof(float));
+
+            if (padded_terminated[e * padded_byte_stride] || padded_truncated[e * padded_byte_stride])
                 reset_env(e);
 
-            // std::cout << "Env " << e << " process movement\n";
-            auto t1 = std::chrono::high_resolution_clock::now();
             process_agent_movement(e, act_data);
-            auto t2 = std::chrono::high_resolution_clock::now();
-            // std::cout << "Env " << e << " resolve interactions\n";
             resolve_local_interactions(e);
-            auto t3 = std::chrono::high_resolution_clock::now();
-            // std::cout << "Env " << e << " radio logs\n";
             execute_radio(e, radio_act_data);
-            auto t4 = std::chrono::high_resolution_clock::now();
-            // std::cout << "Env " << e << " update counters\n";
             update_battery_and_counters(e);
-            auto t5 = std::chrono::high_resolution_clock::now();
 
-            // std::cout << "Env " << e << " post processing\n";
             bool all_saved = (*env_views[e].poi_left == 0);
             bool all_out_of_battery = (*env_views[e].agents_left == 0);
             const bool timeout = current_frames[e] >= max_frames;
-            env_terminated[e] = all_saved || all_out_of_battery;
-            env_truncated[e] = timeout;
-            ++current_frames[e];
-            auto t6 = std::chrono::high_resolution_clock::now();
 
-            // If we are using this environment for machine learning
-            // then fill the torch buffers accordingly
-            // std::cout << "Env " << e << " fill torch\n";
+            padded_terminated[e * padded_byte_stride] = all_saved || all_out_of_battery;
+            padded_truncated[e * padded_byte_stride] = timeout;
+            ++current_frames[e];
+
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
             {
                 fill_torch_obs(e);
             }
-            auto t7 = std::chrono::high_resolution_clock::now();
             if (requires_state)
             {
                 fill_torch_state(e);
             }
-            auto t8 = std::chrono::high_resolution_clock::now();
+        }
 
-#pragma omp critical
+        // Sequential single-thread collection copies directly into the dense PyTorch contiguous buffers
+        // to prevent multi-core cache invalidation storms
+        for (int e = 0; e < num_envs; ++e)
+        {
+            env_terminated[e] = padded_terminated[e * padded_byte_stride];
+            env_truncated[e] = padded_truncated[e * padded_byte_stride];
+            for (int a = 0; a < n_agents; ++a)
             {
-                t_reset_time += (t1 - t_reset_s);
-                t_process_movement += (t2 - t1);
-                t_resolve_interactions += (t3 - t2);
-                t_radio_logs += (t4 - t3);
-                t_update_counters += (t5 - t4);
-                t_post_processing += (t6 - t5);
-                t_fill_torch_obs += (t7 - t6);
-                t_fill_torch_state += (t8 - t7);
+                individual_rewards[e * n_agents + a] = padded_rewards[e * padded_reward_stride + a];
             }
         }
-        auto t9 = std::chrono::high_resolution_clock::now();
-
-        auto t_step_end = std::chrono::high_resolution_clock::now();
-        t_total += (t_step_end - t_step_start);
-        t_python_overhead += (t0 - t_step_start) + (t_step_end - t9);
 
         ++steps_taken;
-        if (steps_taken % 10000 == 0)
-        {
-            std::cout << "[Timing after " << steps_taken << " steps]" << std::endl;
-            std::cout << "  process_agent_movement: " << t_process_movement.count() << " s" << std::endl;
-            std::cout << "  resolve_local_interactions: " << t_resolve_interactions.count() << " s" << std::endl;
-            std::cout << "  execute_radio: " << t_radio_logs.count() << " s" << std::endl;
-            std::cout << "  update_battery_and_counters: " << t_update_counters.count() << " s" << std::endl;
-            std::cout << "  post_processing: " << t_post_processing.count() << " s" << std::endl;
-            std::cout << "  fill_torch_obs: " << t_fill_torch_obs.count() << " s" << std::endl;
-            std::cout << "  fill_torch_state: " << t_fill_torch_state.count() << " s" << std::endl;
-            std::cout << "  reset_env: " << t_reset_time.count() << " s" << std::endl;
-            std::cout << "  python_overhead: " << t_python_overhead.count() << " s" << std::endl;
-            std::cout << "  TOTAL step() time: " << t_total.count() << " s" << std::endl;
-            std::cout << std::endl;
-        }
-        // Optionally reset timers if you want per-interval stats
-        //     t_process_movement = std::chrono::duration<double>(0);
-        //     t_resolve_interactions = std::chrono::duration<double>(0);
-        //     t_radio_logs = std::chrono::duration<double>(0);
-        //     t_update_counters = std::chrono::duration<double>(0);
-        //     t_post_processing = std::chrono::duration<double>(0);
-        //     t_fill_torch_obs = std::chrono::duration<double>(0);
-        //     t_fill_torch_state = std::chrono::duration<double>(0);
-        //     t_reset_time = std::chrono::duration<double>(0);
-        //     t_python_overhead = std::chrono::duration<double>(0);
-        //     t_total = std::chrono::duration<double>(0);
-        
-        return;
     }
 };
 
