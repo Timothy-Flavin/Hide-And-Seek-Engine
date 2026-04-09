@@ -25,7 +25,7 @@ def main():
             if result.returncode != 0:
                 print(f"Failed on {mode} state={state}")
                 sys.exit(1)
-            time.sleep(60)  # let the cpu cool down
+            time.sleep(1)  # let the cpu cool down
     print("\nAll speedtests completed successfully.")
 
 
