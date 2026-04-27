@@ -32,7 +32,7 @@ def generate_agents_json(num_agents: int) -> str:
         "altitude_max": 1.0,
         "base_speed": 2.0,
         "base_view": 5.0,
-        "battery": 150.0,
+        "battery": 150,
         "deployment_delay": 0.0,
         "rgb": [255, 224, 189],
         "terrain_speed": {"grass": 1.0, "water": 0.2, "mountain": 0.5},
@@ -154,7 +154,7 @@ def main():
 
     results_matrix = np.zeros((len(env_counts), len(agent_counts), num_runs))
 
-    os.makedirs("Epyc_Tuning/env_configs_epyc", exist_ok=True)
+    os.makedirs("Epyc_Tuning/env_configs_laptop_new", exist_ok=True)
 
     for env_idx, n_envs in enumerate(env_counts):
         if n_envs == 1:
@@ -174,7 +174,7 @@ def main():
     state_str = "state" if requires_state else "nostate"
     base_name = f"{exp_name_prefix}speedtest_results_{mode}_{state_str}"
 
-    np.save(os.path.join("Epyc_Tuning/env_configs_epyc", f"{base_name}_raw.npy"), results_matrix)
+    np.save(os.path.join("Epyc_Tuning/env_configs_laptop_new", f"{base_name}_raw.npy"), results_matrix)
 
     # Plotting
     plt.figure(figsize=(10, 6))
@@ -202,7 +202,7 @@ def main():
     plt.legend()
     plt.grid(True)
 
-    plot_path = os.path.join("Epyc_Tuning/env_configs_epyc", f"{base_name}.png")
+    plot_path = os.path.join("Epyc_Tuning/env_configs_laptop_new", f"{base_name}.png")
     plt.savefig(plot_path)
     print(
         f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to {base_name}_raw.npy"

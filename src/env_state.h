@@ -1,5 +1,4 @@
 #pragma once
-
 #include <cstdint>
 #include <vector>
 #include <cstddef>
@@ -88,7 +87,7 @@ struct CentralizedStateStrides
 //-------------------INTERNAL ENVIRONMENT DATA STRUCTURES------------------------
 
 // Tile responsibilities like type altitude and observed
-struct alignas(8) Tile
+struct Tile
 {
     uint32_t flags;
     float altitude;
@@ -149,55 +148,68 @@ struct alignas(8) Tile
 };
 
 // 1. Logically grouped AoS structures (Alignments ensure clean cache lines)
-struct alignas(16) AgentState
+struct AgentState
 {
-    float x;
-    float y;
-    float battery;
-    float view_range;
-    float deployment_remaining;
-    int type;
-    uint8_t stuck;
-    uint16_t current_tile;
-    int last_x;
-    int last_y;
-    int state_last_x;
-    int state_last_y;
+    float x;                    // 4 bytes
+    float y;                    // 4 bytes
+    float view_range;           // 4 bytes
+    float deployment_remaining; // 4 bytes
+    uint16_t last_x;            // 2 bytes
+    uint16_t last_y;            // 2 bytes
+    uint8_t stuck;              // 1 byte
+    uint8_t _padding[3];        // 3 bytes explicitly added to reach 24
 };
 
-struct alignas(16) POIState
+struct POIState
 {
     float x;
     float y;
-    uint32_t savable_by_mask; // Bitmask: (1 << agent_id) replaces bool array
-    uint8_t found;
-    uint8_t saved;
-    uint8_t moves;
-    int last_x;
-    int last_y;
-    int state_last_x;
-    int state_last_y;
+    // Bits 0-19: savable_by_mask
+    // Bit 20:    found
+    // Bit 21:    saved
+    // Bit 22:    moves (bool: does this POI move?)
+    uint32_t state;
+    uint16_t last_x;
+    uint16_t last_y;
+    // --- Accessors ---
+    // Agent Mask (0-19)
+    void set_savable(int id, bool v) { v ? state |= (1u << id) : state &= ~(1u << id); }
+    bool is_savable_by(int id) const { return (state >> id) & 1u; }
+
+    // Logic Flags (20-22)
+    void set_found(bool v) { v ? state |= (1u << 20) : state &= ~(1u << 20); }
+    bool is_found() const { return (state >> 20) & 1u; }
+
+    void set_saved(bool v) { v ? state |= (1u << 21) : state &= ~(1u << 21); }
+    bool is_saved() const { return (state >> 21) & 1u; }
+
+    void set_moves(bool v) { v ? state |= (1u << 22) : state &= ~(1u << 22); }
+    bool does_move() const { return (state >> 22) & 1u; }
 };
 
 // What Agent A knows about Agent B
-struct alignas(16) AgentKnowledge
+// AgentKnowledge: 14 bytes of data + 2 explicit padding bytes = 16 bytes total.
+struct AgentKnowledge
 {
-    float x;
-    float y;
-    uint8_t has_contact; // 0 = never seen/heard from, 1 = valid known location
-    int last_x;
-    int last_y;
+    float x;             // 4 bytes
+    float y;             // 4 bytes
+    uint16_t last_x;     // 2 bytes
+    uint16_t last_y;     // 2 bytes
+    uint8_t has_contact; // 1 byte
+    uint8_t is_stuck;    // 1 byte
+    uint8_t _padding[2]; // 2 bytes explicitly added to reach 16
 };
 
 // What Agent A knows about POI (Survivor) K
-struct alignas(16) POIKnowledge
+struct POIKnowledge
 {
-    float x;
-    float y;
-    uint8_t knows_found;
-    uint8_t knows_saved;
-    int last_x;
-    int last_y;
+    float x;             // 4 bytes
+    float y;             // 4 bytes
+    uint16_t last_x;     // 2 bytes
+    uint16_t last_y;     // 2 bytes
+    uint8_t knows_found; // 1 byte
+    uint8_t knows_saved; // 1 byte
+    uint8_t _padding[2]; // 2 bytes explicitly added to reach 16
 };
 
 // 2. The View Struct: Maps to the contiguous flat memory
@@ -227,6 +239,13 @@ enum Mode
 
 class EnvironmentArena
 {
+private:
+    // Helper to align memory offsets to specific boundaries (used only for env boundaries now)
+    static constexpr size_t align_up(size_t val, size_t alignment)
+    {
+        return (val + alignment - 1) & ~(alignment - 1);
+    }
+
 public:
     std::vector<uint8_t> memory;
     uint8_t *aligned_base;
@@ -238,52 +257,58 @@ public:
     int n_tile_types;
     int map_area;
 
-    EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types, Mode mode_value, int init_mode)
-        : n_agents(num_agents),
-          n_pois(num_pois),
-          n_tile_types(num_tile_types),
-          map_area(w * h),
-          mode(mode_value)
-    {
-        // Calculate the exact memory footprint of each component for a single environment
-        size_t grid_bytes = map_area * sizeof(Tile);
-        size_t agent_bytes = n_agents * sizeof(AgentState);
-        size_t poi_bytes = n_pois * sizeof(POIState);
-        size_t speed_bytes = (n_agents * n_tile_types) * sizeof(float);
+    // Cache internal offset locations for blazing fast get_env_view calls
+    size_t offset_agents, offset_pois, offset_speeds, offset_agent_know, offset_poi_know, offset_counters;
 
-        size_t agent_knowledge_bytes = 0;
-        size_t poi_knowledge_bytes = 0;
+    EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types, Mode mode_value, int init_mode)
+        : n_agents(num_agents), n_pois(num_pois), n_tile_types(num_tile_types), map_area(w * h), mode(mode_value)
+    {
+        size_t current_offset = 0;
+
+        // Grid (starts at 0)
+        current_offset += map_area * sizeof(Tile);
+
+        // Tightly pack the arrays back-to-back.
+        // No internal padding needed because all sizes are multiples of 4.
+        offset_agents = current_offset;
+        current_offset += n_agents * sizeof(AgentState);
+
+        offset_pois = current_offset;
+        current_offset += n_pois * sizeof(POIState);
+
+        offset_speeds = current_offset;
+        current_offset += (n_agents * n_tile_types) * sizeof(float);
+
+        offset_agent_know = current_offset;
         if (mode == Mode::DECENTRALIZED)
         {
-            agent_knowledge_bytes = (n_agents * n_agents) * sizeof(AgentKnowledge);
-            poi_knowledge_bytes = (n_agents * n_pois) * sizeof(POIKnowledge);
+            current_offset += (n_agents * n_agents) * sizeof(AgentKnowledge);
         }
-        size_t counter_bytes = 4 * sizeof(int);
 
-        // Sum the exact required bytes with zero arbitrary internal padding.
-        // Because Tile (8), AgentState (28), POIState (16), float (4), and int (4)
-        // are all naturally aligned to at least 4 bytes, they will pack perfectly safely.
-        size_t raw_stride = grid_bytes + agent_bytes + poi_bytes + speed_bytes +
-                            agent_knowledge_bytes + poi_knowledge_bytes + counter_bytes;
+        offset_poi_know = current_offset;
+        if (mode == Mode::DECENTRALIZED)
+        {
+            current_offset += (n_agents * n_pois) * sizeof(POIKnowledge);
+        }
 
-        // Align ONLY the total environment boundary to a 256-byte boundary.
-        // This prevents Thread A (Environment 0) and Thread B (Environment 1)
-        // from writing to the same physical L1/L2 cache line (False Sharing)
-        // or triggering adjacency prefetchers.
-        env_stride = (raw_stride + 255) & ~255;
+        offset_counters = current_offset;
+        current_offset += 4 * sizeof(int);
 
-        // Allocate the contiguous memory block for all environments, without initializing.
-        // We add 255 extra bytes to manually align the origin pointer to a 256-byte boundary
-        // since std::vector's default allocator does not guarantee CPU cache line alignment.
+        // ONLY align the total environment footprint to a 256-byte boundary.
+        // This isolates threads writing to different environments.
+        env_stride = align_up(current_offset, 256);
+
+        // Allocate block (+255 to allow manual 256-byte alignment of the base pointer)
         memory.resize(num_envs * env_stride + 255);
-
         uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
-        aligned_base = reinterpret_cast<uint8_t *>((raw_ptr + 255) & ~255);
+        aligned_base = reinterpret_cast<uint8_t *>(align_up(raw_ptr, 256));
 
-        if (init_mode == 1) {
+        if (init_mode == 1)
+        {
             std::memset(aligned_base, 0, num_envs * env_stride);
-        } else {
-            // First touch policy: Initialize memory in parallel to properly distribute across NUMA nodes
+        }
+        else
+        {
 #pragma omp parallel for schedule(static)
             for (int e = 0; e < num_envs; ++e)
             {
@@ -292,33 +317,21 @@ public:
         }
     }
 
-    // Explicitly inline for hot-loop performance
+    // Fully inline, utilizing pre-calculated offsets for minimum overhead
     inline EnvStateView get_env_view(int env_idx)
     {
         EnvStateView view;
-
-        // Calculate the starting memory address for this specific environment
         uint8_t *base = aligned_base + (env_idx * env_stride);
-        size_t offset = 0;
 
-        view.grid = reinterpret_cast<Tile *>(base + offset);
-        offset += map_area * sizeof(Tile);
-
-        view.agents = reinterpret_cast<AgentState *>(base + offset);
-        offset += n_agents * sizeof(AgentState);
-
-        view.pois = reinterpret_cast<POIState *>(base + offset);
-        offset += n_pois * sizeof(POIState);
-
-        view.agent_speeds = reinterpret_cast<float *>(base + offset);
-        offset += (n_agents * n_tile_types) * sizeof(float);
+        view.grid = reinterpret_cast<Tile *>(base);
+        view.agents = reinterpret_cast<AgentState *>(base + offset_agents);
+        view.pois = reinterpret_cast<POIState *>(base + offset_pois);
+        view.agent_speeds = reinterpret_cast<float *>(base + offset_speeds);
 
         if (mode == Mode::DECENTRALIZED)
         {
-            view.agent_knowledge = reinterpret_cast<AgentKnowledge *>(base + offset);
-            offset += (n_agents * n_agents) * sizeof(AgentKnowledge);
-            view.poi_knowledge = reinterpret_cast<POIKnowledge *>(base + offset);
-            offset += (n_agents * n_pois) * sizeof(POIKnowledge);
+            view.agent_knowledge = reinterpret_cast<AgentKnowledge *>(base + offset_agent_know);
+            view.poi_knowledge = reinterpret_cast<POIKnowledge *>(base + offset_poi_know);
         }
         else
         {
@@ -326,13 +339,11 @@ public:
             view.poi_knowledge = nullptr;
         }
 
-        view.current_frame = reinterpret_cast<int *>(base + offset);
-        offset += sizeof(int);
-        view.undiscovered_remaining = reinterpret_cast<int *>(base + offset);
-        offset += sizeof(int);
-        view.poi_left = reinterpret_cast<int *>(base + offset);
-        offset += sizeof(int);
-        view.agents_left = reinterpret_cast<int *>(base + offset);
+        view.current_frame = reinterpret_cast<int *>(base + offset_counters);
+        view.undiscovered_remaining = reinterpret_cast<int *>(base + offset_counters + sizeof(int));
+        view.poi_left = reinterpret_cast<int *>(base + offset_counters + 2 * sizeof(int));
+        view.agents_left = reinterpret_cast<int *>(base + offset_counters + 3 * sizeof(int));
+
         return view;
     }
 };

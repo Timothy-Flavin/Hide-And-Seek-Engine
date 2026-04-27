@@ -20,7 +20,7 @@ print("\\textbf{Hardware} & \\textbf{1 Agent (SPS)} & \\textbf{5 Agents (SPS)} &
 print("\\midrule")
 print(format_table("AMD Ryzen 9950X", "Epyc_Tuning/env_configs_9950X"))
 print(format_table("AMD EPYC 7282", "Epyc_Tuning/env_configs_epyc"))
-print(format_table("Intel 4-Core Laptop", "env_configs_laptop"))
+print(format_table("Intel 4-Core Laptop", "env_configs_laptop_new"))
 print("\\bottomrule")
 print("\\end{tabular}")
 print("\\caption{Peak Throughput (SPS) scaling by Agent Count across different hardware configurations (Decentralized Observable State).}")

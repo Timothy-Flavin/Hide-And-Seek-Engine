@@ -1,15 +1,97 @@
-# Hide-And-Seek Engine (SAR Extension)
+# Hide-And-Seek Engine (MARL POMDP Simulator)
 
-![SAR Simulation Replay](replay.gif)
+A C++/PyBind11 environment engine for large-scale Multi-Agent Reinforcement Learning (MARL) in partially observable grid-worlds. Designed for high-throughput, batched simulation with PyTorch.
 
-High-performance OpenMP + pybind11 grid-world simulator for heterogeneous Search and Rescue (SAR), with:
+-----
 
-  - CTDE-ready tensors (`C x H x W`) for CNN extractors
-  - Hybrid action space (`move` + `radio`)
-  - PettingZoo parallel API adapter
-  - Local/POV rendering utilities
+## Core Usage & API
 
-## Install
+The primary entry point for PyTorch-based RL is the `SARBatchedGridEnv`. It natively returns batched tensors.
+
+```python
+from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
+import numpy as np
+
+env = SARBatchedGridEnv(
+    num_envs=128,
+    map_png="test_level/level.png",
+    tiles_json="test_level/tiles.json",
+    agents_json="test_level/agents.json",
+    survivors_json="test_level/survivors.json",
+    mode="centralized",
+    requires_state=True,
+    seed=42,
+)
+
+obs, info = env.reset()
+
+# Sample random continuous movement and discrete radio actions
+move_actions = np.random.uniform(-1.0, 1.0, size=(128, env.config.n_agents, 2))
+radio_actions = np.random.randint(0, env.config.n_agents, size=(128, env.config.n_agents))
+
+next_obs, rewards, terminated, truncated, info = env.step(move_actions, radio_actions)
+
+if env.requires_state:
+    global_state = env.state()
+```
+
+Got it. That makes much more sense for a targeted communication protocol—using the agent's own ID as the logical silence/no-op is a clean way to handle it. 
+
+Here is the corrected **Action Space** section for the README with the updated shapes and a revised code example to reflect the target-ID logic.
+
+***
+
+### Action Space
+
+The action space is a hybrid continuous/discrete space defined per agent. When passing actions to `env.step(move_actions, radio_actions)`, you provide two tensors:
+
+1.  **Movement (`move_actions`)**: A 2D continuous vector `[dy, dx]` bounded in `[-1.0, 1.0]`. 
+2.  **Radio (`radio_actions`)**: A discrete integer from `0` to `n_agents`. Transmitting an agent's own ID acts as the no-op (no transmission).
+
+**Shapes:**
+* `move_actions`: `[num_envs, n_agents, 2]`
+* `radio_actions`: `[num_envs, n_agents]`
+
+**Example Action Tensor (1 env, 2 agents):**
+```python
+# Agent 0: Moves South-East [1.0, 1.0], transmits to Agent 1 (action = 1)
+# Agent 1: Moves North [-1.0, 0.0], stays silent on radio (transmits own ID: action = 1)
+move_actions = np.array([[[1.0, 1.0], [-1.0, 0.0]]], dtype=np.float32)
+radio_actions = np.array([[1, 1]], dtype=np.int32)
+```
+
+### Observation Space (Actor Input)
+
+The `obs` returned by `reset()` and `step()` is a dictionary separating spatial feature maps from internal vector states:
+
+  * `obs["spatial"]`: Shape depends on the `mode` (see Observation Modes below). Contains local terrain, altitude, survivor locations, FOV masks, and agent layers.
+  * `obs["internal"]`: Shape `[num_envs, n_agents, 6]`. Contains vector data: `[deploy_remaining, stuck, view_range, battery, y, x]`.
+
+### State Space (Critic Input)
+
+If `requires_state=True`, `env.state()` returns the global, unmasked environment state for centralized training (e.g., CTDE):
+
+  * `state["spatial"]`: `[num_envs, C_global, H, W]`
+  * `state["internal"]`: `[num_envs, flattened_agent_and_survivor_dim]`
+
+### Observation Modes
+
+The environment configuration is controlled by a 3x2 matrix of parameters during initialization: `mode` (`"centralized"`, `"decentralized"`, or `"no_obs"`) and `requires_state` (`True` or `False`).
+
+| Mode | `requires_state` | `obs["spatial"]` Shape | Behavior / Use Case |
+| :--- | :--- | :--- | :--- |
+| `"centralized"` | `False` | `[E, C_local, H, W]` | Agents share a single, merged spatial observation tensor. Useful for joint-action policies. |
+| `"centralized"` | `True` | `[E, C_local, H, W]` | Same as above, but `env.state()` is enabled to fetch the global CTDE state for critics. |
+| `"decentralized"` | `False` | `[E, A, C_local, H, W]` | Each agent $A$ receives strictly its own local FOV observation. |
+| `"decentralized"` | `True` | `[E, A, C_local, H, W]` | Standard CTDE setup. Decentralized execution for actors, global state available for the central critic. |
+| `"no_obs"` | `False` | *Empty/None* | Blind agents. Useful for debugging or relying entirely on communication/internal states. |
+| `"no_obs"` | `True` | *Empty/None* | Blind actors, but global state is still tracked and returned for debugging/value estimation or MDP Joint action learning. |
+
+*(Note: `E` = num\_envs, `A` = n\_agents, `C_local` = local feature channels, `H` = height, `W` = width).*
+
+-----
+
+## Installation
 
 ```bash
 pip install -e .
@@ -21,119 +103,65 @@ Optional rendering/input dependencies:
 pip install pygame pillow pettingzoo imageio
 ```
 
+-----
+
+## Engine Architecture
+
+  * **Memory Layout**: Utilizes Data-Oriented Design (DOD) with cache-aligned, bit-packed memory slabs for the environment state. A 256-byte stride padding is used to prevent false sharing across threads.
+  * **Execution Model**: Relies on OpenMP for environment parallelization and NUMA-aware allocations. Serial C++ and GPU execution steps are prioritized to simplify debugging and maintain code maintainability, intentionally avoiding complex asynchronous thread-overlapping while preserving high throughput.
+  * **PyTorch Integration**: Pinned memory tensors are mutated directly in C++ and instantly available to PyTorch/GPUs via DMA, avoiding Python-side serialization or GIL contention.
+
+-----
+
 ## Level File Formats
 
-### `test_level/tiles.json`
+Environment generation is data-driven via a mapping of images to JSON properties.
 
-Either list or name-\>object map.
-Each tile supports:
+### `tiles.json`
 
-  - `rgb`: `[r, g, b]`
-  - `altitude`: float
-  - `supports_walking`: bool
-  - `supports_flying`: bool
-  - `supports_aquatic`: bool
-  - `blocking`: bool
+Each tile definition:
 
-Movement semantics:
+  * `rgb`: `[r, g, b]` (for PNG mapping)
+  * `altitude`: float
+  * `supports_walking`, `supports_flying`, `supports_aquatic`: bool
+  * `blocking`: bool
 
-  - Agent can enter tile when it matches **at least one** supported transport mode.
-  - If transport does not match:
-      - `blocking=true`: tile behaves like wall (entry denied, agent not stuck)
-      - `blocking=false`: agent can enter but becomes stuck
+### `agents.json`
 
-### `test_level/agents.json`
+Each agent definition:
 
-Either list or name-\>object map.
-Each agent supports:
+  * `flying`, `aqueous`, `walking`: bool
+  * `altitude_min`, `altitude_max`, `base_speed`, `base_view`, `battery`, `deployment_delay`
+  * `rgb`
+  * `terrain_speed` (dict by tile name)
+  * `start`: `[y, x]` (map coords or normalized)
 
-  - `flying`, `aqueous`, `walking`
-  - `altitude_min`, `altitude_max`
-  - `base_speed`, `base_view`, `battery`, `deployment_delay`
-  - `rgb`
-  - `terrain_speed` dictionary by tile name
-  - `start` (`[y, x]`, supports normalized `[0..1]` or map coords)
+### `survivors.json`
 
-### `test_level/survivors.json`
+Each survivor definition:
 
-Either list or name-\>object map.
-Each survivor supports:
+  * `allowed_savers`: list of agent names
+  * `moves`: bool
+  * `rgb` (optional)
+  * `start` (optional)
 
-  - `allowed_savers`: list of agent names
-  - `moves`: bool
-  - `rgb` (optional)
-  - `start` (optional)
+### `level.png`
 
-### `test_level/level.png`
+A standard PNG image. Each pixel is matched to the nearest tile `rgb` defined in `tiles.json`.
 
-PNG map where every pixel is matched to nearest tile `rgb` in `tiles.json`.
+-----
 
-## Core Environment Usage
+## Rendering & Visualization
 
-```python
-from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
+  * **Global Map**: `env.render(env_idx=0)` (Undiscovered tiles dimmed, saved survivors white)
+  * **Agent POV**: `env.render_pov(agent_idx=0, env_idx=0)` (Shows last-known positions and radio knowledge)
+  * **Radio Trace**: `env.radio_render()` (Prints event logs for transmissions)
 
-env = SARBatchedGridEnv(
-    num_envs=8,
-    map_png="test_level/level.png",
-    tiles_json="test_level/tiles.json",
-    agents_json="test_level/agents.json",
-    survivors_json="test_level/survivors.json",
-    map_size=32,
-    seed=42,
-)
+-----
 
-obs, info = env.reset()
-actions = env.action_space.sample()
-obs, rewards, terminated, truncated, info = env.step(actions)
-state = env.state()  # global CTDE state
-```
+## PettingZoo API Compatibility
 
-### Observation Space (Local Actor Input)
-
-`obs` is a dictionary:
-
-  - `obs["spatial"]`: shape `[Env, Agent, C_local, H, W]`
-      - channels include terrain+altitude, local survivor layer, local obs mask, local agent layers
-  - `obs["internal"]`: shape `[Env, Agent, 6]`
-      - `[deploy_remaining, stuck, view_range, battery, y, x]`
-
-### State Space (Central Critic Input)
-
-`env.state()` returns:
-
-  - `state["spatial"]`: shape `[Env, C_global, H, W]`
-  - `state["internal"]`: flattened agent+survivor internal vectors
-
-### Action Space (Hybrid)
-
-Per agent action:
-
-  - movement: 2D vector in `[-1, 1]`
-  - radio: discrete channel `0..3`
-      - `0` = no transmit
-      - `1,2,3` = transmit channel (merged into shared local knowledge)
-
-Tensor shape for partial obs mode stepping batched env:
-
-  - `[num_envs, n_agents, 3]` (`dy`, `dx`, `radio_channel`)
-
-## Rendering
-
-  - Global view: `env.render(env_idx=0)`
-      - undiscovered tiles are drawn at half RGB brightness
-      - saved survivors are white
-  - Agent POV: `env.render_pov(agent_idx=0, env_idx=0)`
-      - allies and survivors shown using last-known positions
-      - knowledge updates when locally seen or shared by radio
-
-Print radio events from current frame:
-
-```python
-env.radio_render()
-```
-
-## PettingZoo Parallel API
+A wrapper is provided for drop-in compatibility with standard multi-agent frameworks.
 
 ```python
 from hide_and_seek_engine.env_wrapper import SARParallelPettingZooEnv
@@ -153,40 +181,25 @@ actions = {
 obs, rewards, terminations, truncations, infos = pz_env.step(actions)
 ```
 
-## Test & Benchmark Suite
+-----
 
-Run unit checks + 10k-step stress tests + FPS measurements + renderer smoke test:
+## Utilities
 
-```bash
-python env_spec.py --steps 10000 --envs 1 2 4 8
-```
+### Test & Benchmark Suite
 
-Skip renderer test:
+Run unit checks, stress tests, and FPS measurements across parallel batches:
 
 ```bash
 python env_spec.py --steps 10000 --envs 1 2 4 8 --skip-render
 ```
 
-## Human Data Recorder
+### Human Data Recorder
 
-Collect SARSA tuples from one human-controlled random agent each episode:
-
-```bash
-python human_runner.py
-```
-
-To record a visual replay of the session:
+Collect SARSA tuples by controlling an agent manually:
 
 ```bash
 python human_runner.py --record
 ```
 
-Controls:
-
-  - movement: `W`, `A`, `S`, `D`
-  - radio: `1`, `2`, `3`
-
-After each episode, enter a save name. Data is written to `saved_human_behavior/<name>/`, containing:
-
-  - `.npy` files for all observation/state/action/reward buffers.
-  - `replay.gif` (if `--record` was used).
+  * **Controls**: `W`, `A`, `S`, `D` (move), `1`, `2`, `3` (radio).
+  * Data is written to `saved_human_behavior/<name>/` as raw `.npy` buffers alongside a `replay.gif`.

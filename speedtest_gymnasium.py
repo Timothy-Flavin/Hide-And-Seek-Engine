@@ -83,7 +83,7 @@ def generate_agents_json(num_agents: int) -> str:
         "altitude_max": 1.0,
         "base_speed": 2.0,
         "base_view": 5.0,
-        "battery": 150.0,
+        "battery": 150,
         "deployment_delay": 0.0,
         "rgb": [255, 224, 189],
         "terrain_speed": {"grass": 1.0, "water": 0.2, "mountain": 0.5},

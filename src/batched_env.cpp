@@ -105,8 +105,8 @@ private:
             AgentState &agent = view.agents[a];
 
             // Get current integer coordinates safely
-            int cy = std::max(0, std::min(height - 1, static_cast<int>(agent.y)));
-            int cx = std::max(0, std::min(width - 1, static_cast<int>(agent.x)));
+            int cy = static_cast<int>(agent.y);
+            int cx = static_cast<int>(agent.x);
 
             uint32_t current_tile_type = view.grid[cy * width + cx].get_type();
 
@@ -146,7 +146,6 @@ private:
             int final_y = static_cast<int>(ny);
             int final_x = static_cast<int>(nx);
             uint16_t t_id = static_cast<uint16_t>(final_y * width + final_x);
-            agent.current_tile = t_id;
             float final_altitude = view.grid[t_id].altitude;
             agent.view_range = std::max(agent_base_view_ranges[a] * final_altitude, 1.0f);
         }
@@ -353,8 +352,11 @@ private:
         // std::cout << "Starting radio loop " << e << "\n";
         for (int a = 0; a < n_agents; ++a)
         {
-            int target_agent = radio_act_data[e * n_agents + a];
+            // Don't update agents that arent messaging eachother
+            for (int ai = 0; ai < n_agents; ++ai)
+                view.agent_knowledge[ait * n_agents + a].has_contact = 0;
 
+            int target_agent = radio_act_data[e * n_agents + a];
             // Assume action maps directly to agent ID (0 = agent 0, 1 = agent 1...)
             // If the environment defines a specific "0 = none, 1 = agent 0" shift, adjust target_agent accordingly.
             if (target_agent == a || target_agent < 0 || target_agent >= n_agents)
@@ -786,7 +788,8 @@ public:
         ssize_t state_spatial_stride = spatial_channels * map_size;
         ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
 
-        if (init_mode == 0) {
+        if (init_mode == 0)
+        {
 #pragma omp parallel for schedule(static)
             for (int e = 0; e < num_envs; ++e)
             {
@@ -807,7 +810,9 @@ public:
                 padded_terminated[e * padded_byte_stride] = 0;
                 padded_truncated[e * padded_byte_stride] = 0;
             }
-        } else {
+        }
+        else
+        {
             for (int e = 0; e < num_envs; ++e)
             {
                 if (torch_obs_spatial_base)
@@ -1034,15 +1039,11 @@ public:
         {
             view.agents[a].last_x = -1;
             view.agents[a].last_y = -1;
-            view.agents[a].state_last_x = -1;
-            view.agents[a].state_last_y = -1;
         }
         for (int p = 0; p < n_pois; ++p)
         {
             view.pois[p].last_x = -1;
             view.pois[p].last_y = -1;
-            view.pois[p].state_last_x = -1;
-            view.pois[p].state_last_y = -1;
         }
 
         if (mode == Mode::DECENTRALIZED && view.agent_knowledge != nullptr)
@@ -1081,13 +1082,13 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-//             if (steps_taken == 0 && e == 0) {
-// #pragma omp critical
-//                 {
-//                     std::ofstream log("thread_affinity.log", std::ios_base::app);
-//                     log << "Step loop Env " << e << ": Thread " << omp_get_thread_num() << " is on CPU " << sched_getcpu() << "\n";
-//                 }
-//             }
+            //             if (steps_taken == 0 && e == 0) {
+            // #pragma omp critical
+            //                 {
+            //                     std::ofstream log("thread_affinity.log", std::ios_base::app);
+            //                     log << "Step loop Env " << e << ": Thread " << omp_get_thread_num() << " is on CPU " << sched_getcpu() << "\n";
+            //                 }
+            //             }
 
             // Clear the 256-byte aligned local thread block instead of hitting the compact pyTorch array
             std::memset(padded_rewards.data() + e * padded_reward_stride, 0, n_agents * sizeof(float));

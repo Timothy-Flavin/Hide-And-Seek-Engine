@@ -26,7 +26,7 @@ ext_modules = [
 
 setuptools.setup(
     name="hide_and_seek_engine",
-    version="0.3.0",
+    version="0.5.0",
     author="Your Name",
     description="High-performance batched multi-agent environment",
     packages=find_packages("src", exclude=("build", "dist", "tmp")),
