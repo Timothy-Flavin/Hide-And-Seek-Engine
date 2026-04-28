@@ -139,6 +139,7 @@ class SARBatchedGridEnv:
                 self.config.saveable_map,
                 self.config.initial_agent_pos,
                 self.config.initial_poi_pos,
+                self.config.agent_max_batteries,
                 self.obs_spatial.data_ptr() if self.mode_val != 2 else 0,
                 self.obs_internal.data_ptr() if self.mode_val != 2 else 0,
                 self.state_spatial.data_ptr() if self.requires_state else 0,

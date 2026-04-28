@@ -12,16 +12,17 @@ class SARConfig:
     width: int
     height: int
 
-    supports_walking: list[bool]
-    supports_aquatic: list[bool]
-    supports_flying: list[bool]
-    is_blocking: list[bool]
+    supports_walking: list[int]
+    supports_aquatic: list[int]
+    supports_flying: list[int]
+    is_blocking: list[int]
 
     type_map: list[int]
     altitude_map: list[float]
     agent_speed_map: list[float]
     agent_view_ranges: list[float]
-    saveable_map: list[bool]
+    agent_max_batteries: list[float]
+    saveable_map: list[int]
     initial_agent_pos: list[float]
     initial_poi_pos: list[float]
 
@@ -79,6 +80,7 @@ def load_sar_config(
     agent_speed_map = []
     initial_agent_pos = []
     agent_view_ranges = []
+    agent_max_batteries = []
     agent_colors = np.array(
         [agents_data[a].get("rgb", [255, 0, 0]) for a in agent_names], dtype=np.int32
     )
@@ -89,7 +91,8 @@ def load_sar_config(
         agent_view_ranges.append(float(agent.get("base_view", 5.0)))
         for t_name in tile_names:
             agent_speed_map.append(float(speeds.get(t_name, 1.0)))
-
+        # Parse battery, default to 250.0 if not specified
+        agent_max_batteries.append(float(agent.get("max_battery", 250.0)))
         # Denormalize starting coords relative to height/width
         start = agent.get("start", [0.5, 0.5])
         initial_agent_pos.extend(
@@ -133,6 +136,7 @@ def load_sar_config(
         altitude_map=altitude_map,
         agent_speed_map=agent_speed_map,
         agent_view_ranges=agent_view_ranges,
+        agent_max_batteries=agent_max_batteries,
         saveable_map=saveable_map,
         initial_agent_pos=initial_agent_pos,
         initial_poi_pos=initial_poi_pos,
