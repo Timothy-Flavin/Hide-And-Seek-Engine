@@ -1,0 +1,74 @@
+{
+    "deep_ocean": {
+        "rgb": [
+            26,
+            37,
+            144
+        ],
+        "altitude": 0.5,
+        "supports_walking": false,
+        "supports_flying": true,
+        "supports_aquatic": true,
+        "blocking": false
+    },
+    "plains": {
+        "rgb": [
+            188,
+            208,
+            155
+        ],
+        "altitude": 0.2,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "dense_jungle": {
+        "rgb": [
+            120,
+            152,
+            73
+        ],
+        "altitude": 0.4,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "grasslands": {
+        "rgb": [
+            153,
+            185,
+            107
+        ],
+        "altitude": 0.3,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "mountains": {
+        "rgb": [
+            156,
+            161,
+            150
+        ],
+        "altitude": 0.7,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "volcano_peak": {
+        "rgb": [
+            112,
+            109,
+            119
+        ],
+        "altitude": 1.0,
+        "supports_walking": false,
+        "supports_flying": false,
+        "supports_aquatic": false,
+        "blocking": true
+    }
+}

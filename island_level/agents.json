@@ -1,0 +1,83 @@
+{
+    "coast_guard_cutter": {
+        "flying": false,
+        "aqueous": true,
+        "walking": false,
+        "altitude_min": 0.0,
+        "altitude_max": 0.0,
+        "base_speed": 1.5,
+        "base_view": 8.0,
+        "battery": 500.0,
+        "rgb": [
+            200,
+            200,
+            200
+        ],
+        "terrain_speed": {
+            "deep_ocean": 1.0,
+            "plains": 0.0,
+            "dense_jungle": 0.0,
+            "grasslands": 0.0,
+            "mountains": 0.0,
+            "volcano_peak": 0.0
+        },
+        "start": [
+            0.2,
+            0.2
+        ]
+    },
+    "surveillance_drone": {
+        "flying": true,
+        "aqueous": false,
+        "walking": false,
+        "altitude_min": 0.5,
+        "altitude_max": 0.9,
+        "base_speed": 4.0,
+        "base_view": 12.0,
+        "battery": 150.0,
+        "rgb": [
+            50,
+            50,
+            50
+        ],
+        "terrain_speed": {
+            "deep_ocean": 1.0,
+            "plains": 1.0,
+            "dense_jungle": 1.0,
+            "grasslands": 1.0,
+            "mountains": 1.0,
+            "volcano_peak": 1.0
+        },
+        "start": [
+            0.8,
+            0.8
+        ]
+    },
+    "patrol_helicopter": {
+        "flying": true,
+        "aqueous": false,
+        "walking": false,
+        "altitude_min": 0.1,
+        "altitude_max": 0.6,
+        "base_speed": 2.5,
+        "base_view": 6.0,
+        "battery": 250.0,
+        "rgb": [
+            255,
+            215,
+            0
+        ],
+        "terrain_speed": {
+            "deep_ocean": 1.0,
+            "plains": 1.0,
+            "dense_jungle": 0.8,
+            "grasslands": 1.0,
+            "mountains": 0.5,
+            "volcano_peak": 0.0
+        },
+        "start": [
+            0.75,
+            0.85
+        ]
+    }
+}

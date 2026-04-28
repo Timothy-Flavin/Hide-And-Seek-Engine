@@ -162,10 +162,14 @@ private:
         for (int a = 0; a < n_agents; ++a)
         {
             AgentState &agent = view.agents[a];
+            if (agent.deployment_remaining <= 0.0)
+                continue;
             float vr = agent.view_range;
             float vr_sq = vr * vr;
 
             // 1. Tile Discoveries
+            int center_x = static_cast<int>(agent.x);
+            int center_y = static_cast<int>(agent.y);
             int min_y = std::max(0, static_cast<int>(agent.y - vr));
             int max_y = std::min(height - 1, static_cast<int>(agent.y + vr));
             int min_x = std::max(0, static_cast<int>(agent.x - vr));
@@ -181,6 +185,55 @@ private:
                     {
                         int t_idx = y * width + x;
                         Tile &t = view.grid[t_idx];
+                        bool needs_global = !t.is_global_observed();
+                        bool needs_local = false;
+                        if constexpr (M == Mode::DECENTRALIZED)
+                        {
+                            needs_local = !t.has_agent_seen(a);
+                        }
+                        // If the tile is already in the tensor, skip the expensive raycast
+                        if (!needs_global && !needs_local)
+                        {
+                            continue;
+                        }
+                        // --- OPTIMIZATION 2: 1D Raycasting ---
+                        bool is_occluded = false;
+                        int x0 = center_x;
+                        int y0 = center_y;
+
+                        int dx = std::abs(x - x0), sx = x0 < x ? 1 : -1;
+                        int dy = std::abs(y - y0), sy = y0 < y ? 1 : -1;
+                        int err = dx - dy, e2;
+
+                        int trace_idx = y0 * width + x0;
+                        int step_x = sx;
+                        int step_y = sy * width;
+
+                        while (true)
+                        {
+                            if (trace_idx == t_idx)
+                                break;
+
+                            if (view.grid[trace_idx].is_blocking())
+                            {
+                                is_occluded = true;
+                                break;
+                            }
+
+                            e2 = 2 * err;
+                            if (e2 > -dy)
+                            {
+                                err -= dy;
+                                trace_idx += step_x; // 1D equivalent of x0 += sx
+                            }
+                            if (e2 < dx)
+                            {
+                                err += dx;
+                                trace_idx += step_y; // 1D equivalent of y0 += sy
+                            }
+                        }
+                        if (is_occluded)
+                            continue; // Skip to the next tile, it's blocked!
 
                         bool newly_global = false;
                         if (!t.is_global_observed())

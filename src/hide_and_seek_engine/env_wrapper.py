@@ -250,7 +250,7 @@ class SARBatchedGridEnv:
         if getattr(self, "render_initialized", False):
             return
         pygame.init()
-        self._pygame_tile_px = 16
+        self._pygame_tile_px = 8
         window_width = self.config.width * self._pygame_tile_px
         window_height = self.config.height * self._pygame_tile_px
         self._pygame_screen = pygame.display.set_mode((window_width, window_height))
