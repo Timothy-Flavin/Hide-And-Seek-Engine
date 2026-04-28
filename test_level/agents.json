@@ -7,7 +7,6 @@
         "base_speed": 2.0,
         "base_view": 5.0,
         "battery": 150.0,
-        "deployment_delay": 0.0,
         "rgb": [
             255,
             224,
@@ -31,7 +30,6 @@
         "base_speed": 1.5,
         "base_view": 3.0,
         "battery": 100.0,
-        "deployment_delay": 0.0,
         "rgb": [
             128,
             188,
@@ -55,7 +53,6 @@
         "base_speed": 3.0,
         "base_view": 7.0,
         "battery": 200.0,
-        "deployment_delay": 1.0,
         "rgb": [
             200,
             100,

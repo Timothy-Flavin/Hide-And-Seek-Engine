@@ -191,13 +191,14 @@ struct POIState
 // AgentKnowledge: 14 bytes of data + 2 explicit padding bytes = 16 bytes total.
 struct AgentKnowledge
 {
-    float x;             // 4 bytes
-    float y;             // 4 bytes
-    uint16_t last_x;     // 2 bytes
-    uint16_t last_y;     // 2 bytes
-    uint8_t has_contact; // 1 byte
-    uint8_t is_stuck;    // 1 byte
-    uint8_t _padding[2]; // 2 bytes explicitly added to reach 16
+    float x;                 // 4 bytes
+    float y;                 // 4 bytes
+    uint16_t last_x;         // 2 bytes
+    uint16_t last_y;         // 2 bytes
+    uint8_t has_contact;     // 1 byte: is this agent getting an update this frame
+    uint8_t has_encountered; // 1 byte: has this agent ever gotten an update
+    uint8_t is_stuck;        // 1 byte
+    uint8_t _padding;        // 1 bytes explicitly added to reach 16
 };
 
 // What Agent A knows about POI (Survivor) K

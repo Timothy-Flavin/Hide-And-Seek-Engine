@@ -62,7 +62,7 @@ private:
     std::vector<uint8_t> padded_truncated;
     int padded_reward_stride;
     int padded_byte_stride;
-    // std::vector<float> global_rewards;
+
     std::vector<EnvStateView> env_views;
     std::vector<int> type_map;
     std::vector<float> altitude_map;
@@ -90,7 +90,6 @@ private:
 
         for (int a = 0; a < n_agents; ++a)
         {
-            // 1. Extract and clamp movement vector magnitude
             float dy = act_data[e * n_agents * 2 + a * 2];
             float dx = act_data[e * n_agents * 2 + a * 2 + 1];
 
@@ -104,31 +103,25 @@ private:
 
             AgentState &agent = view.agents[a];
 
-            // Get current integer coordinates safely
             int cy = static_cast<int>(agent.y);
             int cx = static_cast<int>(agent.x);
 
             uint32_t current_tile_type = view.grid[cy * width + cx].get_type();
 
-            // 2. Calculate requested destination
             float speed = view.agent_speeds[a * n_tiles + current_tile_type];
             float ny = agent.y + dy * speed;
             float nx = agent.x + dx * speed;
 
-            // Constrain to map boundaries first
             ny = std::max(0.0f, std::min(static_cast<float>(height) - 0.001f, ny));
             nx = std::max(0.0f, std::min(static_cast<float>(width) - 0.001f, nx));
 
-            // 3. Collision detection against blocking tiles
             int target_y = static_cast<int>(ny);
             int target_x = static_cast<int>(nx);
 
             Tile &target_tile = view.grid[target_y * width + target_x];
 
-            // If the target tile is blocking, eject the agent to the edge of the tile
             if (target_tile.is_blocking())
             {
-                // Simple axis-aligned ejection: determine which axis crossed the boundary
                 if (target_y != cy)
                 {
                     ny = (dy > 0) ? target_y - 0.001f : target_y + 1.001f;
@@ -139,7 +132,6 @@ private:
                 }
             }
 
-            // 4. Update agent state
             agent.y = ny;
             agent.x = nx;
 
@@ -165,7 +157,7 @@ private:
         // true and if the global observation is false then accumulate the
         // reward accordingly. Likewise with the agent rescue rewards.
         EnvStateView view = env_views[e];
-        const float RESCUE_DIST_SQ = 1.0f * 1.0f; // Must be within 1 unit to rescue
+        const float RESCUE_DIST_SQ = 1.0f * 1.0f;
 
         for (int a = 0; a < n_agents; ++a)
         {
@@ -190,18 +182,15 @@ private:
                         int t_idx = y * width + x;
                         Tile &t = view.grid[t_idx];
 
-                        // Global discovery reward
                         bool newly_global = false;
                         if (!t.is_global_observed())
                         {
                             t.set_global_observed();
                             (*view.undiscovered_remaining)--;
-                            // Add reward (assume 'rewards' is an accessible class member or passed ref)
                             padded_rewards[e * padded_reward_stride + a] += reward_new_tile;
                             newly_global = true;
                         }
 
-                        // Local observation tracking
                         if constexpr (M == Mode::DECENTRALIZED)
                         {
                             if (!t.has_agent_seen(a))
@@ -268,35 +257,32 @@ private:
             for (int p = 0; p < n_pois; ++p)
             {
                 POIState &poi = view.pois[p];
-                if (poi.saved)
-                    continue; // Skip already saved
+                if (poi.is_saved())
+                    continue;
 
                 float dist_sq = (agent.y - poi.y) * (agent.y - poi.y) + (agent.x - poi.x) * (agent.x - poi.x);
 
-                // If POI is seen
                 if (dist_sq <= vr_sq)
                 {
-                    if (!poi.found)
+                    if (!poi.is_found())
                     {
-                        poi.found = 1;
+                        poi.set_found(true);
                         padded_rewards[e * padded_reward_stride + a] += reward_found;
                     }
 
-                    // Attempt Rescue
-                    if (dist_sq <= RESCUE_DIST_SQ && (poi.savable_by_mask & (1U << a)))
+                    if (dist_sq <= RESCUE_DIST_SQ && poi.is_savable_by(a))
                     {
-                        poi.saved = 1;
+                        poi.set_saved(true);
                         padded_rewards[e * padded_reward_stride + a] += reward_saved;
                     }
 
-                    // Update Local Beliefs
                     if constexpr (M == Mode::DECENTRALIZED)
                     {
                         POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
                         pk.x = poi.x;
                         pk.y = poi.y;
-                        pk.knows_found = poi.found;
-                        pk.knows_saved = poi.saved;
+                        pk.knows_found = poi.is_found();
+                        pk.knows_saved = poi.is_saved();
                     }
                 }
             }
@@ -305,9 +291,10 @@ private:
             if constexpr (M == Mode::DECENTRALIZED)
             {
                 AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a];
-                ak.x = agent.y; // Or agent.x depending on your layout (consistency is key)
-                ak.y = agent.x;
+                ak.x = agent.x;
+                ak.y = agent.y;
                 ak.has_contact = 1;
+                ak.has_encountered = 1;
             }
         }
     }
@@ -345,40 +332,33 @@ private:
         // one of the other agents. It will share it's current information
         // updating it's x y in the other agent's tensor observation
         if (mode != Mode::DECENTRALIZED)
-            return; // No-op for global and no_obs modes
+            return;
 
         EnvStateView view = env_views[e];
 
-        // std::cout << "Starting radio loop " << e << "\n";
         for (int a = 0; a < n_agents; ++a)
         {
-            // Don't update agents that arent messaging eachother
             for (int ai = 0; ai < n_agents; ++ai)
-                view.agent_knowledge[ait * n_agents + a].has_contact = 0;
+                view.agent_knowledge[ai * n_agents + a].has_contact = 0;
 
             int target_agent = radio_act_data[e * n_agents + a];
-            // Assume action maps directly to agent ID (0 = agent 0, 1 = agent 1...)
-            // If the environment defines a specific "0 = none, 1 = agent 0" shift, adjust target_agent accordingly.
-            if (target_agent == a || target_agent < 0 || target_agent >= n_agents)
+
+            if (target_agent == 0)
                 continue;
+            if (target_agent <= a)
+                --target_agent; // The agents before me (a) get shifted up 1
 
-            // Agent 'a' sends info to 'target_agent'
-            // std::cout << "Agent " << a << " sending to " << target_agent << " thread: " << e << "\n";
-
-            // 1. Share 'a' location with 'target_agent'
             AgentKnowledge &target_ak = view.agent_knowledge[target_agent * n_agents + a];
             target_ak.x = view.agents[a].x;
             target_ak.y = view.agents[a].y;
             target_ak.has_contact = 1;
+            target_ak.has_encountered = 1;
 
-            // std::cout << "share knowledge\n";
-            // 2. Share POI knowledge
             for (int p = 0; p < n_pois; ++p)
             {
                 POIKnowledge &sender_pk = view.poi_knowledge[a * n_pois + p];
                 POIKnowledge &receiver_pk = view.poi_knowledge[target_agent * n_pois + p];
 
-                // If sender knows more, update receiver
                 if (sender_pk.knows_found && !receiver_pk.knows_found)
                 {
                     receiver_pk.x = sender_pk.x;
@@ -391,9 +371,6 @@ private:
                 }
             }
 
-            // std::cout << "share tile knowledge " << e << "\n";
-
-            // 3. Share Tile Knowledge (Merge maps) ONLY CURRENT VIEW
             float vr = view.agents[a].view_range;
             float vr_sq = vr * vr;
             int min_y = std::max(0, static_cast<int>(view.agents[a].y - vr));
@@ -427,8 +404,6 @@ private:
                     }
                 }
             }
-
-            // std::cout << "log " << e << "\n";
         }
     }
 
@@ -437,7 +412,6 @@ private:
         EnvStateView view = env_views[e];
         for (int a = 0; a < n_agents; ++a)
         {
-            // If an agent is past its battery capacity its deployment ends
             if (view.agents[a].deployment_remaining > 0.0f)
             {
                 view.agents[a].deployment_remaining -= delta_time;
@@ -450,13 +424,12 @@ private:
         int poi_left = 0;
         for (int p = 0; p < n_pois; ++p)
         {
-            if (!view.pois[p].saved)
+            if (!view.pois[p].is_saved())
                 poi_left++;
         }
         *view.poi_left = poi_left;
     }
 
-    // TODO: slowest possible implementation...
     void fill_torch_obs(int e)
     {
         if (!torch_obs_spatial_base || !torch_obs_internal_base)
@@ -468,94 +441,54 @@ private:
         if (mode == Mode::DECENTRALIZED)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-            ssize_t internal_stride = 6; // y, x, battery, view_range, deploy, stuck
+            ssize_t internal_stride = 6; // y, x, max_bat, view_range, deploy, stuck
 
             for (int a = 0; a < n_agents; ++a)
             {
                 float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
-                // Spatial MASKED already handled inline during discovery
-
                 // POI MASKED
                 for (int p = 0; p < n_pois; ++p)
                 {
                     POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
-
-                    if (pk.last_y >= 0 && pk.last_x >= 0 && pk.last_y < height && pk.last_x < width)
-                        spat_base[decentral_obs_strides->PIO_START + pk.last_y * width + pk.last_x] = 0.0f;
-
+                    int py = static_cast<int>(pk.y);
+                    int px = static_cast<int>(pk.x);
+                    spat_base[decentral_obs_strides->PIO_START + pk.last_y * width + pk.last_x] = 0.0f;
                     if (pk.knows_found && !pk.knows_saved)
                     {
                         int py = static_cast<int>(pk.y);
                         int px = static_cast<int>(pk.x);
-                        if (py >= 0 && py < height && px >= 0 && px < width)
-                        {
-                            spat_base[decentral_obs_strides->PIO_START + py * width + px] = 1.0f;
-                            pk.last_y = py;
-                            pk.last_x = px;
-                        }
-                        else
-                        {
-                            pk.last_y = -1;
-                            pk.last_x = -1;
-                        }
-                    }
-                    else
-                    {
-                        pk.last_y = -1;
-                        pk.last_x = -1;
+                        spat_base[decentral_obs_strides->PIO_START + py * width + px] = 1.0f;
+                        pk.last_y = py;
+                        pk.last_x = px;
                     }
                 }
 
-                // Agents
-                if (view.agents[a].last_y >= 0 && view.agents[a].last_x >= 0 && view.agents[a].last_y < height && view.agents[a].last_x < width)
-                    spat_base[decentral_obs_strides->MY_LOCATION_START + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
-
+                // Agents (Myself)
+                spat_base[decentral_obs_strides->MY_LOCATION_START + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
                 int my_y = static_cast<int>(view.agents[a].y);
                 int my_x = static_cast<int>(view.agents[a].x);
-                if (my_y >= 0 && my_y < height && my_x >= 0 && my_x < width)
-                {
-                    spat_base[decentral_obs_strides->MY_LOCATION_START + my_y * width + my_x] = 1.0f;
-                    view.agents[a].last_y = my_y;
-                    view.agents[a].last_x = my_x;
-                }
-                else
-                {
-                    view.agents[a].last_y = -1;
-                    view.agents[a].last_x = -1;
-                }
+                spat_base[decentral_obs_strides->MY_LOCATION_START + my_y * width + my_x] = 1.0f;
+                view.agents[a].last_y = my_y;
+                view.agents[a].last_x = my_x;
 
+                // Agents (Others)
                 int other_idx = 0;
                 for (int a2 = 0; a2 < n_agents; ++a2)
                 {
                     if (a == a2)
                         continue;
                     AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a2];
-
-                    if (ak.last_y >= 0 && ak.last_x >= 0 && ak.last_y < height && ak.last_x < width)
-                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + ak.last_y * width + ak.last_x] = 0.0f;
-
                     if (ak.has_contact)
                     {
                         int oy = static_cast<int>(ak.y);
                         int ox = static_cast<int>(ak.x);
-                        if (oy >= 0 && oy < height && ox >= 0 && ox < width)
-                        {
-                            spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + oy * width + ox] = 1.0f;
-                            ak.last_y = oy;
-                            ak.last_x = ox;
-                        }
-                        else
-                        {
-                            ak.last_y = -1;
-                            ak.last_x = -1;
-                        }
-                    }
-                    else
-                    {
-                        ak.last_y = -1;
-                        ak.last_x = -1;
+                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + ak.last_y * width + ak.last_x] = 0.0f;
+                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + oy * width + ox] = 1.0f;
+                        ak.last_y = oy;
+                        ak.last_x = ox;
+                        ak.has_encountered = 1;
                     }
                     other_idx++;
                 }
@@ -563,7 +496,7 @@ private:
                 // Internal Vector
                 int_base[0] = view.agents[a].y;
                 int_base[1] = view.agents[a].x;
-                int_base[2] = view.agents[a].battery;
+                int_base[2] = agent_max_batteries[a];
                 int_base[3] = view.agents[a].view_range;
                 int_base[4] = view.agents[a].deployment_remaining;
                 int_base[5] = static_cast<float>(view.agents[a].stuck);
@@ -577,61 +510,38 @@ private:
 
             for (int p = 0; p < n_pois; ++p)
             {
-                if (view.pois[p].last_y >= 0 && view.pois[p].last_x >= 0 && view.pois[p].last_y < height && view.pois[p].last_x < width)
-                    spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
-
-                if (view.pois[p].found && !view.pois[p].saved)
+                spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
+                if (view.pois[p].is_found() && !view.pois[p].is_saved())
                 {
                     int py = static_cast<int>(view.pois[p].y);
                     int px = static_cast<int>(view.pois[p].x);
-                    if (py >= 0 && py < height && px >= 0 && px < width)
-                    {
-                        spat_base[central_obs_strides->PIO_START + py * width + px] = 1.0f;
-                        view.pois[p].last_y = py;
-                        view.pois[p].last_x = px;
-                    }
-                    else
-                    {
-                        view.pois[p].last_y = -1;
-                        view.pois[p].last_x = -1;
-                    }
-                }
-                else
-                {
-                    view.pois[p].last_y = -1;
-                    view.pois[p].last_x = -1;
+                    spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
+                    spat_base[central_obs_strides->PIO_START + py * width + px] = 1.0f;
+                    view.pois[p].last_y = py;
+                    view.pois[p].last_x = px;
                 }
             }
 
             for (int a = 0; a < n_agents; ++a)
             {
-                if (view.agents[a].last_y >= 0 && view.agents[a].last_x >= 0 && view.agents[a].last_y < height && view.agents[a].last_x < width)
-                    spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
+                spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
 
                 int ay = static_cast<int>(view.agents[a].y);
                 int ax = static_cast<int>(view.agents[a].x);
-                if (ay >= 0 && ay < height && ax >= 0 && ax < width)
-                {
-                    spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + ay * width + ax] = 1.0f;
-                    view.agents[a].last_y = ay;
-                    view.agents[a].last_x = ax;
-                }
-                else
-                {
-                    view.agents[a].last_y = -1;
-                    view.agents[a].last_x = -1;
-                }
+                spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + ay * width + ax] = 1.0f;
+                view.agents[a].last_y = ay;
+                view.agents[a].last_x = ax;
 
                 int_base[a * 6 + 0] = view.agents[a].y;
                 int_base[a * 6 + 1] = view.agents[a].x;
-                int_base[a * 6 + 2] = view.agents[a].battery;
+                int_base[a * 6 + 2] = agent_max_batteries[a];
                 int_base[a * 6 + 3] = view.agents[a].view_range;
                 int_base[a * 6 + 4] = view.agents[a].deployment_remaining;
                 int_base[a * 6 + 5] = static_cast<float>(view.agents[a].stuck);
             }
         }
     }
-    // TODO: slowest possible implementation...
+
     void fill_torch_state(int e)
     {
         if (!torch_state_spatial_base || !torch_state_internal_base)
@@ -644,12 +554,10 @@ private:
         float *spat_base = torch_state_spatial_base + e * spatial_stride;
         float *int_base = torch_state_internal_base + e * (n_agents * 6 + n_pois * 4);
 
-        // UNMASKED Terrain already largely static, just update during discovery
-
-        // UNMASKED POIs (Any POI not yet saved)
         for (int p = 0; p < n_pois; ++p)
         {
-            if (!view.pois[p].saved)
+            spat_base[central_state_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
+            if (!view.pois[p].is_saved())
             {
                 int py = static_cast<int>(view.pois[p].y);
                 int px = static_cast<int>(view.pois[p].x);
@@ -660,10 +568,10 @@ private:
             }
         }
 
-        // True Agent Locations
         int int_off = 0;
         for (int a = 0; a < n_agents; ++a)
         {
+            spat_base[central_state_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
             int ay = static_cast<int>(view.agents[a].y);
             int ax = static_cast<int>(view.agents[a].x);
             if (ay >= 0 && ay < height && ax >= 0 && ax < width)
@@ -672,24 +580,22 @@ private:
             }
             int_base[int_off++] = view.agents[a].y;
             int_base[int_off++] = view.agents[a].x;
-            int_base[int_off++] = view.agents[a].battery;
+            int_base[int_off++] = agent_max_batteries[a];
             int_base[int_off++] = view.agents[a].view_range;
             int_base[int_off++] = view.agents[a].deployment_remaining;
             int_base[int_off++] = static_cast<float>(view.agents[a].stuck);
         }
 
-        // True POI data
         for (int p = 0; p < n_pois; ++p)
         {
             int_base[int_off++] = view.pois[p].y;
             int_base[int_off++] = view.pois[p].x;
-            int_base[int_off++] = static_cast<float>(view.pois[p].found);
-            int_base[int_off++] = static_cast<float>(view.pois[p].saved);
+            int_base[int_off++] = static_cast<float>(view.pois[p].is_found());
+            int_base[int_off++] = static_cast<float>(view.pois[p].is_saved());
         }
     }
 
 public:
-    // Hyper Parameters sent from python
     int seed;
     int n_tiles;
     int n_pois;
@@ -703,12 +609,11 @@ public:
     int num_envs;
     int map_size;
 
-    // Internal data for resetting the environment managing randomness
-    // and rendering the radio
     std::vector<std::mt19937> rngs;
     std::vector<int> current_frames;
     std::vector<float> init_agent_positions;
     std::vector<float> init_poi_positions;
+    std::vector<float> agent_max_batteries;
     std::vector<std::string> radio_logs;
     std::vector<Tile> pristine_grid;
 
@@ -721,13 +626,14 @@ public:
         const std::vector<uint8_t> &supports_aqua,
         const std::vector<uint8_t> &supports_fly,
         const std::vector<uint8_t> &is_block,
-        const std::vector<int> &t_map, // width*height int for tile types
+        const std::vector<int> &t_map,
         const std::vector<float> &alt_map,
         const std::vector<float> &speed_map,
         const std::vector<float> &agent_view_ranges,
-        const std::vector<uint8_t> &saveable_rules,  // n_poi * n_agents can this poi be saved by this agent
-        const std::vector<float> &initial_agent_pos, // n_agent * 2 x y start locs
-        const std::vector<float> &initial_poi_pos,   // n_poi * 2 x y start locs
+        const std::vector<uint8_t> &saveable_rules,
+        const std::vector<float> &initial_agent_pos,
+        const std::vector<float> &initial_poi_pos,
+        const std::vector<float> &agent_max_batteries_val,
         uintptr_t obs_spatial_ptr,
         uintptr_t obs_internal_ptr,
         uintptr_t state_spatial_ptr,
@@ -735,7 +641,7 @@ public:
         uintptr_t rewards_ptr,
         uintptr_t terminated_ptr,
         uintptr_t truncated_ptr,
-        bool requires_state = false, // Should we allocate the true state tensor?
+        bool requires_state = false,
         bool coop_rewards = true,
         float reward_new_tile_val = 0.05f,
         float reward_found_val = 2.0f,
@@ -749,7 +655,9 @@ public:
           type_map(std::move(t_map)), altitude_map(std::move(alt_map)), agent_speed_map(std::move(speed_map)),
           agent_base_view_ranges(std::move(agent_view_ranges)),
           saveable_rules(std::move(saveable_rules)), init_agent_positions(std::move(initial_agent_pos)),
-          init_poi_positions(std::move(initial_poi_pos)), requires_state(requires_state), cooperative_rewards(coop_rewards),
+          init_poi_positions(std::move(initial_poi_pos)),
+          agent_max_batteries(std::move(agent_max_batteries_val)),
+          requires_state(requires_state), cooperative_rewards(coop_rewards),
           reward_new_tile(reward_new_tile_val), reward_found(reward_found_val), reward_saved(reward_saved_val),
           max_frames(max_frames_val), map_size(w * h), mode(static_cast<Mode>(mode_value))
     {
@@ -757,12 +665,11 @@ public:
         {
             throw(std::invalid_argument("mode value < 0 or > 2 cannot be bound into Mode enum"));
         }
-        // 1. Dynamic bounds tracking
+
         n_tiles = int(supports_walking.size());
         n_agents = int(init_agent_positions.size() / 2);
         n_pois = int(init_poi_positions.size() / 2);
 
-        // 2. Setup internal simulation states
         current_frames.resize(num_envs, 0);
         radio_logs.resize(num_envs, "");
 
@@ -774,14 +681,12 @@ public:
         env_terminated = reinterpret_cast<uint8_t *>(terminated_ptr);
         env_truncated = reinterpret_cast<uint8_t *>(truncated_ptr);
 
-        // Padded strides to align to 256 bytes per env to prevent false sharing
         padded_reward_stride = std::max(64, static_cast<int>((n_agents * sizeof(float) + 255) / sizeof(float)));
         padded_byte_stride = 256;
         padded_rewards.resize(num_envs * padded_reward_stride, 0.0f);
         padded_terminated.resize(num_envs * padded_byte_stride, 0);
         padded_truncated.resize(num_envs * padded_byte_stride, 0);
 
-        // First-touch initialization for PyTorch tensors to ensure NUMA spreading
         ssize_t spatial_channels = n_tiles + 3 + n_agents;
         ssize_t obs_spatial_stride = (mode == Mode::DECENTRALIZED) ? (n_agents * spatial_channels * map_size) : (spatial_channels * map_size);
         ssize_t obs_internal_stride = n_agents * 6;
@@ -840,7 +745,6 @@ public:
             rngs.push_back(std::mt19937(base_rng()));
         }
 
-        // Bind Stride Structs purely from env_state.h truth
         if (mode == Mode::DECENTRALIZED)
         {
             decentral_obs_strides = std::make_unique<DecentralizedPartialObsStrides>(width, height, n_tiles, n_agents);
@@ -859,7 +763,6 @@ public:
         for (int e = 0; e < num_envs; ++e)
             env_views.push_back(arena->get_env_view(e));
 
-        // Create the base grid once to copy during resets
         pristine_grid.resize(map_size);
         for (int i = 0; i < map_size; ++i)
         {
@@ -886,13 +789,12 @@ public:
             std::uniform_real_distribution<float> rand_dir(-1.0f, 1.0f);
             std::uniform_int_distribution<int> rand_radio(0, n_agents - 1);
 
-            // Find max battery among agents for this environment
             float max_battery = 0.0f;
             for (int a = 0; a < n_agents; ++a)
             {
-                if (env_views[e].agents[a].battery > max_battery)
+                if (env_views[e].agents[a].deployment_remaining > max_battery)
                 {
-                    max_battery = env_views[e].agents[a].battery;
+                    max_battery = env_views[e].agents[a].deployment_remaining;
                 }
             }
 
@@ -946,65 +848,56 @@ public:
 
         EnvStateView view = env_views[env_idx];
 
-        // A. Env Counters
         if (view.current_frame)
             *view.current_frame = 0;
         if (view.undiscovered_remaining)
             *view.undiscovered_remaining = map_size;
 
-        // B. Tiles
         std::memcpy(view.grid, pristine_grid.data(), map_size * sizeof(Tile));
 
-        // C. Agents
         for (int a = 0; a < n_agents; ++a)
         {
             view.agents[a].y = init_agent_positions[a * 2];
             view.agents[a].x = init_agent_positions[a * 2 + 1];
-            view.agents[a].battery = 100.0f;
+            view.agents[a].deployment_remaining = agent_max_batteries[a];
 
             int cy = static_cast<int>(view.agents[a].y);
             int cx = static_cast<int>(view.agents[a].x);
             float start_altitude = view.grid[cy * width + cx].altitude;
             view.agents[a].view_range = std::max(agent_base_view_ranges[a] * start_altitude, 1.0f);
 
-            view.agents[a].deployment_remaining = view.agents[a].battery;
-            view.agents[a].type = a;
             view.agents[a].stuck = 0;
+            view.agents[a].last_y = static_cast<uint16_t>(view.agents[a].y);
+            view.agents[a].last_x = static_cast<uint16_t>(view.agents[a].x);
 
-            // Load specialized speeds
             for (int t = 0; t < n_tiles; ++t)
             {
                 view.agent_speeds[a * n_tiles + t] = agent_speed_map[a * n_tiles + t];
             }
         }
 
-        // D. Survivors (POIs)
         std::uniform_real_distribution<float> dist_w(0.5f, static_cast<float>(width) - 0.5f);
         std::uniform_real_distribution<float> dist_h(0.5f, static_cast<float>(height) - 0.5f);
         for (int p = 0; p < n_pois; ++p)
         {
             view.pois[p].y = dist_h(rngs[env_idx]);
             view.pois[p].x = dist_w(rngs[env_idx]);
-            view.pois[p].found = 0;
-            view.pois[p].saved = 0;
-            view.pois[p].moves = 0;
+            view.pois[p].state = 0;
+            view.pois[p].last_y = static_cast<uint16_t>(view.pois[p].y);
+            view.pois[p].last_x = static_cast<uint16_t>(view.pois[p].x);
 
-            // Generate 1-hot bitmask integer evaluating the allowed savers array natively
-            uint32_t savable_mask = 0;
             for (int a = 0; a < n_agents; ++a)
             {
                 if (saveable_rules.size() > size_t(p * n_agents + a) && saveable_rules[p * n_agents + a])
                 {
-                    savable_mask |= (1U << a);
+                    view.pois[p].set_savable(a, true);
                 }
             }
-            view.pois[p].savable_by_mask = savable_mask;
         }
 
         *view.poi_left = n_pois;
         *view.agents_left = n_agents;
 
-        // E. Diff Tracker & Tensor Clear
         if (mode == Mode::DECENTRALIZED && torch_obs_spatial_base != nullptr)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
@@ -1027,7 +920,6 @@ public:
             float *spat_base = torch_state_spatial_base + env_idx * spatial_stride;
             std::memset(spat_base, 0, spatial_stride * sizeof(float));
 
-            // Populate static Unmasked Terrain Type and Altitude exactly once per episode
             for (int i = 0; i < map_size; ++i)
             {
                 spat_base[central_state_strides->TYLE_TYPE_START + view.grid[i].get_type() * map_size + i] = 1.0f;
@@ -1035,28 +927,22 @@ public:
             }
         }
 
-        for (int a = 0; a < n_agents; ++a)
-        {
-            view.agents[a].last_x = -1;
-            view.agents[a].last_y = -1;
-        }
-        for (int p = 0; p < n_pois; ++p)
-        {
-            view.pois[p].last_x = -1;
-            view.pois[p].last_y = -1;
-        }
-
         if (mode == Mode::DECENTRALIZED && view.agent_knowledge != nullptr)
         {
             for (int i = 0; i < n_agents * n_agents; ++i)
             {
-                view.agent_knowledge[i].last_x = -1;
-                view.agent_knowledge[i].last_y = -1;
+                view.agent_knowledge[i].has_encountered = 0;
+                view.agent_knowledge[i].has_contact = 0;
+                view.agent_knowledge[i].last_y = 0;
+                view.agent_knowledge[i].last_x = 0;
             }
             for (int i = 0; i < n_agents * n_pois; ++i)
             {
-                view.poi_knowledge[i].last_x = -1;
-                view.poi_knowledge[i].last_y = -1;
+                view.poi_knowledge[i].knows_found = 0;
+                view.poi_knowledge[i].knows_saved = 0;
+                int p = i % n_pois;
+                view.poi_knowledge[i].last_y = static_cast<uint16_t>(view.pois[p].y);
+                view.poi_knowledge[i].last_x = static_cast<uint16_t>(view.pois[p].x);
             }
         }
     }
@@ -1070,7 +956,6 @@ public:
 
     void step(py::array_t<float, py::array::c_style | py::array::forcecast> move_actions_array, py::array_t<int, py::array::c_style> radio_actions_array)
     {
-        // action space is box2d[dx, dy], discrete(num radio choices)
         if ((move_actions_array.ndim() != 1) || (radio_actions_array.ndim() != 1))
             throw std::invalid_argument("actions must have shape [E*A*2] for movement and [E*A] for radio");
         if ((move_actions_array.shape(0) != 2 * num_envs * n_agents) || (radio_actions_array.shape(0) != num_envs * n_agents))
@@ -1082,15 +967,6 @@ public:
 #pragma omp parallel for schedule(static)
         for (int e = 0; e < num_envs; ++e)
         {
-            //             if (steps_taken == 0 && e == 0) {
-            // #pragma omp critical
-            //                 {
-            //                     std::ofstream log("thread_affinity.log", std::ios_base::app);
-            //                     log << "Step loop Env " << e << ": Thread " << omp_get_thread_num() << " is on CPU " << sched_getcpu() << "\n";
-            //                 }
-            //             }
-
-            // Clear the 256-byte aligned local thread block instead of hitting the compact pyTorch array
             std::memset(padded_rewards.data() + e * padded_reward_stride, 0, n_agents * sizeof(float));
 
             if (padded_terminated[e * padded_byte_stride] || padded_truncated[e * padded_byte_stride])
@@ -1119,8 +995,6 @@ public:
             }
         }
 
-        // Sequential single-thread collection copies directly into the dense PyTorch contiguous buffers
-        // to prevent multi-core cache invalidation storms
         for (int e = 0; e < num_envs; ++e)
         {
             env_terminated[e] = padded_terminated[e * padded_byte_stride];
@@ -1137,41 +1011,39 @@ public:
 
 PYBIND11_MODULE(cpp_engine, m)
 {
-    /* REGISTER_FEATURE_TYPE_ENUM(m); // Uncomment or define if needed */
-
     py::class_<BatchedEnvironment>(m, "BatchedEnvironment")
         .def(py::init<
-                 int,                  // n_envs
-                 int,                  // sim_seed
-                 int,                  // width
-                 int,                  // height
-                 std::vector<uint8_t>, // supports_walk
-                 std::vector<uint8_t>, // supports_aqua
-                 std::vector<uint8_t>, // supports_fly
-                 std::vector<uint8_t>, // is_block
-                 std::vector<int>,     // t_map
-                 std::vector<float>,   // alt_map
-                 std::vector<float>,   // speed_map
-                 std::vector<float>,   // agent_view_ranges
-                 std::vector<uint8_t>, // saveable_rules
-                 std::vector<float>,   // initial_agent_pos
-                 std::vector<float>,   // initial_poi_pos
-                 uintptr_t,            // obs_spatial_ptr
-                 uintptr_t,            // obs_internal_ptr
-                 uintptr_t,            // state_spatial_ptr
-                 uintptr_t,            // state_internal_ptr
-                 uintptr_t,            // rewards_ptr
-                 uintptr_t,            // terminated_ptr
-                 uintptr_t,            // truncated_ptr
-                 bool,                 // requires_state
-                 bool,                 // coop_rewards
-                 float,                // reward_new_tile_val
-                 float,                // reward_found_val
-                 float,                // reward_saved_val
-                 int,                  // max_frames_val
-                 int,                  // mode_value
-                 int                   // init_mode
-                 >(),
+                 int,
+                 int,
+                 int,
+                 int,
+                 std::vector<uint8_t>,
+                 std::vector<uint8_t>,
+                 std::vector<uint8_t>,
+                 std::vector<uint8_t>,
+                 std::vector<int>,
+                 std::vector<float>,
+                 std::vector<float>,
+                 std::vector<float>,
+                 std::vector<uint8_t>,
+                 std::vector<float>,
+                 std::vector<float>,
+                 std::vector<float>,
+                 uintptr_t,
+                 uintptr_t,
+                 uintptr_t,
+                 uintptr_t,
+                 uintptr_t,
+                 uintptr_t,
+                 uintptr_t,
+                 bool,
+                 bool,
+                 float,
+                 float,
+                 float,
+                 int,
+                 int,
+                 int>(),
              py::arg("n_envs"),
              py::arg("sim_seed"),
              py::arg("width"),
@@ -1187,6 +1059,7 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("saveable_rules"),
              py::arg("initial_agent_pos"),
              py::arg("initial_poi_pos"),
+             py::arg("agent_max_batteries_val"),
              py::arg("obs_spatial_ptr"),
              py::arg("obs_internal_ptr"),
              py::arg("state_spatial_ptr"),
@@ -1204,7 +1077,5 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("init_mode") = 0)
         .def("reset", &BatchedEnvironment::reset)
         .def("reset_env", &BatchedEnvironment::reset_env, py::arg("env_idx"))
-        .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"))
-        // Add other methods as needed
-        ;
+        .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"));
 }
