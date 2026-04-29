@@ -1,8 +1,9 @@
-# Example wilderness SAR | Coast Guard Monitoring | Neighborhood Watch | Warehouse Fire |
-|---|---|---|---|
-| ![Example wilderness SAR](saved_human_behavior/example/replay.gif) | ![Coast Guard Monitoring](saved_human_behavior/island/replay.gif) | ![Neighborhood Watch](saved_human_behavior/neighborhood/replay.gif) | ![Warehouse Fire](saved_human_behavior/warehouse/replay.gif) |
-
 # Hide-And-Seek Engine (MARL POMDP Simulator)
+
+| Example wilderness SAR | Coast Guard Monitoring | Neighborhood Watch | Warehouse Fire |
+|---|---|---|---|
+| <img src="saved_human_behavior/example/replay.gif" alt="Example wilderness SAR" width="200"> | <img src="saved_human_behavior/island/replay.gif" alt="Coast Guard Monitoring" width="200"> | <img src="saved_human_behavior/neighborhood/replay.gif" alt="Neighborhood Watch" width="200"> | <img src="saved_human_behavior/warehouse/replay.gif" alt="Warehouse Fire" width="200"> |
+
 
 A C++/PyBind11 environment engine for large-scale Multi-Agent Reinforcement Learning (MARL) in partially observable grid-worlds. Designed for high-throughput, batched simulation with PyTorch.
 
