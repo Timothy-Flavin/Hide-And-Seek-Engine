@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <memory>
 #include <cstring>
-#include <algorithm>
 
 // Define ssize_t for cross-platform compatibility (if not already handled)
 #ifndef ssize_t
@@ -13,6 +12,26 @@
 typedef ptrdiff_t ssize_t;
 #endif
 #endif
+
+// Helper to convert float to a 16-bit integer (FP16)
+inline uint16_t float_to_fp16(float f)
+{
+    if (f == 0.0f)
+        return 0;
+    uint32_t x;
+    std::memcpy(&x, &f, sizeof(x));
+    return static_cast<uint16_t>(((x >> 16) & 0x8000) | ((((x & 0x7f800000) - 0x38000000) >> 13) & 0x7c00) | ((x >> 13) & 0x03ff));
+}
+
+inline float fp16_to_float(uint16_t h)
+{
+    if (h == 0)
+        return 0.0f;
+    uint32_t x = ((h & 0x8000) << 16) | (((h & 0x7c00) + 0x1C000) << 13) | ((h & 0x03FF) << 13);
+    float f;
+    std::memcpy(&f, &x, sizeof(f));
+    return f;
+}
 
 // ---------------CONVENIENCE TENSOR STRIDE OBJECTS-------------------
 // What individual agents with limited radio see
@@ -27,9 +46,9 @@ struct DecentralizedPartialObsStrides
     // Stride pointer  location for altitude layer
     const ssize_t ALTITUDE_TYPE_START; // w*h
     // Stride pointer location for person of interests who have been seen but not saved
-    const ssize_t PIO_START;             // w*h
-    const ssize_t OBSERVED_START;        // w*h
-    const ssize_t MY_LOCATION_START;     // w*h
+    const ssize_t PIO_START;
+    const ssize_t OBSERVED_START;
+    const ssize_t MY_LOCATION_START;
     const ssize_t OTHER_LOCATIONS_START; // (n_agents-1)*w*h
     DecentralizedPartialObsStrides(ssize_t w, ssize_t h, ssize_t n_tile_types, ssize_t n_agents)
         : map_area(w * h),
@@ -40,19 +59,15 @@ struct DecentralizedPartialObsStrides
           MY_LOCATION_START(OBSERVED_START + map_area),
           OTHER_LOCATIONS_START(MY_LOCATION_START + map_area) {}
 };
-// What individual agents with centralized control / perfect radio see
+
 struct CentralizedPartialObsStrides
 {
     const ssize_t map_area;
-    // Stride pointer  location for tile type layers
-    const ssize_t TYLE_TYPE_START = 0; // n_tile_types * w*h
-    // Stride pointer  location for altitude layer
-    const ssize_t ALTITUDE_TYPE_START; // w*h
-    // Stride pointer  location for person of interests who have been seen but not saved
-    const ssize_t PIO_START;      // w*h
-    const ssize_t OBSERVED_START; // w*h
-    // All agents because this would be a centralized actor taking all agent actions
-    const ssize_t AGENT_LOCATIONS_START; // n_agent_layers*w*h
+    const ssize_t TYLE_TYPE_START = 0;
+    const ssize_t ALTITUDE_TYPE_START;
+    const ssize_t PIO_START;
+    const ssize_t OBSERVED_START;
+    const ssize_t AGENT_LOCATIONS_START;
     CentralizedPartialObsStrides(ssize_t w, ssize_t h, ssize_t n_tile_types, ssize_t n_agent_layers)
         : map_area(w * h),
           TYLE_TYPE_START(0),
@@ -61,20 +76,15 @@ struct CentralizedPartialObsStrides
           OBSERVED_START(PIO_START + map_area),
           AGENT_LOCATIONS_START(OBSERVED_START + map_area) {}
 };
-// The true game state including hidden variables for centralized training
+
 struct CentralizedStateStrides
 {
     const ssize_t map_area;
-    // Stride pointer location for tile type layers
-    const ssize_t TYLE_TYPE_START = 0; // n_tile_types * w*h
-    // Stride pointer  location for altitude layer
-    const ssize_t ALTITUDE_TYPE_START; // w*h
-    // Stride pointer true location for all person of interests who
-    // are not saved. They need not be spotted yet
-    const ssize_t PIO_START; // w*h
-    // This will be one layer because only the true discovered map matters
-    const ssize_t OBSERVED_START;        // w*h
-    const ssize_t AGENT_LOCATIONS_START; // n_agent_layers*w*h
+    const ssize_t TYLE_TYPE_START = 0;
+    const ssize_t ALTITUDE_TYPE_START;
+    const ssize_t PIO_START;
+    const ssize_t OBSERVED_START;
+    const ssize_t AGENT_LOCATIONS_START;
     CentralizedStateStrides(ssize_t w, ssize_t h, ssize_t n_tile_types, ssize_t n_agent_layers)
         : map_area(w * h),
           TYLE_TYPE_START(0),
@@ -85,8 +95,6 @@ struct CentralizedStateStrides
 };
 
 //-------------------INTERNAL ENVIRONMENT DATA STRUCTURES------------------------
-
-// Tile responsibilities like type altitude and observed
 struct Tile
 {
     uint32_t flags;
@@ -100,34 +108,11 @@ struct Tile
     // ==========================================
     // TILE TYPE (Bits 5-11)
     // ==========================================
-    inline uint32_t get_type() const
-    {
-        return (flags >> TILE_TYPE_SHIFT) & TILE_TYPE_MASK;
-    }
-
-    inline void set_type(uint32_t type_id)
-    {
-        flags = (flags & ~(TILE_TYPE_MASK << TILE_TYPE_SHIFT)) |
-                ((type_id & TILE_TYPE_MASK) << TILE_TYPE_SHIFT);
-    }
-
-    // ==========================================
-    // AGENT OBSERVED MASKS (Bits 12-31)
-    // ==========================================
-    inline bool has_agent_seen(int agent_id) const
-    {
-        return (flags >> (AGENT_MASK_SHIFT + agent_id)) & 1U;
-    }
-
-    inline void set_agent_seen(int agent_id)
-    {
-        flags |= (1U << (AGENT_MASK_SHIFT + agent_id));
-    }
-
-    inline void clear_agent_seen(int agent_id)
-    {
-        flags &= ~(1U << (AGENT_MASK_SHIFT + agent_id));
-    }
+    inline uint32_t get_type() const { return (flags >> TILE_TYPE_SHIFT) & TILE_TYPE_MASK; }
+    inline void set_type(uint32_t type_id) { flags = (flags & ~(TILE_TYPE_MASK << TILE_TYPE_SHIFT)) | ((type_id & TILE_TYPE_MASK) << TILE_TYPE_SHIFT); }
+    inline bool has_agent_seen(int agent_id) const { return (flags >> (AGENT_MASK_SHIFT + agent_id)) & 1U; }
+    inline void set_agent_seen(int agent_id) { flags |= (1U << (AGENT_MASK_SHIFT + agent_id)); }
+    inline void clear_agent_seen(int agent_id) { flags &= ~(1U << (AGENT_MASK_SHIFT + agent_id)); }
 
     // ==========================================
     // PHYSICAL & GLOBAL PROPERTIES (Bits 0-4)
@@ -156,8 +141,15 @@ struct AgentState
     float deployment_remaining; // 4 bytes
     uint16_t last_x;            // 2 bytes
     uint16_t last_y;            // 2 bytes
-    uint8_t stuck;              // 1 byte
-    uint8_t _padding[3];        // 3 bytes explicitly added to reach 24
+    uint8_t flags;              // 1 byte: 0=stuck, 1=walk, 2=fly, 3=swim
+    uint16_t max_alt_fp16;      // 2 bytes: storing max altitude
+    uint8_t _padding;           // 1 byte: explicit padding to 24 bytes total
+
+    inline bool is_stuck() const { return flags & 1U; }
+    inline bool can_walk() const { return flags & 2U; }
+    inline bool can_fly() const { return flags & 4U; }
+    inline bool can_swim() const { return flags & 8U; }
+    inline void set_stuck(bool v) { v ? flags |= 1U : flags &= ~1U; }
 };
 
 struct POIState
@@ -175,14 +167,10 @@ struct POIState
     // Agent Mask (0-19)
     void set_savable(int id, bool v) { v ? state |= (1u << id) : state &= ~(1u << id); }
     bool is_savable_by(int id) const { return (state >> id) & 1u; }
-
-    // Logic Flags (20-22)
     void set_found(bool v) { v ? state |= (1u << 20) : state &= ~(1u << 20); }
     bool is_found() const { return (state >> 20) & 1u; }
-
     void set_saved(bool v) { v ? state |= (1u << 21) : state &= ~(1u << 21); }
     bool is_saved() const { return (state >> 21) & 1u; }
-
     void set_moves(bool v) { v ? state |= (1u << 22) : state &= ~(1u << 22); }
     bool does_move() const { return (state >> 22) & 1u; }
 };
@@ -191,40 +179,35 @@ struct POIState
 // AgentKnowledge: 14 bytes of data + 2 explicit padding bytes = 16 bytes total.
 struct AgentKnowledge
 {
-    float x;                 // 4 bytes
-    float y;                 // 4 bytes
-    uint16_t last_x;         // 2 bytes
-    uint16_t last_y;         // 2 bytes
-    uint8_t has_contact;     // 1 byte: is this agent getting an update this frame
-    uint8_t has_encountered; // 1 byte: has this agent ever gotten an update
-    uint8_t is_stuck;        // 1 byte
-    uint8_t _padding;        // 1 bytes explicitly added to reach 16
+    float x;
+    float y;
+    uint16_t last_x;
+    uint16_t last_y;
+    uint8_t has_contact;
+    uint8_t has_encountered;
+    uint8_t is_stuck;
+    uint8_t _padding;
 };
 
-// What Agent A knows about POI (Survivor) K
 struct POIKnowledge
 {
-    float x;             // 4 bytes
-    float y;             // 4 bytes
-    uint16_t last_x;     // 2 bytes
-    uint16_t last_y;     // 2 bytes
-    uint8_t knows_found; // 1 byte
-    uint8_t knows_saved; // 1 byte
-    uint8_t _padding[2]; // 2 bytes explicitly added to reach 16
+    float x;
+    float y;
+    uint16_t last_x;
+    uint16_t last_y;
+    uint8_t knows_found;
+    uint8_t knows_saved;
+    uint8_t _padding[2];
 };
 
-// 2. The View Struct: Maps to the contiguous flat memory
 struct EnvStateView
 {
-    Tile *grid; // spatial part of the observation
+    Tile *grid;
     AgentState *agents;
     POIState *pois;
-    // --- NEW BELIEF MATRICES ---
-    // Size: n_agents * n_agents. Index via [viewer_id * n_agents + target_id]
-    AgentKnowledge *agent_knowledge; // used to fill agent layer(s) of tensor
-    // Size: n_agents * n_pois. Index via [viewer_id * n_pois + poi_id]
-    POIKnowledge *poi_knowledge; // used to fill poi layer of tensor
-    float *agent_speeds;         // Size: n_agents * n_tile_types
+    AgentKnowledge *agent_knowledge;
+    POIKnowledge *poi_knowledge;
+    float *agent_speeds;
     int *current_frame;
     int *undiscovered_remaining;
     int *poi_left;
@@ -241,7 +224,6 @@ enum Mode
 class EnvironmentArena
 {
 private:
-    // Helper to align memory offsets to specific boundaries (used only for env boundaries now)
     static constexpr size_t align_up(size_t val, size_t alignment)
     {
         return (val + alignment - 1) & ~(alignment - 1);
@@ -258,19 +240,14 @@ public:
     int n_tile_types;
     int map_area;
 
-    // Cache internal offset locations for blazing fast get_env_view calls
     size_t offset_agents, offset_pois, offset_speeds, offset_agent_know, offset_poi_know, offset_counters;
 
     EnvironmentArena(int num_envs, int w, int h, int num_agents, int num_pois, int num_tile_types, Mode mode_value, int init_mode)
         : n_agents(num_agents), n_pois(num_pois), n_tile_types(num_tile_types), map_area(w * h), mode(mode_value)
     {
         size_t current_offset = 0;
-
-        // Grid (starts at 0)
         current_offset += map_area * sizeof(Tile);
 
-        // Tightly pack the arrays back-to-back.
-        // No internal padding needed because all sizes are multiples of 4.
         offset_agents = current_offset;
         current_offset += n_agents * sizeof(AgentState);
 
@@ -295,11 +272,7 @@ public:
         offset_counters = current_offset;
         current_offset += 4 * sizeof(int);
 
-        // ONLY align the total environment footprint to a 256-byte boundary.
-        // This isolates threads writing to different environments.
         env_stride = align_up(current_offset, 256);
-
-        // Allocate block (+255 to allow manual 256-byte alignment of the base pointer)
         memory.resize(num_envs * env_stride + 255);
         uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(memory.data());
         aligned_base = reinterpret_cast<uint8_t *>(align_up(raw_ptr, 256));
@@ -318,7 +291,6 @@ public:
         }
     }
 
-    // Fully inline, utilizing pre-calculated offsets for minimum overhead
     inline EnvStateView get_env_view(int env_idx)
     {
         EnvStateView view;

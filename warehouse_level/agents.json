@@ -1,0 +1,83 @@
+{
+    "surveillance_drone": {
+        "flying": true,
+        "aqueous": false,
+        "walking": false,
+        "altitude_min": 0.5,
+        "altitude_max": 0.9,
+        "base_speed": 4.0,
+        "base_view": 12.0,
+        "battery": 150.0,
+        "rgb": [
+            200,
+            200,
+            200
+        ],
+        "terrain_speed": {
+            "exterior_ground": 1.0,
+            "warehouse_floor": 0.0,
+            "shrubbery": 1.0,
+            "wall": 0.0,
+            "road": 1.0,
+            "fire": 0.0
+        },
+        "start": [
+            0.8,
+            0.1
+        ]
+    },
+    "security_guard": {
+        "flying": false,
+        "aqueous": false,
+        "walking": true,
+        "altitude_min": 0.0,
+        "altitude_max": 0.0,
+        "base_speed": 1.5,
+        "base_view": 8.0,
+        "battery": 400.0,
+        "rgb": [
+            50,
+            100,
+            255
+        ],
+        "terrain_speed": {
+            "exterior_ground": 1.0,
+            "warehouse_floor": 1.0,
+            "shrubbery": 0.4,
+            "wall": 0.0,
+            "road": 1.2,
+            "fire": 0.0
+        },
+        "start": [
+            0.9,
+            0.5
+        ]
+    },
+    "firefighter": {
+        "flying": false,
+        "aqueous": false,
+        "walking": true,
+        "altitude_min": 0.0,
+        "altitude_max": 0.0,
+        "base_speed": 1.2,
+        "base_view": 6.0,
+        "battery": 500.0,
+        "rgb": [
+            255,
+            165,
+            0
+        ],
+        "terrain_speed": {
+            "exterior_ground": 1.0,
+            "warehouse_floor": 1.0,
+            "shrubbery": 0.4,
+            "wall": 0.0,
+            "road": 1.0,
+            "fire": 0.0
+        },
+        "start": [
+            0.9,
+            0.6
+        ]
+    }
+}

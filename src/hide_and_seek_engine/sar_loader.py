@@ -22,6 +22,8 @@ class SARConfig:
     agent_speed_map: list[float]
     agent_view_ranges: list[float]
     agent_max_batteries: list[float]
+    agent_flags: list[int]
+    agent_max_altitudes: list[float]
     saveable_map: list[int]
     initial_agent_pos: list[float]
     initial_poi_pos: list[float]
@@ -46,13 +48,13 @@ def load_sar_config(
     n_tiles = len(tile_names)
 
     supports_walking = [
-        bool(tiles_data[t].get("supports_walking", False)) for t in tile_names
+        int(tiles_data[t].get("supports_walking", False)) for t in tile_names
     ]
     supports_aquatic = [
-        bool(tiles_data[t].get("supports_aquatic", False)) for t in tile_names
+        int(tiles_data[t].get("supports_aquatic", False)) for t in tile_names
     ]
     supports_flying = [
-        bool(tiles_data[t].get("supports_flying", False)) for t in tile_names
+        int(tiles_data[t].get("supports_flying", False)) for t in tile_names
     ]
     is_blocking = [bool(tiles_data[t].get("blocking", False)) for t in tile_names]
 
@@ -81,6 +83,8 @@ def load_sar_config(
     initial_agent_pos = []
     agent_view_ranges = []
     agent_max_batteries = []
+    agent_flags = []
+    agent_max_altitudes = []
     agent_colors = np.array(
         [agents_data[a].get("rgb", [255, 0, 0]) for a in agent_names], dtype=np.int32
     )
@@ -91,13 +95,26 @@ def load_sar_config(
         agent_view_ranges.append(float(agent.get("base_view", 5.0)))
         for t_name in tile_names:
             agent_speed_map.append(float(speeds.get(t_name, 1.0)))
-        # Parse battery, default to 250.0 if not specified
-        agent_max_batteries.append(float(agent.get("max_battery", 250.0)))
-        # Denormalize starting coords relative to height/width
+            
+        agent_max_batteries.append(float(agent.get("battery", 250.0)))
+        
         start = agent.get("start", [0.5, 0.5])
         initial_agent_pos.extend(
             [float(start[0] * (height - 1)), float(start[1] * (width - 1))]
         )
+        
+        # Determine bitmask flags for C++ optimization
+        can_fly = bool(agent.get("flying", False))
+        can_swim = bool(agent.get("aqueous", False))
+        can_walk = bool(agent.get("walking", False))
+        
+        flag = 0
+        if can_walk: flag |= 2 # Bit 1: walk
+        if can_fly: flag |= 4  # Bit 2: fly
+        if can_swim: flag |= 8 # Bit 3: swim
+        agent_flags.append(flag)
+        
+        agent_max_altitudes.append(float(agent.get("altitude_max", 1.0)))
 
     # 4. POI (Survivor) Properties
     survivor_names = list(survivors_data.keys())
@@ -137,6 +154,8 @@ def load_sar_config(
         agent_speed_map=agent_speed_map,
         agent_view_ranges=agent_view_ranges,
         agent_max_batteries=agent_max_batteries,
+        agent_flags=agent_flags,
+        agent_max_altitudes=agent_max_altitudes,
         saveable_map=saveable_map,
         initial_agent_pos=initial_agent_pos,
         initial_poi_pos=initial_poi_pos,

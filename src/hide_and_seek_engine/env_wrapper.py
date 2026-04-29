@@ -50,7 +50,6 @@ class SARBatchedGridEnv:
         self.agent_internal_dim = 6
 
         # 2. Allocate contiguous PyTorch memory for zero-copy C++ updates
-        # Pinned memory ensures fast transfer if the user later shifts these to a GPU
         if self.mode_val == 0:  # DECENTRALIZED
             self.obs_spatial = torch.empty(
                 (
@@ -140,6 +139,8 @@ class SARBatchedGridEnv:
                 self.config.initial_agent_pos,
                 self.config.initial_poi_pos,
                 self.config.agent_max_batteries,
+                self.config.agent_flags,
+                self.config.agent_max_altitudes,
                 self.obs_spatial.data_ptr() if self.mode_val != 2 else 0,
                 self.obs_internal.data_ptr() if self.mode_val != 2 else 0,
                 self.state_spatial.data_ptr() if self.requires_state else 0,
@@ -158,7 +159,6 @@ class SARBatchedGridEnv:
             )
 
     def _get_obs_dict(self):
-        """Returns the in-place updated tensors."""
         return {
             "spatial": (
                 self.obs_spatial.to(self.device)
@@ -181,21 +181,15 @@ class SARBatchedGridEnv:
         return self._get_obs_dict(), {}
 
     def step(self, move_actions, radio_actions):
-        """
-        Takes move_actions [num_envs, n_agents, 2] and radio_actions [num_envs, n_agents]
-        """
         t0 = time.perf_counter()
 
-        # Ensure correct formatting for the pybind arrays. Use reshape(-1) to avoid copying memory!
         move_act = np.asarray(move_actions, dtype=np.float32).reshape(-1)
         radio_act = np.asarray(radio_actions, dtype=np.int32).reshape(-1)
 
         t1 = time.perf_counter()
-        # Advance the environment. The C++ function directly writes to our spatial/internal memory!
         self.env.step(move_act, radio_act)
 
         t2 = time.perf_counter()
-        # Returns directly reference the pre-allocated tensors
         rewards = self.rewards
         terminated = self.terminated
         truncated = self.truncated
@@ -246,7 +240,6 @@ class SARBatchedGridEnv:
         }
 
     def _init_renderer(self):
-        """Just-in-time initialization of Pygame and cached drawing variables."""
         if getattr(self, "render_initialized", False):
             return
         pygame.init()
@@ -256,33 +249,27 @@ class SARBatchedGridEnv:
         self._pygame_screen = pygame.display.set_mode((window_width, window_height))
         pygame.display.set_caption("SAR Batched Environment Viewer")
 
-        # Pull colors safely populated by the updated loader
         self._terrain_colors = self.config.terrain_rgb
         self._agent_colors = self.config.agent_rgb
         self._survivor_colors = self.config.survivor_rgb
 
-        # Pre-cache the true map layout as an RGB array [H, W, 3]
         type_map_grid = np.array(self.config.type_map).reshape(
             self.config.height, self.config.width
         )
         self._base_map_rgb = self._terrain_colors[type_map_grid].astype(np.uint8)
 
-        # Cut RGB values in half for undiscovered tiles
         self._dimmed_map_rgb = (self._base_map_rgb // 2).astype(np.uint8)
 
         self.render_initialized = True
 
     def _extract_agent_positions(self, env_idx):
-        """Grabs the N x 2 array of [y, x] floats from the vectorized internal state."""
         if self.requires_state:
-            # Internal State layout: [E, A*6 + P*4]. Agents are the first A*6 block.
             internal = self.state_internal[env_idx].cpu().numpy()
             agent_data = internal[: self.config.n_agents * 6].reshape(
                 self.config.n_agents, 6
             )
             return agent_data[:, :2]
 
-        # Fallback if requires_state=False
         if self.mode_val != 0:
             internal = self.obs_internal[env_idx].cpu().numpy()
             return internal[:, :2]
@@ -305,7 +292,6 @@ class SARBatchedGridEnv:
             print(f"Warning: Requested POV {pov} exceeds agent count. Skipping.")
             return
 
-        # Fetch the shared true positions (avoids layer scanning)
         agent_pos = self._extract_agent_positions(env_idx)
 
         if pov == -1:
@@ -356,10 +342,8 @@ class SARBatchedGridEnv:
 
     def _draw_to_screen(self, rgb_grid, poi_mask, agent_pos):
         import pygame
-
         pygame.event.pump()
 
-        # 1. Base map
         surface = pygame.surfarray.make_surface(rgb_grid.transpose(1, 0, 2))
         scaled_surface = pygame.transform.scale(
             surface,
@@ -372,7 +356,6 @@ class SARBatchedGridEnv:
 
         tile = self._pygame_tile_px
 
-        # 2. POIs (Since POI mask is a single flattened layer, np.where is practically free here)
         poi_ys, poi_xs = np.where(poi_mask)
         for y, x in zip(poi_ys, poi_xs):
             center = (x * tile + tile // 2, y * tile + tile // 2)
@@ -380,11 +363,9 @@ class SARBatchedGridEnv:
                 self._pygame_screen, (255, 255, 255), center, max(2, tile // 3)
             )
 
-        # 3. Agents (Pulled directly from internal float arrays!)
         for a in range(self.config.n_agents):
             y, x = int(agent_pos[a, 0]), int(agent_pos[a, 1])
 
-            # Simple bounds check
             if 0 <= y < self.config.height and 0 <= x < self.config.width:
                 color = tuple(int(c) for c in self._agent_colors[a])
                 rect = pygame.Rect(x * tile + 2, y * tile + 2, tile - 4, tile - 4)

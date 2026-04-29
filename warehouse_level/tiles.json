@@ -1,0 +1,74 @@
+{
+    "exterior_ground": {
+        "rgb": [
+            61,
+            110,
+            112
+        ],
+        "altitude": 0.4,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "warehouse_floor": {
+        "rgb": [
+            96,
+            96,
+            112
+        ],
+        "altitude": 0.4,
+        "supports_walking": true,
+        "supports_flying": false,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "shrubbery": {
+        "rgb": [
+            60,
+            163,
+            112
+        ],
+        "altitude": 0.2,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "wall": {
+        "rgb": [
+            39,
+            39,
+            54
+        ],
+        "altitude": 1.0,
+        "supports_walking": false,
+        "supports_flying": false,
+        "supports_aquatic": false,
+        "blocking": true
+    },
+    "road": {
+        "rgb": [
+            150,
+            150,
+            161
+        ],
+        "altitude": 0.4,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "fire": {
+        "rgb": [
+            235,
+            86,
+            75
+        ],
+        "altitude": 0.2,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    }
+}

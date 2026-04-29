@@ -1,0 +1,34 @@
+{
+    "fleeing_arsonist": {
+        "allowed_savers": [
+            "surveillance_drone",
+            "security_guard"
+        ],
+        "moves": true,
+        "start": [
+            0.2,
+            0.2
+        ]
+    },
+    "trapped_worker": {
+        "allowed_savers": [
+            "security_guard",
+            "firefighter"
+        ],
+        "moves": false,
+        "start": [
+            0.4,
+            0.5
+        ]
+    },
+    "hazardous_materials": {
+        "allowed_savers": [
+            "firefighter"
+        ],
+        "moves": false,
+        "start": [
+            0.7,
+            0.7
+        ]
+    }
+}

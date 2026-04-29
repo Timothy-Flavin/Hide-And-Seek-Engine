@@ -1,0 +1,50 @@
+{
+    "grass": {
+        "rgb": [
+            41,
+            141,
+            66
+        ],
+        "altitude": 0.6,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "house": {
+        "rgb": [
+            122,
+            109,
+            92
+        ],
+        "altitude": 0.3,
+        "supports_walking": false,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": true
+    },
+    "woods": {
+        "rgb": [
+            20,
+            82,
+            54
+        ],
+        "altitude": 0.4,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    },
+    "street": {
+        "rgb": [
+            207,
+            196,
+            188
+        ],
+        "altitude": 0.8,
+        "supports_walking": true,
+        "supports_flying": true,
+        "supports_aquatic": false,
+        "blocking": false
+    }
+}

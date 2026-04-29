@@ -1,0 +1,77 @@
+{
+    "watch_drone": {
+        "flying": true,
+        "aqueous": false,
+        "walking": false,
+        "altitude_min": 0.9,
+        "altitude_max": 1.0,
+        "base_speed": 4.0,
+        "base_view": 14.0,
+        "battery": 150.0,
+        "rgb": [
+            255,
+            255,
+            255
+        ],
+        "terrain_speed": {
+            "grass": 1.0,
+            "house": 1.0,
+            "woods": 1.0,
+            "street": 1.0
+        },
+        "start": [
+            0.1,
+            0.1
+        ]
+    },
+    "patrol_volunteer": {
+        "flying": false,
+        "aqueous": false,
+        "walking": true,
+        "altitude_min": 0.0,
+        "altitude_max": 0.0,
+        "base_speed": 1.5,
+        "base_view": 7.0,
+        "battery": 300.0,
+        "rgb": [
+            255,
+            200,
+            0
+        ],
+        "terrain_speed": {
+            "grass": 0.8,
+            "house": 0.0,
+            "woods": 0.3,
+            "street": 1.0
+        },
+        "start": [
+            0.5,
+            0.5
+        ]
+    },
+    "police_officer": {
+        "flying": false,
+        "aqueous": false,
+        "walking": true,
+        "altitude_min": 0.0,
+        "altitude_max": 0.0,
+        "base_speed": 2.0,
+        "base_view": 9.0,
+        "battery": 400.0,
+        "rgb": [
+            0,
+            0,
+            255
+        ],
+        "terrain_speed": {
+            "grass": 0.9,
+            "house": 0.0,
+            "woods": 0.4,
+            "street": 1.2
+        },
+        "start": [
+            0.8,
+            0.8
+        ]
+    }
+}

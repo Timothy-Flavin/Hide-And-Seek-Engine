@@ -1,0 +1,51 @@
+// 1. Tile Discoveries
+int center_x = static_cast<int>(agent.x);
+int center_y = static_cast<int>(agent.y);
+int min_y = std::max(0, static_cast<int>(agent.y - vr));
+int max_y = std::min(height - 1, static_cast<int>(agent.y + vr));
+int min_x = std::max(0, static_cast<int>(agent.x - vr));
+int max_x = std::min(width - 1, static_cast<int>(agent.x + vr));
+
+for (int y = min_y; y <= max_y; ++y)
+{
+    float ysq = (agent.y - y) * (agent.y - y);
+    for (int x = min_x; x <= max_x; ++x)
+    {
+        float dist_sq = ysq + (agent.x - x) * (agent.x - x);
+        if (dist_sq <= vr_sq)
+        {
+            // --- FAST INTEGER LINE OF SIGHT (BRESENHAM) ---
+            bool is_occluded = false;
+            int x0 = center_x;
+            int y0 = center_y;
+            int x1 = x;
+            int y1 = y;
+            
+            int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+            int dy = std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
+            int err = dx - dy, e2;
+
+            while (true)
+            {
+                // Break if we've reached the target tile
+                if (x0 == x1 && y0 == y1) break; 
+                
+                // If the intermediate tile is blocking, the target is occluded
+                int trace_idx = y0 * width + x0;
+                if (view.grid[trace_idx].is_blocking()) { // Assuming you have a flag like this
+                    is_occluded = true;
+                    break;
+                }
+                
+                e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+
+            if (is_occluded) continue; // Skip to the next tile, it's blocked!
+            // ----------------------------------------------
+
+            // ... (Your existing newly_global logic and tensor mapping goes here)
+            int t_idx = y * width + x;
+            Tile &t = view.grid[t_idx];
+            // ...

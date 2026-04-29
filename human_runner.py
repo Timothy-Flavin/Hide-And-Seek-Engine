@@ -151,10 +151,10 @@ def main():
     pygame.init()
     env = SARBatchedGridEnv(
         num_envs=1,
-        map_png="island_level/level.png",
-        tiles_json="island_level/tiles.json",
-        agents_json="island_level/agents.json",
-        survivors_json="island_level/survivors.json",
+        map_png="test_level/level.png",
+        tiles_json="test_level/tiles.json",
+        agents_json="test_level/agents.json",
+        survivors_json="test_level/survivors.json",
         requires_state=True,
     )
 

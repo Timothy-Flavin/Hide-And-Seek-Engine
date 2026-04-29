@@ -1,0 +1,35 @@
+{
+    "suspicious_prowler": {
+        "allowed_savers": [
+            "watch_drone",
+            "patrol_volunteer",
+            "police_officer"
+        ],
+        "moves": true,
+        "start": [
+            0.3,
+            0.4
+        ]
+    },
+    "lost_pet": {
+        "allowed_savers": [
+            "patrol_volunteer"
+        ],
+        "moves": true,
+        "start": [
+            0.6,
+            0.2
+        ]
+    },
+    "unfamiliar_vehicle": {
+        "allowed_savers": [
+            "watch_drone",
+            "police_officer"
+        ],
+        "moves": false,
+        "start": [
+            0.7,
+            0.6
+        ]
+    }
+}
