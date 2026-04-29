@@ -247,10 +247,10 @@ if __name__ == "__main__":
 
     env = SARBatchedGridEnv(
         num_envs=args.num_envs,
-        map_png="test_level/level.png",
-        tiles_json="test_level/tiles.json",
-        agents_json="test_level/agents.json",
-        survivors_json="test_level/survivors.json",
+        map_png="levels/test_level/level.png",
+        tiles_json="levels/test_level/tiles.json",
+        agents_json="levels/test_level/agents.json",
+        survivors_json="levels/test_level/survivors.json",
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
@@ -412,18 +412,18 @@ if __name__ == "__main__":
                 )
 
     # Plot episodic returns at the end
-    os.makedirs("results", exist_ok=True)
+    os.makedirs("experiments/results", exist_ok=True)
     base_name = f"dqn_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}"
-    np.save(f"results/{base_name}.npy", np.array(episodic_returns))
+    np.save(f"experiments/results/{base_name}.npy", np.array(episodic_returns))
 
     plt.figure()
     plt.plot(episodic_returns)
     plt.xlabel("Episode")
     plt.ylabel("Return")
     plt.title(f"Episodic Returns (Run {args.run_number})")
-    plt.savefig(f"results/{base_name}.png")
+    plt.savefig(f"experiments/results/{base_name}.png")
     print(
-        f"End of training. Plotted {len(episodic_returns)} episodes to 'results/{base_name}.png'."
+        f"End of training. Plotted {len(episodic_returns)} episodes to 'experiments/results/{base_name}.png'."
     )
 
     # Plot smoothed episodic returns using EMA (0.99)
@@ -436,14 +436,14 @@ if __name__ == "__main__":
         plt.xlabel("Episode")
         plt.ylabel("EMA Return (0.99)")
         plt.title(f"Smoothed Episodic Returns (EMA 0.99) (Run {args.run_number})")
-        plt.savefig(f"results/{base_name}_smoothed.png")
-        plt.savefig(f"results/dqn_episodic_returns_ema99_run_{args.run_number}.png")
-        print(f"Plotted EMA-smoothed episodic returns to 'results/dqn_episodic_returns_ema99_run_{args.run_number}.png'.")
+        plt.savefig(f"experiments/results/{base_name}_smoothed.png")
+        plt.savefig(f"experiments/results/dqn_episodic_returns_ema99_run_{args.run_number}.png")
+        print(f"Plotted EMA-smoothed episodic returns to 'experiments/results/dqn_episodic_returns_ema99_run_{args.run_number}.png'.")
 
     plt.figure()
     plt.plot(q_losses)
     plt.xlabel("Update Step")
     plt.ylabel("Q Loss")
     plt.title(f"Q Network Loss (Run {args.run_number})")
-    plt.savefig(f"results/dqn_q_losses_run_{args.run_number}.png")
-    print(f"Plotted {len(q_losses)} loss values to 'results/dqn_q_losses_run_{args.run_number}.png'.")
+    plt.savefig(f"experiments/results/dqn_q_losses_run_{args.run_number}.png")
+    print(f"Plotted {len(q_losses)} loss values to 'experiments/results/dqn_q_losses_run_{args.run_number}.png'.")

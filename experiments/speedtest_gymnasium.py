@@ -182,9 +182,9 @@ def main():
     num_runs = 3
 
     assets = {
-        "map_png": "test_level/level.png",
-        "tiles_json": "test_level/tiles.json",
-        "survivors_json": "test_level/survivors.json",
+        "map_png": "levels/test_level/level.png",
+        "tiles_json": "levels/test_level/tiles.json",
+        "survivors_json": "levels/test_level/survivors.json",
     }
 
     results_matrix = np.zeros((len(env_counts), len(agent_counts), num_runs))
@@ -200,7 +200,7 @@ def main():
                 fps = run_speedtest_gymnasium(n_envs, n_agents, steps, assets)
                 results_matrix[env_idx, agent_idx, run_idx] = fps
 
-    np.save("speedtest_results_gymnasium_raw.npy", results_matrix)
+    np.save("experiments/speedtest_results_gymnasium_raw.npy", results_matrix)
 
     # Plotting
     plt.figure(figsize=(10, 6))
@@ -229,10 +229,10 @@ def main():
     plt.legend()
     plt.grid(True)
 
-    plot_path = "speedtest_results_gymnasium.png"
+    plot_path = "experiments/speedtest_results_gymnasium.png"
     plt.savefig(plot_path)
     print(
-        f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to speedtest_results_gymnasium_raw.npy"
+        f"\nSpeedtest complete. Plot saved to {plot_path} and raw arrays to experiments/speedtest_results_gymnasium_raw.npy"
     )
 
 

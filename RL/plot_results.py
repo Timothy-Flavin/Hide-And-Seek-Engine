@@ -20,7 +20,7 @@ def plot_results():
     for prefix, label, color, linestyle in variants:
         interpolated_runs = []
         for run_num in range(1, 6):
-            filename = f"results/{prefix}_episodic_returns_run_{run_num}.npy"
+            filename = f"experiments/results/{prefix}_episodic_returns_run_{run_num}.npy"
             if os.path.exists(filename):
                 returns = np.load(filename)
                 if len(returns) == 0:
@@ -49,8 +49,8 @@ def plot_results():
     plt.title("Algorithm Comparison (Mean ± Standard Error)")
     plt.grid(True)
     plt.legend()
-    os.makedirs("results", exist_ok=True)
-    out_file = "results/combined_learning_curves.png"
+    os.makedirs("experiments/results", exist_ok=True)
+    out_file = "experiments/results/combined_learning_curves.png"
     plt.savefig(out_file)
     print(f"Saved combined plot to {out_file}")
 
@@ -66,7 +66,7 @@ def plot_results():
         plt.title(f"{label} - Individual Runs (98% EMA)")
         plt.grid(True)
         plt.legend()
-        out_file = f"results/{prefix}_individual_runs.png"
+        out_file = f"experiments/results/{prefix}_individual_runs.png"
         plt.savefig(out_file)
         print(f"Saved per-algorithm plot to {out_file}")
 

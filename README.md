@@ -19,10 +19,10 @@ import numpy as np
 
 env = SARBatchedGridEnv(
     num_envs=128,
-    map_png="test_level/level.png",
-    tiles_json="test_level/tiles.json",
-    agents_json="test_level/agents.json",
-    survivors_json="test_level/survivors.json",
+    map_png="levels/test_level/level.png",
+    tiles_json="levels/test_level/tiles.json",
+    agents_json="levels/test_level/agents.json",
+    survivors_json="levels/test_level/survivors.json",
     mode="centralized",
     requires_state=True,
     seed=42,
@@ -172,10 +172,10 @@ A wrapper is provided for drop-in compatibility with standard multi-agent framew
 from hide_and_seek_engine.env_wrapper import SARParallelPettingZooEnv
 
 pz_env = SARParallelPettingZooEnv(
-    map_png="test_level/level.png",
-    tiles_json="test_level/tiles.json",
-    agents_json="test_level/agents.json",
-    survivors_json="test_level/survivors.json",
+    map_png="levels/test_level/level.png",
+    tiles_json="levels/test_level/tiles.json",
+    agents_json="levels/test_level/agents.json",
+    survivors_json="levels/test_level/survivors.json",
 )
 
 obs, infos = pz_env.reset()

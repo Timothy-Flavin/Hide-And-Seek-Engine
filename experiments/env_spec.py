@@ -181,10 +181,10 @@ def main():
         "--skip-render", action="store_true", help="Skip renderer smoke test"
     )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--map-png", default="test_level/level.png")
-    parser.add_argument("--tiles-json", default="test_level/tiles.json")
-    parser.add_argument("--agents-json", default="test_level/agents.json")
-    parser.add_argument("--survivors-json", default="test_level/survivors.json")
+    parser.add_argument("--map-png", default="levels/test_level/level.png")
+    parser.add_argument("--tiles-json", default="levels/test_level/tiles.json")
+    parser.add_argument("--agents-json", default="levels/test_level/agents.json")
+    parser.add_argument("--survivors-json", default="levels/test_level/survivors.json")
     args = parser.parse_args()
 
     assets = {

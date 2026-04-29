@@ -334,10 +334,10 @@ if __name__ == "__main__":
 
     env = SARBatchedGridEnv(
         num_envs=args.num_envs,
-        map_png="test_level/level.png",
-        tiles_json="test_level/tiles.json",
-        agents_json="test_level/agents.json",
-        survivors_json="test_level/survivors.json",
+        map_png="levels/test_level/level.png",
+        tiles_json="levels/test_level/tiles.json",
+        agents_json="levels/test_level/agents.json",
+        survivors_json="levels/test_level/survivors.json",
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
@@ -563,5 +563,5 @@ if __name__ == "__main__":
 
     writer.close()
     
-    os.makedirs("results", exist_ok=True)
-    np.save(f"results/sac_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+    os.makedirs("experiments/results", exist_ok=True)
+    np.save(f"experiments/results/sac_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
