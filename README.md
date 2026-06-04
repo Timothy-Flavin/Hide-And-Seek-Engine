@@ -4,6 +4,18 @@
 |---|---|---|---|
 | <img src="saved_human_behavior/example/replay.gif?raw=true" alt="Example wilderness SAR" width="200"> | <img src="saved_human_behavior/island/replay.gif?raw=true" alt="Coast Guard Monitoring" width="200"> | <img src="saved_human_behavior/neighborhood/replay.gif?raw=true" alt="Neighborhood Watch" width="200"> | <img src="saved_human_behavior/warehouse/replay.gif?raw=true" alt="Warehouse Fire" width="200"> |
 
+## Cite this using
+```
+@misc{flavin2026highthroughputcomputeefficientpomdphideandseekengine,
+      title={A High-Throughput Compute-Efficient POMDP Hide-And-Seek-Engine (HASE) for Multi-Agent Operations}, 
+      author={Timothy Flavin and Sandip Sen},
+      year={2026},
+      eprint={2604.27162},
+      archivePrefix={arXiv},
+      primaryClass={cs.MA},
+      url={https://arxiv.org/abs/2604.27162}, 
+}
+```
 
 A C++/PyBind11 environment engine for large-scale Multi-Agent Reinforcement Learning (MARL) in partially observable grid-worlds. Designed for high-throughput, batched simulation with PyTorch.
 
