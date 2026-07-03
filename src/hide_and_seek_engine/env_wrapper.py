@@ -25,6 +25,8 @@ class SARBatchedGridEnv:
         requires_state=True,
         device="cpu",
         init_mode="parallel_first_touch",
+        ego_view=False,
+        ego_size=32,
     ):
         self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
         self.num_envs = num_envs
@@ -32,6 +34,14 @@ class SARBatchedGridEnv:
         self.requires_state = requires_state
         self.render_initialized = False
         self.init_mode_val = 0 if init_mode == "parallel_first_touch" else 1
+
+        # Ego-centric obs: the spatial obs tensor becomes a fixed
+        # ego_size x ego_size window centered on each agent instead of the full
+        # HxW map. State (requires_state) is unaffected and stays global.
+        self.ego_view = bool(ego_view)
+        self.ego_size = int(ego_size)
+        if self.ego_view and self.ego_size <= 0:
+            raise ValueError("ego_size must be > 0 when ego_view=True")
 
         self.steps_taken = 0
         self.t_py_flatten = 0.0
@@ -49,40 +59,58 @@ class SARBatchedGridEnv:
         # Internal channels per agent: y, x, battery, view_range, deploy, stuck
         self.agent_internal_dim = 6
 
-        # 2. Allocate contiguous PyTorch memory for zero-copy C++ updates
-        if self.mode_val == 0:  # DECENTRALIZED
+        # 2. Allocate contiguous PyTorch memory for zero-copy C++ updates.
+        # Spatial obs footprint. In ego mode the per-agent window replaces the
+        # full map, and centralized obs becomes per-agent (each agent gets its
+        # own crop of the shared observed map).
+        if self.ego_view:
+            obs_h = obs_w = self.ego_size
+        else:
+            obs_h, obs_w = self.config.height, self.config.width
+
+        # Whether the spatial obs tensor carries a per-agent dimension.
+        obs_per_agent = (self.mode_val == 0) or self.ego_view
+
+        if obs_per_agent and self.mode_val != 2:  # DECENTRALIZED, or ego CENTRALIZED
             self.obs_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.config.n_agents,
                     self.spatial_channels,
-                    self.config.height,
-                    self.config.width,
+                    obs_h,
+                    obs_w,
                 ),
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.obs_internal = torch.empty(
-                (self.num_envs, self.config.n_agents, self.agent_internal_dim),
-                dtype=torch.float32,
-                pin_memory=True,
-            ).contiguous()
-        else:  # CENTRALIZED or NO_OBS
+        else:  # non-ego CENTRALIZED or NO_OBS
             self.obs_spatial = torch.empty(
                 (
                     self.num_envs,
                     self.spatial_channels,
-                    self.config.height,
-                    self.config.width,
+                    obs_h,
+                    obs_w,
                 ),
                 dtype=torch.float32,
                 pin_memory=True,
             ).contiguous()
-            self.obs_internal = torch.empty(
-                (self.num_envs, self.config.n_agents, self.agent_internal_dim),
-                dtype=torch.float32,
-                pin_memory=True,
-            ).contiguous()
+
+        self.obs_internal = torch.empty(
+            (self.num_envs, self.config.n_agents, self.agent_internal_dim),
+            dtype=torch.float32,
+            pin_memory=True,
+        ).contiguous()
+
+        # Per-sample spatial obs shape (excludes the leading num_envs dim).
+        # Runners should read this instead of assuming (C, H, W): in ego
+        # centralized mode it is (A, C, S, S).
+        self.obs_spatial_shape = tuple(self.obs_spatial.shape[1:])
+        # Shape of a single agent's spatial map slab (C, H, W) or (C, S, S).
+        # This is what a per-agent CNN encoder consumes; it is stable across
+        # modes and is the value runners should feed to their encoders.
+        self.map_spatial_shape = (self.spatial_channels, obs_h, obs_w)
+        # Whether obs_spatial carries a leading per-agent dimension.
+        self.obs_is_per_agent = obs_per_agent and self.mode_val != 2
 
         if self.requires_state:
             self.state_spatial = torch.empty(
@@ -156,6 +184,8 @@ class SARBatchedGridEnv:
                 250,  # Max frames
                 self.mode_val,
                 self.init_mode_val,
+                self.ego_view,
+                self.ego_size,
             )
 
     def _get_obs_dict(self):

@@ -24,6 +24,10 @@ class Args:
     """the name of this experiment"""
     centralized: bool = True
     """whether to use centralized or individual PPO"""
+    ego_view: bool = False
+    """ego-centric obs: fixed window centered on each agent (use with --no-centralized)"""
+    ego_size: int = 32
+    """side length of the ego-centric obs window when ego_view is set"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
@@ -224,10 +228,13 @@ if __name__ == "__main__":
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
+        ego_view=args.ego_view,
+        ego_size=args.ego_size,
     )
 
     n_agents = env.config.n_agents
-    spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
+    # Single-agent spatial map shape (C, H, W) or (C, ego, ego); robust to ego mode.
+    spatial_shape = env.map_spatial_shape
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
     num_actions_per_agent = 5
 

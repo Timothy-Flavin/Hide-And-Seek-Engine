@@ -41,6 +41,20 @@ private:
     float *torch_state_spatial_base = nullptr;
     float *torch_state_internal_base = nullptr;
 
+    // Ego-centric viewing. When enabled the spatial obs tensor shared with
+    // pytorch is a fixed ego_size x ego_size window centered on each agent
+    // rather than the full HxW map. The full-map fog-of-war accumulation is
+    // kept in an internal, reused buffer (ego_full_obs) and a single crop copy
+    // per agent is written into the shared tensor each step.
+    bool ego_view = false;
+    int ego_size = 0;
+    std::vector<float> ego_full_obs;
+    // Accumulation target for the incremental spatial-obs writes. In the
+    // default (non-ego) path this simply aliases torch_obs_spatial_base so
+    // behavior is unchanged and writes stay zero-copy. In ego mode it points
+    // at ego_full_obs so the shared tensor can hold the smaller crop.
+    float *obs_accum_base = nullptr;
+
     Mode mode;
 
     std::unique_ptr<DecentralizedPartialObsStrides> decentral_obs_strides;
@@ -252,11 +266,11 @@ private:
                             if (!t.has_agent_seen(a))
                             {
                                 t.set_agent_seen(a);
-                                if (torch_obs_spatial_base != nullptr)
+                                if (obs_accum_base != nullptr)
                                 {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                    float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
+                                    float *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                                     spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
                                     spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
                                     spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
@@ -267,11 +281,11 @@ private:
                         {
                             if (newly_global)
                             {
-                                if (torch_obs_spatial_base != nullptr)
+                                if (obs_accum_base != nullptr)
                                 {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                    float *spat_base = torch_obs_spatial_base + e * spatial_stride;
+                                    float *spat_base = obs_accum_base + e * spatial_stride;
                                     spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
                                     spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
                                     spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
@@ -440,11 +454,11 @@ private:
                         if (t.has_agent_seen(a) && !t.has_agent_seen(target_agent))
                         {
                             t.set_agent_seen(target_agent);
-                            if (torch_obs_spatial_base != nullptr)
+                            if (obs_accum_base != nullptr)
                             {
                                 ssize_t map_area = width * height;
                                 ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
+                                float *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
                                 spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
                                 spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
                                 spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
@@ -481,7 +495,7 @@ private:
 
     void fill_torch_obs(int e)
     {
-        if (!torch_obs_spatial_base || !torch_obs_internal_base)
+        if (!obs_accum_base || !torch_obs_internal_base)
             return;
 
         EnvStateView view = env_views[e];
@@ -494,7 +508,7 @@ private:
 
             for (int a = 0; a < n_agents; ++a)
             {
-                float *spat_base = torch_obs_spatial_base + e * (n_agents * spatial_stride) + a * spatial_stride;
+                float *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
                 for (int p = 0; p < n_pois; ++p)
@@ -548,7 +562,7 @@ private:
         else if (mode == Mode::CENTRALIZED)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-            float *spat_base = torch_obs_spatial_base + e * spatial_stride;
+            float *spat_base = obs_accum_base + e * spatial_stride;
             float *int_base = torch_obs_internal_base + e * (n_agents * 6);
 
             for (int p = 0; p < n_pois; ++p)
@@ -581,6 +595,66 @@ private:
                 int_base[a * 6 + 3] = view.agents[a].view_range;
                 int_base[a * 6 + 4] = view.agents[a].deployment_remaining;
                 int_base[a * 6 + 5] = static_cast<float>(view.agents[a].flags & 1U);
+            }
+        }
+    }
+
+    // Copy an ego_size x ego_size crop of the full-map accumulation buffer into
+    // the shared pytorch tensor, centered on each agent. Out-of-bounds cells are
+    // zero-padded. This is the single unavoidable copy from the internal global
+    // state to the shared (smaller) ego tensor; no allocation happens here, all
+    // buffers are pre-sized and reused. Called per-env from the omp step loop.
+    void fill_ego_obs(int e)
+    {
+        if (!ego_view || !torch_obs_spatial_base || !obs_accum_base)
+            return;
+
+        EnvStateView view = env_views[e];
+        const int S = ego_size;
+        const int half = S / 2;
+        const ssize_t map_area = static_cast<ssize_t>(width) * height;
+        const ssize_t channels = n_tiles + 3 + n_agents;
+        const ssize_t full_agent_stride = channels * map_area; // per-map slab in accum buffer
+        const ssize_t ego_plane = static_cast<ssize_t>(S) * S;
+        const ssize_t ego_agent_stride = channels * ego_plane; // per-agent slab in shared tensor
+
+        for (int a = 0; a < n_agents; ++a)
+        {
+            // Decentralized: each agent has its own accumulated map.
+            // Centralized: all agents crop from the single shared map.
+            const float *src_map =
+                (mode == Mode::DECENTRALIZED)
+                    ? obs_accum_base + e * (n_agents * full_agent_stride) + a * full_agent_stride
+                    : obs_accum_base + e * full_agent_stride;
+
+            float *dst = torch_obs_spatial_base + e * (n_agents * ego_agent_stride) + a * ego_agent_stride;
+
+            // Fully overwrite the agent's crop each step; zero handles OOB padding.
+            std::memset(dst, 0, ego_agent_stride * sizeof(float));
+
+            const int cy = static_cast<int>(view.agents[a].y);
+            const int cx = static_cast<int>(view.agents[a].x);
+            const int y0 = cy - half; // source row for destination row 0
+            const int x0 = cx - half; // source col for destination col 0
+
+            const int r0 = std::max(0, -y0);
+            const int r1 = std::min(S, height - y0);
+            const int c0 = std::max(0, -x0);
+            const int c1 = std::min(S, width - x0);
+            if (r1 <= r0 || c1 <= c0)
+                continue; // agent fully outside map (should not happen) -> all zeros
+
+            const int span = c1 - c0;
+            for (ssize_t ch = 0; ch < channels; ++ch)
+            {
+                const float *src_ch = src_map + ch * map_area;
+                float *dst_ch = dst + ch * ego_plane;
+                for (int r = r0; r < r1; ++r)
+                {
+                    const float *src_row = src_ch + static_cast<ssize_t>(y0 + r) * width + (x0 + c0);
+                    float *dst_row = dst_ch + static_cast<ssize_t>(r) * S + c0;
+                    std::memcpy(dst_row, src_row, span * sizeof(float));
+                }
             }
         }
     }
@@ -693,7 +767,9 @@ public:
         float reward_saved_val = 20.0f,
         int max_frames_val = 250,
         int mode_value = 0,
-        int init_mode = 0)
+        int init_mode = 0,
+        bool ego_view_val = false,
+        int ego_size_val = 0)
         : num_envs(n_envs), seed(sim_seed), width(w), height(h),
           supports_walking(std::move(supports_walk)), supports_aquatic(std::move(supports_aqua)),
           supports_flying(std::move(supports_fly)), is_blocking(std::move(is_block)),
@@ -737,13 +813,36 @@ public:
         ssize_t state_spatial_stride = spatial_channels * map_size;
         ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
 
+        // Resolve the accumulation target for incremental spatial-obs writes.
+        // Default (non-ego): alias the shared pytorch tensor -> zero-copy, unchanged.
+        // Ego: allocate a reused internal full-map buffer; the shared tensor holds
+        // the per-agent ego crop instead of the whole map.
+        ego_view = ego_view_val;
+        ego_size = ego_size_val;
+        if (ego_view)
+        {
+            if (ego_size <= 0)
+                throw std::invalid_argument("ego_size must be > 0 when ego_view is enabled");
+            if (mode != Mode::NO_OBS && torch_obs_spatial_base != nullptr)
+            {
+                // obs_spatial_stride is the per-env full-map size (matches the
+                // tensor shape used in the non-ego path).
+                ego_full_obs.assign(static_cast<size_t>(num_envs) * obs_spatial_stride, 0.0f);
+                obs_accum_base = ego_full_obs.data();
+            }
+        }
+        else
+        {
+            obs_accum_base = torch_obs_spatial_base;
+        }
+
         if (init_mode == 0)
         {
 #pragma omp parallel for schedule(static)
             for (int e = 0; e < num_envs; ++e)
             {
-                if (torch_obs_spatial_base)
-                    std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+                if (obs_accum_base)
+                    std::memset(obs_accum_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
                 if (torch_obs_internal_base)
                     std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
                 if (torch_state_spatial_base && requires_state)
@@ -764,8 +863,8 @@ public:
         {
             for (int e = 0; e < num_envs; ++e)
             {
-                if (torch_obs_spatial_base)
-                    std::memset(torch_obs_spatial_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+                if (obs_accum_base)
+                    std::memset(obs_accum_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
                 if (torch_obs_internal_base)
                     std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
                 if (torch_state_spatial_base && requires_state)
@@ -867,7 +966,11 @@ public:
                 ++current_frames[e];
 
                 if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
+                {
                     fill_torch_obs(e);
+                    if (ego_view)
+                        fill_ego_obs(e);
+                }
                 if (requires_state)
                     fill_torch_state(e);
             }
@@ -942,20 +1045,32 @@ public:
         *view.poi_left = n_pois;
         *view.agents_left = n_agents;
 
-        if (mode == Mode::DECENTRALIZED && torch_obs_spatial_base != nullptr)
+        // Clear the full-map accumulation buffer (fog of war reset). This targets
+        // obs_accum_base, which aliases the shared tensor in the non-ego path and
+        // the internal buffer in ego mode.
+        if (mode == Mode::DECENTRALIZED && obs_accum_base != nullptr)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
             for (int a = 0; a < n_agents; ++a)
             {
-                float *spat_base = torch_obs_spatial_base + env_idx * (n_agents * spatial_stride) + a * spatial_stride;
+                float *spat_base = obs_accum_base + env_idx * (n_agents * spatial_stride) + a * spatial_stride;
                 std::memset(spat_base, 0, spatial_stride * sizeof(float));
             }
         }
-        else if (mode == Mode::CENTRALIZED && torch_obs_spatial_base != nullptr)
+        else if (mode == Mode::CENTRALIZED && obs_accum_base != nullptr)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
-            float *spat_base = torch_obs_spatial_base + env_idx * spatial_stride;
+            float *spat_base = obs_accum_base + env_idx * spatial_stride;
             std::memset(spat_base, 0, spatial_stride * sizeof(float));
+        }
+
+        // In ego mode the shared tensor holds the crop, not the accumulation
+        // buffer, so zero it directly too. A fresh reset has nothing observed, so
+        // an all-zero crop is correct until the next fill_ego_obs.
+        if (ego_view && torch_obs_spatial_base != nullptr && mode != Mode::NO_OBS)
+        {
+            ssize_t ego_env_stride = static_cast<ssize_t>(n_agents) * (n_tiles + 3 + n_agents) * ego_size * ego_size;
+            std::memset(torch_obs_spatial_base + env_idx * ego_env_stride, 0, ego_env_stride * sizeof(float));
         }
 
         if (requires_state && torch_state_spatial_base != nullptr)
@@ -1030,7 +1145,11 @@ public:
             ++current_frames[e];
 
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)
+            {
                 fill_torch_obs(e);
+                if (ego_view)
+                    fill_ego_obs(e);
+            }
             if (requires_state)
                 fill_torch_state(e);
         }
@@ -1085,6 +1204,8 @@ PYBIND11_MODULE(cpp_engine, m)
                  float,
                  int,
                  int,
+                 int,
+                 bool,
                  int>(),
              py::arg("n_envs"),
              py::arg("sim_seed"),
@@ -1118,7 +1239,9 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("reward_saved_val") = 20.0f,
              py::arg("max_frames_val") = 250,
              py::arg("mode_value") = 0,
-             py::arg("init_mode") = 0)
+             py::arg("init_mode") = 0,
+             py::arg("ego_view") = false,
+             py::arg("ego_size") = 0)
         .def("reset", &BatchedEnvironment::reset)
         .def("reset_env", &BatchedEnvironment::reset_env, py::arg("env_idx"))
         .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"));

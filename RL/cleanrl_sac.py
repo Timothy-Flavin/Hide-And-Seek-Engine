@@ -37,6 +37,10 @@ class Args:
     """the run number for this experiment"""
     centralized: bool = True
     """whether to use centralized or decentralized execution"""
+    ego_view: bool = False
+    """ego-centric obs: fixed window centered on each agent (use with --no-centralized)"""
+    ego_size: int = 32
+    """side length of the ego-centric obs window when ego_view is set"""
 
     # Algorithm specific arguments
     total_timesteps: int = 10000000
@@ -341,17 +345,20 @@ if __name__ == "__main__":
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
+        ego_view=args.ego_view,
+        ego_size=args.ego_size,
     )
 
     n_agents = env.config.n_agents
-    
+
     # After resetting the env, check the actual shapes of observations for buffer init
     dummy_obs = env._get_obs_dict()
-    spatial_shape = dummy_obs["spatial"].shape[1:]  # either (C, H, W) or (A, C, H, W)
+    spatial_shape = dummy_obs["spatial"].shape[1:]  # (C, H, W), (A, C, H, W), or ego (A, C, S, S)
     internal_dim = dummy_obs["internal"].shape[1:]  # (A, D)
 
-    # For the models, we pass the single-env or single-agent spatial shape
-    single_spatial_shape = spatial_shape if args.centralized else spatial_shape[1:]
+    # Single-agent spatial map shape fed to the encoders; robust to ego mode
+    # (in ego mode obs is always per-agent, including centralized).
+    single_spatial_shape = env.map_spatial_shape
     
     num_actions_per_agent = 5
 

@@ -25,6 +25,12 @@ class Args:
     cuda: bool = True
     centralized: bool = True
 
+    # Ego-centric obs: fixed ego_size x ego_size window centered on each agent.
+    # Ego obs is always per-agent, so use it with the decentralized path
+    # (--no-centralized).
+    ego_view: bool = False
+    ego_size: int = 32
+
     total_timesteps: int = 10000000
     learning_rate: float = 2.5e-4
     num_envs: int = 128
@@ -254,11 +260,14 @@ if __name__ == "__main__":
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
+        ego_view=args.ego_view,
+        ego_size=args.ego_size,
     )
 
     n_agents = env.config.n_agents
-    spatial_shape = (env.spatial_channels, env.config.height, env.config.width)
-    buffer_spatial_shape = spatial_shape if args.centralized else (n_agents, *spatial_shape)
+    # Single-agent spatial map shape (C, H, W) or (C, ego, ego); robust to ego mode.
+    spatial_shape = env.map_spatial_shape
+    buffer_spatial_shape = env.obs_spatial_shape
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
     q_network = torch.compile(
