@@ -30,6 +30,8 @@ class Args:
     # (--no-centralized).
     ego_view: bool = False
     ego_size: int = 32
+    # Path to the level directory (level.png, tiles.json, agents.json, survivors.json).
+    level: str = "levels/test_level"
 
     total_timesteps: int = 10000000
     learning_rate: float = 2.5e-4
@@ -253,10 +255,10 @@ if __name__ == "__main__":
 
     env = SARBatchedGridEnv(
         num_envs=args.num_envs,
-        map_png="levels/test_level/level.png",
-        tiles_json="levels/test_level/tiles.json",
-        agents_json="levels/test_level/agents.json",
-        survivors_json="levels/test_level/survivors.json",
+        map_png=os.path.join(args.level, "level.png"),
+        tiles_json=os.path.join(args.level, "tiles.json"),
+        agents_json=os.path.join(args.level, "agents.json"),
+        survivors_json=os.path.join(args.level, "survivors.json"),
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
@@ -420,19 +422,27 @@ if __name__ == "__main__":
                     + (1.0 - args.tau) * target_network_param.data
                 )
 
-    # Plot episodic returns at the end
-    os.makedirs("experiments/results", exist_ok=True)
-    base_name = f"dqn_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}"
-    np.save(f"experiments/results/{base_name}.npy", np.array(episodic_returns))
+    # Plot episodic returns at the end (results namespaced per level + variant)
+    level_name = os.path.basename(os.path.normpath(args.level))
+    if args.centralized:
+        variant = "centralized"
+    elif args.ego_view:
+        variant = "decentralized_ego"
+    else:
+        variant = "decentralized"
+    results_dir = os.path.join("experiments/results", level_name)
+    os.makedirs(results_dir, exist_ok=True)
+    base_name = f"dqn_{variant}_episodic_returns_run_{args.run_number}"
+    np.save(os.path.join(results_dir, f"{base_name}.npy"), np.array(episodic_returns))
 
     plt.figure()
     plt.plot(episodic_returns)
     plt.xlabel("Episode")
     plt.ylabel("Return")
     plt.title(f"Episodic Returns (Run {args.run_number})")
-    plt.savefig(f"experiments/results/{base_name}.png")
+    plt.savefig(os.path.join(results_dir, f"{base_name}.png"))
     print(
-        f"End of training. Plotted {len(episodic_returns)} episodes to 'experiments/results/{base_name}.png'."
+        f"End of training. Plotted {len(episodic_returns)} episodes to '{os.path.join(results_dir, base_name)}.png'."
     )
 
     # Plot smoothed episodic returns using EMA (0.99)
@@ -445,14 +455,13 @@ if __name__ == "__main__":
         plt.xlabel("Episode")
         plt.ylabel("EMA Return (0.99)")
         plt.title(f"Smoothed Episodic Returns (EMA 0.99) (Run {args.run_number})")
-        plt.savefig(f"experiments/results/{base_name}_smoothed.png")
-        plt.savefig(f"experiments/results/dqn_episodic_returns_ema99_run_{args.run_number}.png")
-        print(f"Plotted EMA-smoothed episodic returns to 'experiments/results/dqn_episodic_returns_ema99_run_{args.run_number}.png'.")
+        plt.savefig(os.path.join(results_dir, f"{base_name}_smoothed.png"))
+        print(f"Plotted EMA-smoothed episodic returns to '{os.path.join(results_dir, base_name)}_smoothed.png'.")
 
     plt.figure()
     plt.plot(q_losses)
     plt.xlabel("Update Step")
     plt.ylabel("Q Loss")
     plt.title(f"Q Network Loss (Run {args.run_number})")
-    plt.savefig(f"experiments/results/dqn_q_losses_run_{args.run_number}.png")
-    print(f"Plotted {len(q_losses)} loss values to 'experiments/results/dqn_q_losses_run_{args.run_number}.png'.")
+    plt.savefig(os.path.join(results_dir, f"dqn_{variant}_q_losses_run_{args.run_number}.png"))
+    print(f"Plotted {len(q_losses)} loss values to '{results_dir}/dqn_{variant}_q_losses_run_{args.run_number}.png'.")

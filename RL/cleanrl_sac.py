@@ -41,6 +41,8 @@ class Args:
     """ego-centric obs: fixed window centered on each agent (use with --no-centralized)"""
     ego_size: int = 32
     """side length of the ego-centric obs window when ego_view is set"""
+    level: str = "levels/test_level"
+    """path to the level directory (expects level.png, tiles.json, agents.json, survivors.json)"""
 
     # Algorithm specific arguments
     total_timesteps: int = 10000000
@@ -338,10 +340,10 @@ if __name__ == "__main__":
 
     env = SARBatchedGridEnv(
         num_envs=args.num_envs,
-        map_png="levels/test_level/level.png",
-        tiles_json="levels/test_level/tiles.json",
-        agents_json="levels/test_level/agents.json",
-        survivors_json="levels/test_level/survivors.json",
+        map_png=os.path.join(args.level, "level.png"),
+        tiles_json=os.path.join(args.level, "tiles.json"),
+        agents_json=os.path.join(args.level, "agents.json"),
+        survivors_json=os.path.join(args.level, "survivors.json"),
         mode="centralized" if args.centralized else "decentralized",
         requires_state=False,
         device=device,
@@ -544,7 +546,9 @@ if __name__ == "__main__":
             cached_logical_steps -= args.train_frequency
 
         # --- Logging steps/sec and updates/sec every 1% of total steps ---
-        if step_count >= args.total_timesteps//100 and global_step > args.learning_starts:
+        # Require update_count > 0: the loss/value tensors below are only bound
+        # after the first gradient update, so never log before one has run.
+        if step_count >= args.total_timesteps//100 and global_step > args.learning_starts and update_count > 0:
             now = time.time()
             elapsed = now - last_log_time
             steps_per_sec = step_count / elapsed
@@ -569,6 +573,17 @@ if __name__ == "__main__":
             update_count = 0
 
     writer.close()
-    
-    os.makedirs("experiments/results", exist_ok=True)
-    np.save(f"experiments/results/sac_{'centralized' if args.centralized else 'decentralized'}_episodic_returns_run_{args.run_number}.npy", np.array(episodic_returns))
+
+    level_name = os.path.basename(os.path.normpath(args.level))
+    if args.centralized:
+        variant = "centralized"
+    elif args.ego_view:
+        variant = "decentralized_ego"
+    else:
+        variant = "decentralized"
+    results_dir = os.path.join("experiments/results", level_name)
+    os.makedirs(results_dir, exist_ok=True)
+    np.save(
+        os.path.join(results_dir, f"sac_{variant}_episodic_returns_run_{args.run_number}.npy"),
+        np.array(episodic_returns),
+    )

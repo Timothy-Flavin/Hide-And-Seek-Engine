@@ -146,17 +146,27 @@ def main():
     parser.add_argument(
         "--record", action="store_true", help="Record a GIF of the episode"
     )
+    parser.add_argument(
+        "--level",
+        default="levels/test_level",
+        help="Path to the level directory (expects level.png, tiles.json, "
+        "agents.json, survivors.json). Defaults to levels/test_level.",
+    )
     args = parser.parse_args()
+
+    if not os.path.isdir(args.level):
+        parser.error(f"Level directory not found: {args.level}")
 
     pygame.init()
     env = SARBatchedGridEnv(
         num_envs=1,
-        map_png="levels/test_level/level.png",
-        tiles_json="levels/test_level/tiles.json",
-        agents_json="levels/test_level/agents.json",
-        survivors_json="levels/test_level/survivors.json",
+        map_png=os.path.join(args.level, "level.png"),
+        tiles_json=os.path.join(args.level, "tiles.json"),
+        agents_json=os.path.join(args.level, "agents.json"),
+        survivors_json=os.path.join(args.level, "survivors.json"),
         requires_state=True,
     )
+    print(f"Loaded level: {args.level}")
 
     print("Controls: WASD move, 1/2/3 radio channels, close window to exit")
 
