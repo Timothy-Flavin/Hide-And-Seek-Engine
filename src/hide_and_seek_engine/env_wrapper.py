@@ -274,13 +274,33 @@ class SARBatchedGridEnv:
             ),
         }
 
-    def _init_renderer(self):
-        if getattr(self, "render_initialized", False):
+    def _init_renderer(self, grid_w=None, grid_h=None, tile_px=8):
+        """Create (or resize) the pygame window.
+
+        ``grid_w``/``grid_h`` default to the full map; the ego renderer passes
+        the ego window side so the display matches the crop the agent consumes.
+        The window is (re)created whenever the requested grid or tile size
+        changes, so the same env can render either the global map or an ego crop.
+        """
+        grid_w = self.config.width if grid_w is None else int(grid_w)
+        grid_h = self.config.height if grid_h is None else int(grid_h)
+
+        already = getattr(self, "render_initialized", False)
+        same = (
+            already
+            and getattr(self, "_render_grid_w", None) == grid_w
+            and getattr(self, "_render_grid_h", None) == grid_h
+            and getattr(self, "_pygame_tile_px", None) == tile_px
+        )
+        if same:
             return
+
         pygame.init()
-        self._pygame_tile_px = 8
-        window_width = self.config.width * self._pygame_tile_px
-        window_height = self.config.height * self._pygame_tile_px
+        self._pygame_tile_px = tile_px
+        self._render_grid_w = grid_w
+        self._render_grid_h = grid_h
+        window_width = grid_w * self._pygame_tile_px
+        window_height = grid_h * self._pygame_tile_px
         self._pygame_screen = pygame.display.set_mode((window_width, window_height))
         pygame.display.set_caption("SAR Batched Environment Viewer")
 
@@ -335,6 +355,85 @@ class SARBatchedGridEnv:
             self._render_decentralized_pov(env_idx, pov, agent_pos)
         else:
             self._render_centralized_obs(env_idx, agent_pos)
+
+    def render_ego(self, pov, env_idx=0, tile_px=16):
+        """Render exactly the ego-centric observation agent ``pov`` consumes.
+
+        This draws the uint8 ego crop the network receives -- the agent sits at
+        the center, undiscovered tiles are shown as fog, and everything visible
+        (terrain, survivors, teammates) is whatever has accumulated in the
+        agent's observation buffer, including tiles/POIs shared over the radio.
+        The agent's circular view range is overlaid as a ring.
+
+        Falls back to the full-map POV render when the env is not in ego mode.
+        """
+        if not self.ego_view:
+            self.render(pov, env_idx)
+            return
+        if pov >= self.config.n_agents:
+            print(f"Warning: Requested ego POV {pov} exceeds agent count. Skipping.")
+            return
+
+        S = self.ego_size
+        self._init_renderer(grid_w=S, grid_h=S, tile_px=tile_px)
+
+        spatial = self.obs_spatial[env_idx, pov].cpu().numpy()  # (C, S, S) uint8
+        n_tiles = self.config.n_tiles
+        idx_poi = n_tiles + 1
+        idx_obs = n_tiles + 2
+        idx_me = n_tiles + 3          # MY_LOCATION channel
+        idx_others = n_tiles + 4      # OTHER_LOCATIONS channels start here
+
+        observed = spatial[idx_obs] > 0
+        tile_argmax = spatial[:n_tiles].argmax(axis=0)
+        terrain = self._terrain_colors[tile_argmax].astype(np.uint8)  # (S, S, 3)
+        fog = np.array([12, 12, 18], dtype=np.uint8)
+        rgb_grid = np.where(observed[..., None], terrain, fog).astype(np.uint8)
+
+        poi_mask = spatial[idx_poi] > 0
+
+        # Map the packed OTHER_LOCATIONS channels back to real agent indices
+        # (they are the agents other than pov, in ascending order).
+        others = [a for a in range(self.config.n_agents) if a != pov]
+        agent_layers = [(spatial[idx_me] > 0, pov)]
+        for k, a in enumerate(others):
+            agent_layers.append((spatial[idx_others + k] > 0, a))
+
+        view_range = float(self.obs_internal[env_idx, pov, 3].item())
+        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range)
+
+    def _draw_ego_to_screen(self, rgb_grid, poi_mask, agent_layers, view_range):
+        import pygame
+        pygame.event.pump()
+
+        S = self.ego_size
+        tile = self._pygame_tile_px
+        surface = pygame.surfarray.make_surface(rgb_grid.transpose(1, 0, 2))
+        scaled_surface = pygame.transform.scale(surface, (S * tile, S * tile))
+        self._pygame_screen.blit(scaled_surface, (0, 0))
+
+        # View-range ring around the agent, which is fixed at the crop center.
+        half = S // 2
+        center = (half * tile + tile // 2, half * tile + tile // 2)
+        if view_range and view_range > 0:
+            pygame.draw.circle(
+                self._pygame_screen, (255, 255, 0), center,
+                int(round(view_range * tile)), 1
+            )
+
+        poi_ys, poi_xs = np.where(poi_mask)
+        for y, x in zip(poi_ys, poi_xs):
+            c = (x * tile + tile // 2, y * tile + tile // 2)
+            pygame.draw.circle(self._pygame_screen, (255, 255, 255), c, max(2, tile // 3))
+
+        for mask, a in agent_layers:
+            ys, xs = np.where(mask)
+            color = tuple(int(c) for c in self._agent_colors[a])
+            for y, x in zip(ys, xs):
+                rect = pygame.Rect(x * tile + 2, y * tile + 2, tile - 4, tile - 4)
+                pygame.draw.rect(self._pygame_screen, color, rect)
+
+        pygame.display.flip()
 
     def _render_true_state(self, env_idx, agent_pos):
         spatial = self.state_spatial[env_idx].cpu().numpy()
