@@ -17,6 +17,7 @@ VARIANTS = [
     ("centralized", "Centralized", "-"),
     ("decentralized", "Decentralized", "--"),
     ("decentralized_ego", "Decentralized+Ego", ":"),
+    ("decentralized_ego_radio", "Decentralized+Ego+Radio", "-."),
 ]
 
 RESULTS_ROOT = "experiments/results"

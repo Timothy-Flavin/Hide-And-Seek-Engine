@@ -15,6 +15,7 @@ torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from RL.MixedObservationEncoder import MixedObservationEncoder
+from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
 
 
 @dataclass
@@ -30,6 +31,8 @@ class Args:
     """side length of the ego-centric obs window when ego_view is set"""
     level: str = "levels/test_level"
     """path to the level directory (expects level.png, tiles.json, agents.json, survivors.json)"""
+    use_radio: bool = False
+    """decentralized-only ablation: add a trainable per-agent radio head so agents learn to share observations (use with --no-centralized)"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
@@ -93,12 +96,15 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True):
+    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True, use_radio=False, n_radio_actions=0):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
         self.centralized = centralized
-        
+        # Radio ablation: decentralized-only trainable per-agent radio head.
+        self.use_radio = use_radio and not centralized
+        self.n_radio_actions = n_radio_actions
+
         self.encoder = MixedObservationEncoder(
             spatial_shape=spatial_shape,
             vector_dim=np.prod(internal_dim) if centralized else internal_dim[1],
@@ -106,16 +112,19 @@ class Agent(nn.Module):
             vector_hidden_dim=32,
             output_dim=256,
         )
-        
-        # Policy Heads - One per agent or One shared
+
+        # Policy head output width = move dims (+ radio dims for the radio ablation).
+        # A single fused head emits sum(discrete_dims); logits are zero-copy split
+        # into the move/radio factors so no extra kernel launch is incurred.
+        self.head_out_dim = num_actions_per_agent + (n_radio_actions if self.use_radio else 0)
         self.actor_heads = nn.ModuleList([
             nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.Tanh(),
-                layer_init(nn.Linear(128, num_actions_per_agent), std=0.01)
+                layer_init(nn.Linear(128, self.head_out_dim), std=0.01)
             ) for _ in range(n_agents if centralized else 1)
         ])
-        
+
         # Value Function Head
         self.critic = nn.Sequential(
             layer_init(nn.Linear(256, 128)),
@@ -126,9 +135,36 @@ class Agent(nn.Module):
         if centralized:
             self.get_value = self._get_value_centralized
             self.get_action_and_value = self._get_action_and_value_centralized
+        elif self.use_radio:
+            self.get_value = self._get_value_decentralized
+            self.get_action_and_value = self._get_action_and_value_radio
         else:
             self.get_value = self._get_value_decentralized
             self.get_action_and_value = self._get_action_and_value_decentralized
+
+    def _get_action_and_value_radio(self, spatial, internal, action=None, radio_action=None):
+        # Decentralized radio ablation: ONE encoder pass, ONE fused actor head of
+        # width (move + radio); split the logits (views) into the two factors.
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
+        feats = self.encoder(x)
+
+        logits_all = self.actor_heads[0](feats).view(B, self.n_agents, self.head_out_dim)
+        move_logits = logits_all[..., :self.num_actions_per_agent]
+        radio_logits = logits_all[..., self.num_actions_per_agent:]
+
+        move_probs = Categorical(logits=move_logits)
+        radio_probs = Categorical(logits=radio_logits)
+        if action is None:
+            action = move_probs.sample()
+        if radio_action is None:
+            radio_action = radio_probs.sample()
+
+        value = self.critic(feats).view(B, self.n_agents)
+        return (
+            action, move_probs.log_prob(action), move_probs.entropy(), value,
+            radio_action, radio_probs.log_prob(radio_action), radio_probs.entropy(),
+        )
 
     def _get_value_centralized(self, spatial, internal):
         B = spatial.shape[0]
@@ -240,7 +276,13 @@ if __name__ == "__main__":
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
     num_actions_per_agent = 5
 
-    agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized).to(device))
+    if args.use_radio and args.centralized:
+        raise ValueError("--use-radio is a decentralized ablation; run it with --no-centralized")
+    # Radio action space: 0 = no broadcast, 1..n_agents-1 = share with a peer.
+    n_radio_actions = n_agents
+    use_radio = bool(args.use_radio and not args.centralized)
+
+    agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -256,6 +298,10 @@ if __name__ == "__main__":
     rewards = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
     dones = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
     values = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
+    # Radio-ablation storage: joint (move+radio) logprobs go in `logprobs`; the
+    # radio action index is stored separately so it can be re-evaluated.
+    if use_radio:
+        radio_actions_buf = torch.empty((args.num_steps, args.num_envs, n_agents), dtype=torch.long).to(device)
 
     # Start the game
     global_step = 0
@@ -285,15 +331,25 @@ if __name__ == "__main__":
             dones[step] = next_done.unsqueeze(1).expand(-1, n_agents)
 
             with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_spatial, next_internal)
+                if use_radio:
+                    # Single forward pass yields both factored actions.
+                    action, logprob, _, value, radio_action, radio_logprob, _ = agent.get_action_and_value(next_spatial, next_internal)
+                else:
+                    action, logprob, _, value = agent.get_action_and_value(next_spatial, next_internal)
                 values[step] = value
             actions[step] = action
-            logprobs[step] = logprob
 
             # Map Discrete to Continuous XY using ACTION_MAP
             actions_np = action.cpu().numpy()
             move_actions = ACTION_MAP[actions_np] # Shape: (num_envs, n_agents, 2)
-            radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
+
+            if use_radio:
+                radio_actions_buf[step] = radio_action
+                logprobs[step] = logprob + radio_logprob  # joint logprob for PPO ratio
+                radio_actions = radio_action.cpu().numpy().astype(np.int32)
+            else:
+                logprobs[step] = logprob
+                radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
 
             next_obs, rewards_raw, terminations, truncations, infos = env.step(move_actions, radio_actions)
 
@@ -360,6 +416,8 @@ if __name__ == "__main__":
         b_advantages = advantages.reshape((-1, n_agents))
         b_returns = returns.reshape((-1, n_agents))
         b_values = values.reshape((-1, n_agents))
+        if use_radio:
+            b_radio_actions = radio_actions_buf.reshape((-1, n_agents))
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
@@ -370,12 +428,25 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
-                    b_obs_spatial[mb_inds], 
-                    b_obs_internal[mb_inds], 
-                    b_actions.long()[mb_inds]
-                )
-                
+                if use_radio:
+                    # Single forward pass returns both factors; joint (move+radio)
+                    # logprob/entropy so the PPO ratio and entropy bonus cover both.
+                    (_, move_newlogprob, move_entropy, newvalue,
+                     _, radio_newlogprob, radio_entropy) = agent.get_action_and_value(
+                        b_obs_spatial[mb_inds],
+                        b_obs_internal[mb_inds],
+                        b_actions.long()[mb_inds],
+                        b_radio_actions[mb_inds],
+                    )
+                    newlogprob = move_newlogprob + radio_newlogprob
+                    entropy = move_entropy + radio_entropy
+                else:
+                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(
+                        b_obs_spatial[mb_inds],
+                        b_obs_internal[mb_inds],
+                        b_actions.long()[mb_inds]
+                    )
+
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -443,12 +514,15 @@ if __name__ == "__main__":
     writer.close()
 
     level_name = os.path.basename(os.path.normpath(args.level))
+    # Compositional variant name, e.g. decentralized_ego_radio.
     if args.centralized:
         variant = "centralized"
-    elif args.ego_view:
-        variant = "decentralized_ego"
     else:
         variant = "decentralized"
+        if args.ego_view:
+            variant += "_ego"
+        if use_radio:
+            variant += "_radio"
     results_dir = os.path.join("experiments/results", level_name)
     os.makedirs(results_dir, exist_ok=True)
     np.save(

@@ -15,6 +15,7 @@ torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from RL.MixedObservationEncoder import MixedObservationEncoder
+from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
 
 
 @dataclass
@@ -32,6 +33,9 @@ class Args:
     ego_size: int = 32
     # Path to the level directory (level.png, tiles.json, agents.json, survivors.json).
     level: str = "levels/test_level"
+    # Decentralized-only ablation: add a trainable per-agent radio Q-head so
+    # agents learn to share observations (use with --no-centralized).
+    use_radio: bool = False
 
     total_timesteps: int = 10000000
     learning_rate: float = 2.5e-4
@@ -55,12 +59,15 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 class CustomReplayBuffer:
     def __init__(
-        self, capacity, num_envs, n_agents, spatial_shape, internal_dim, device
+        self, capacity, num_envs, n_agents, spatial_shape, internal_dim, device, store_radio=False
     ):
         self.capacity = capacity
         self.num_envs = num_envs
         self.n_agents = n_agents
         self.device = device
+        self.store_radio = store_radio
+        if store_radio:
+            self.radio_actions = torch.empty((capacity, n_agents), dtype=torch.int64).contiguous()
 
         self.spatial_obs = torch.empty(
             (capacity, *spatial_shape), dtype=torch.float32, pin_memory=True
@@ -80,12 +87,14 @@ class CustomReplayBuffer:
         self.pos = 0
         self.size = 0
 
-    def add(self, spatial, internal, next_spatial, next_internal, action, reward, done):
+    def add(self, spatial, internal, next_spatial, next_internal, action, reward, done, radio_action=None):
         batch_size = spatial.shape[0]
 
         # Convert action to tensor if it isn't already (usually numpy array)
         if not isinstance(action, torch.Tensor):
             action = torch.tensor(action, dtype=torch.int64)
+        if self.store_radio and not isinstance(radio_action, torch.Tensor):
+            radio_action = torch.tensor(radio_action, dtype=torch.int64)
 
         # reward and done are already tensors from the env
         summed_reward = reward.sum(dim=1, keepdim=True)
@@ -101,6 +110,8 @@ class CustomReplayBuffer:
             self.actions[idx].copy_(action)
             self.rewards[idx].copy_(summed_reward)
             self.dones[idx].copy_(done_col)
+            if self.store_radio:
+                self.radio_actions[idx].copy_(radio_action)
         else:
             # Handle wrap around
             part1_len = self.capacity - self.pos
@@ -124,12 +135,26 @@ class CustomReplayBuffer:
             self.actions[idx2].copy_(action[part1_len:])
             self.rewards[idx2].copy_(summed_reward[part1_len:])
             self.dones[idx2].copy_(done_col[part1_len:])
+            if self.store_radio:
+                self.radio_actions[idx1].copy_(radio_action[:part1_len])
+                self.radio_actions[idx2].copy_(radio_action[part1_len:])
 
         self.size = min(self.size + batch_size, self.capacity)
         self.pos = (self.pos + batch_size) % self.capacity
 
     def sample(self, batch_size):
         idxs = torch.randint(0, self.size, (batch_size,))
+        if self.store_radio:
+            return (
+                self.spatial_obs[idxs].to(self.device),
+                self.internal_obs[idxs].to(self.device),
+                self.next_spatial_obs[idxs].to(self.device),
+                self.next_internal_obs[idxs].to(self.device),
+                self.actions[idxs].to(self.device),
+                self.rewards[idxs].to(self.device),
+                self.dones[idxs].to(self.device),
+                self.radio_actions[idxs].to(self.device),
+            )
         return (
             self.spatial_obs[idxs].to(self.device),
             self.internal_obs[idxs].to(self.device),
@@ -142,13 +167,16 @@ class CustomReplayBuffer:
 
 
 class QNetwork(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, centralized=True, num_actions_per_agent=5):
+    def __init__(self, spatial_shape, internal_dim, n_agents, centralized=True, num_actions_per_agent=5, use_radio=False, n_radio_actions=0):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
         self.spatial_shape = spatial_shape
         self.internal_dim = internal_dim
         self.centralized = centralized
+        # Radio ablation: decentralized-only trainable per-agent radio Q-head.
+        self.use_radio = use_radio and not centralized
+        self.n_radio_actions = n_radio_actions
 
         self.encoder = MixedObservationEncoder(
             spatial_shape=spatial_shape,
@@ -157,12 +185,17 @@ class QNetwork(nn.Module):
             vector_hidden_dim=32,
             output_dim=256,
         )
+        # Advantage head width = move dims (+ radio dims for the radio ablation).
+        # One fused head emits sum(discrete_dims); the joint VDN Q is
+        # V + sum_a adv_move_a[move] + sum_a adv_radio_a[radio]. The move/radio
+        # advantages are a zero-copy split of the single head output.
+        self.head_out_dim = num_actions_per_agent + (n_radio_actions if self.use_radio else 0)
         self.adv_heads = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Linear(256, 128),
                     nn.ReLU(),
-                    nn.Linear(128, num_actions_per_agent),
+                    nn.Linear(128, self.head_out_dim),
                 )
                 for _ in range(n_agents if centralized else 1)
             ]
@@ -177,9 +210,23 @@ class QNetwork(nn.Module):
         if centralized:
             self.get_action = self._get_action_centralized
             self.forward = self._forward_centralized
+        elif self.use_radio:
+            self.get_action = self.get_action_radio
+            self.forward = self._forward_decentralized
         else:
             self.get_action = self._get_action_decentralized
             self.forward = self._forward_decentralized
+
+    def get_action_radio(self, spatial, internal):
+        # Decentralized radio ablation: ONE encoder pass, ONE fused advantage head;
+        # split the output into move/radio and take each greedy action.
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
+        feats = self.encoder(x)
+        adv_all = self.adv_heads[0](feats).view(B, self.n_agents, self.head_out_dim)
+        move_action = torch.argmax(adv_all[..., :self.num_actions_per_agent], dim=2)
+        radio_action = torch.argmax(adv_all[..., self.num_actions_per_agent:], dim=2)
+        return move_action, radio_action
 
     def _get_action_centralized(self, spatial, internal):
         B = spatial.shape[0]
@@ -213,6 +260,10 @@ class QNetwork(nn.Module):
         v_value = self.v_head(feats) # [B, 1]
         adv_values = torch.stack([head(feats) for head in self.adv_heads], dim=1) # [B, n_agents, num_actions]
 
+        # Dueling identifiability: mean-center each agent's advantage over its
+        # action dim so V and A cannot drift against each other.
+        adv_values = adv_values - adv_values.mean(dim=2, keepdim=True)
+
         return v_value, adv_values
 
     def _forward_decentralized(self, spatial, internal):
@@ -227,7 +278,21 @@ class QNetwork(nn.Module):
         v_value = v_value.view(B, self.n_agents, 1).sum(dim=1) # Sum over agents for VDN
 
         adv_values = self.adv_heads[0](feats)
-        adv_values = adv_values.view(B, self.n_agents, self.num_actions_per_agent)
+        # Width is head_out_dim (== num_actions when no radio). Callers split off
+        # the radio slice when use_radio is set.
+        adv_values = adv_values.view(B, self.n_agents, self.head_out_dim)
+
+        # Dueling identifiability: mean-center each advantage factor over its own
+        # action dim. Move and radio are independent heads, so they must be
+        # centered separately (centering the concatenation would couple them).
+        if self.use_radio:
+            move = adv_values[..., :self.num_actions_per_agent]
+            radio = adv_values[..., self.num_actions_per_agent:]
+            move = move - move.mean(dim=2, keepdim=True)
+            radio = radio - radio.mean(dim=2, keepdim=True)
+            adv_values = torch.cat([move, radio], dim=2)
+        else:
+            adv_values = adv_values - adv_values.mean(dim=2, keepdim=True)
 
         return v_value, adv_values
 
@@ -272,17 +337,23 @@ if __name__ == "__main__":
     buffer_spatial_shape = env.obs_spatial_shape
     internal_dim = (env.config.n_agents, env.agent_internal_dim)
 
+    if args.use_radio and args.centralized:
+        raise ValueError("--use-radio is a decentralized ablation; run it with --no-centralized")
+    # Radio action space: 0 = no broadcast, 1..n_agents-1 = share with a peer.
+    n_radio_actions = n_agents
+    use_radio = bool(args.use_radio and not args.centralized)
+
     q_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized).to(device)
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions).to(device)
     )
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized).to(device)
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions).to(device)
     )
     target_network.load_state_dict(q_network.state_dict())
 
     rb = CustomReplayBuffer(
-        args.buffer_size, args.num_envs, n_agents, buffer_spatial_shape, internal_dim, device
+        args.buffer_size, args.num_envs, n_agents, buffer_spatial_shape, internal_dim, device, store_radio=use_radio
     )
 
     start_time = time.time()
@@ -314,17 +385,35 @@ if __name__ == "__main__":
             global_step,
         )
 
-        if random.random() < epsilon:
-            actions_discrete = np.random.randint(
-                0, num_actions_per_agent, size=(args.num_envs, n_agents)
-            )
+        if use_radio:
+            # Per-factor epsilon-greedy; a single combined forward provides both
+            # greedy actions when either factor needs one.
+            explore_move = random.random() < epsilon
+            explore_radio = random.random() < epsilon
+            if not (explore_move and explore_radio):
+                with torch.no_grad():
+                    move_greedy, radio_greedy = q_network.get_action_radio(spatial, internal)
+            if explore_move:
+                actions_discrete = np.random.randint(0, num_actions_per_agent, size=(args.num_envs, n_agents))
+            else:
+                actions_discrete = move_greedy.cpu().numpy()
+            if explore_radio:
+                radio_discrete = np.random.randint(0, n_radio_actions, size=(args.num_envs, n_agents))
+            else:
+                radio_discrete = radio_greedy.cpu().numpy()
+            radio_actions = radio_discrete.astype(np.int32)
         else:
-            with torch.no_grad():
-                actions_discrete_t = q_network.get_action(spatial, internal)
-                actions_discrete = actions_discrete_t.cpu().numpy()
+            if random.random() < epsilon:
+                actions_discrete = np.random.randint(
+                    0, num_actions_per_agent, size=(args.num_envs, n_agents)
+                )
+            else:
+                with torch.no_grad():
+                    actions_discrete = q_network.get_action(spatial, internal).cpu().numpy()
+            radio_discrete = None
+            radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
 
         move_actions = ACTION_MAP[actions_discrete]  # Shape: (num_envs, n_agents, 2)
-        radio_actions = np.zeros((args.num_envs, n_agents), dtype=np.int32)
 
         next_obs, rewards, terminations, truncations, infos = env.step(
             move_actions, radio_actions
@@ -345,6 +434,7 @@ if __name__ == "__main__":
             actions_discrete,
             rewards,
             terminations,
+            radio_action=radio_discrete,
         )
 
         spatial = n_spatial
@@ -371,25 +461,51 @@ if __name__ == "__main__":
         # Model update every 4 logical steps (across all envs)
         while cached_logical_steps >= args.train_frequency:
             if global_step > args.learning_starts:
-                (
-                    b_spatial,
-                    b_internal,
-                    b_n_spatial,
-                    b_n_internal,
-                    b_actions,
-                    b_rewards,
-                    b_dones,
-                ) = rb.sample(args.batch_size)
+                if use_radio:
+                    (
+                        b_spatial,
+                        b_internal,
+                        b_n_spatial,
+                        b_n_internal,
+                        b_actions,
+                        b_rewards,
+                        b_dones,
+                        b_radio_actions,
+                    ) = rb.sample(args.batch_size)
+                else:
+                    (
+                        b_spatial,
+                        b_internal,
+                        b_n_spatial,
+                        b_n_internal,
+                        b_actions,
+                        b_rewards,
+                        b_dones,
+                    ) = rb.sample(args.batch_size)
 
+                move_dim = num_actions_per_agent
                 with torch.no_grad():
-                    target_v, target_adv = target_network(b_n_spatial, b_n_internal)
-                    target_adv_max, _ = target_adv.max(dim=2)
-                    target_q_sum = target_v + target_adv_max.sum(dim=1, keepdim=True)
+                    target_v, target_adv_all = target_network(b_n_spatial, b_n_internal)
+                    if use_radio:
+                        # Factored VDN over the single wide head: max each factor.
+                        target_move_max, _ = target_adv_all[..., :move_dim].max(dim=2)
+                        target_radio_max, _ = target_adv_all[..., move_dim:].max(dim=2)
+                        target_q_sum = target_v + target_move_max.sum(dim=1, keepdim=True) + target_radio_max.sum(dim=1, keepdim=True)
+                    else:
+                        target_adv_max, _ = target_adv_all.max(dim=2)
+                        target_q_sum = target_v + target_adv_max.sum(dim=1, keepdim=True)
                     td_target = b_rewards + args.gamma * target_q_sum * (1 - b_dones)
 
-                v, adv = q_network(b_spatial, b_internal)
-                adv_taken = adv.gather(2, b_actions.unsqueeze(2)).squeeze(2)
-                old_val_sum = v + adv_taken.sum(dim=1, keepdim=True)
+                v, adv_all = q_network(b_spatial, b_internal)
+                if use_radio:
+                    move_adv = adv_all[..., :move_dim]
+                    radio_adv = adv_all[..., move_dim:]
+                    adv_taken = move_adv.gather(2, b_actions.unsqueeze(2)).squeeze(2)
+                    radio_taken = radio_adv.gather(2, b_radio_actions.unsqueeze(2)).squeeze(2)
+                    old_val_sum = v + adv_taken.sum(dim=1, keepdim=True) + radio_taken.sum(dim=1, keepdim=True)
+                else:
+                    adv_taken = adv_all.gather(2, b_actions.unsqueeze(2)).squeeze(2)
+                    old_val_sum = v + adv_taken.sum(dim=1, keepdim=True)
 
                 loss = F.mse_loss(td_target, old_val_sum)
 
@@ -424,12 +540,15 @@ if __name__ == "__main__":
 
     # Plot episodic returns at the end (results namespaced per level + variant)
     level_name = os.path.basename(os.path.normpath(args.level))
+    # Compositional variant name, e.g. decentralized_ego_radio.
     if args.centralized:
         variant = "centralized"
-    elif args.ego_view:
-        variant = "decentralized_ego"
     else:
         variant = "decentralized"
+        if args.ego_view:
+            variant += "_ego"
+        if use_radio:
+            variant += "_radio"
     results_dir = os.path.join("experiments/results", level_name)
     os.makedirs(results_dir, exist_ok=True)
     base_name = f"dqn_{variant}_episodic_returns_run_{args.run_number}"
