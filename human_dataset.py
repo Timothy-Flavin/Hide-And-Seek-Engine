@@ -5,18 +5,22 @@ agents, then supports the iterative record -> train -> record loop. One run:
 
 * loads a random level (unless ``--level``) and, each episode, hands the player a
   random agent to control from its ego POV;
-* auto-radios teammates via a heuristic: the instant a survivor enters the
-  controlled agent's ego view it broadcasts, and every 20 steps it also sends a
-  random message to another agent;
+* auto-radios for the controlled agent via a heuristic: the instant a survivor
+  enters its ego view it broadcasts, and every 20 steps it also sends a random
+  message to another agent;
 * drives the non-controlled teammates with the latest decentralized_ego policy
-  checkpoint for the level (random fallback);
+  checkpoint for the level (random fallback). Teammates also transmit radio:
+  from the policy's radio head when a decentralized_ego_radio checkpoint is
+  loaded, else the same heuristic -- so their shared location/tiles/POIs reach
+  the controlled agent's ego view;
 * records 2500 frames (``--frames-per-run``) and *appends* them under
   ``experiments/results/<level>/<agent_type>/`` as immutable segments -- run it
   4x to reach the 10k pre-training target.
 
 The recorded ego observation is the uint8 crop the network consumes, so the same
-files feed the trainers' ``--human-bc`` term directly. The player sees the global
-map (ego-crop rendering is unsupported); the *recorded* obs is still the ego crop.
+files feed the trainers' ``--human-bc`` term directly. The player sees exactly
+that ego crop -- the agent centered in its view-range ring, discovered tiles,
+and teammate/POI info shared over the radio -- i.e. what an artificial agent sees.
 
 Controls: WASD move, close the window to stop (partial data is still appended).
 Radio is automatic.
@@ -90,6 +94,24 @@ def _discretize_move(move_xy: np.ndarray) -> int:
     return int(np.argmin(np.sum((ACTION_MAP - move_xy[None, :2]) ** 2, axis=1)))
 
 
+def _heuristic_radio(ego_spatial, step: int, n_agents: int, poi_channel: int) -> int:
+    """Heuristic radio action for one agent from its ego crop.
+
+    Broadcasts the instant a survivor is in the agent's ego view; otherwise
+    sends a random peer message every RANDOM_MESSAGE_PERIOD steps. Radio value
+    0 == silent, 1..n_agents-1 == share with a peer (decoded engine-side). Used
+    for the human and for teammates when the loaded policy has no radio head.
+    """
+    if n_agents <= 1:
+        return 0
+    survivor_spotted = bool((ego_spatial[poi_channel] > 0).any().item())
+    if survivor_spotted:
+        return SPOTTED_CHANNEL
+    if step > 0 and step % RANDOM_MESSAGE_PERIOD == 0:
+        return random.randrange(1, n_agents)
+    return 0
+
+
 def _load_agent_names(agents_json: str) -> list[str]:
     with open(agents_json) as f:
         return list(json.load(f).keys())
@@ -99,25 +121,32 @@ class TeammatePolicy:
     """Latest decentralized_ego policy for a level, used to drive teammates.
 
     Only decentralized ego checkpoints are usable (the runner feeds each agent
-    its own ego crop). Falls back to random when none is found. Radio teammates
-    are not modeled -- teammates stay silent.
+    its own ego crop). ``has_radio`` is True when a ``decentralized_ego_radio``
+    checkpoint was loaded, in which case ``act`` returns policy-chosen radio
+    actions too; otherwise radio is left to the caller's heuristic.
     """
 
-    def __init__(self, net, act_fn):
+    def __init__(self, net, act_fn, has_radio: bool):
         self.net = net
         self.act_fn = act_fn
+        self.has_radio = has_radio
 
-    def act(self, spatial, internal) -> np.ndarray:
-        # spatial: (1, n_agents, C, S, S) uint8 ; internal: (1, n_agents, D)
-        return self.act_fn(spatial, internal)[0].cpu().numpy()
+    def act(self, spatial, internal):
+        """Return (move, radio) per-agent int arrays of shape (n_agents,).
+
+        ``radio`` is None when the policy has no radio head (caller supplies a
+        heuristic). spatial: (1, n_agents, C, S, S) uint8; internal: (1, n_agents, D).
+        """
+        return self.act_fn(spatial, internal)
 
 
-def _load_policy_state(level, alg, run_number):
-    """Return the decentralized_ego policy state_dict for (level, alg, run), or
-    None. Prefers the rolling resume checkpoint, then the 100% weight snapshot."""
+def _load_policy_state(level, alg, run_number, use_radio):
+    """Return the decentralized_ego[_radio] policy state_dict for
+    (level, alg, run, use_radio), or None. Prefers the rolling resume
+    checkpoint, then the 100% weight snapshot."""
     import torch
 
-    variant = variant_name(centralized=False, ego_view=True, use_radio=False)
+    variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
     results_dir = results_dir_for(level, alg)
     prefix = f"{alg}_{variant}_run_{run_number}"
     key = POLICY_KEY[alg]
@@ -135,43 +164,72 @@ def _load_policy_state(level, alg, run_number):
 
 
 def _build_teammate_policy(env, level, alg, run_number, device):
-    state = _load_policy_state(level, alg, run_number)
-    if state is None:
-        print(f"[teammates] No decentralized_ego {alg} checkpoint for '{level_name_of(level)}' "
-              f"run {run_number}; using random teammate actions.")
-        return None
+    """Build the teammate policy, preferring a radio-enabled checkpoint.
 
+    Tries the ``decentralized_ego_radio`` variant first (teammates then choose
+    both movement *and* radio); falls back to the move-only ``decentralized_ego``
+    variant (teammates move by policy, radio by heuristic); returns None when no
+    checkpoint exists (random movement, heuristic radio)."""
     n_agents = env.config.n_agents
     spatial_shape = env.map_spatial_shape           # (C, ego, ego)
     internal_dim = (n_agents, env.agent_internal_dim)
+    n_radio_actions = n_agents
 
-    if alg == "dqn":
-        from RL.cleanrl_dqn import QNetwork
-        net = QNetwork(spatial_shape, internal_dim, n_agents, centralized=False)
+    for use_radio in (True, False):
+        state = _load_policy_state(level, alg, run_number, use_radio)
+        if state is None:
+            continue
 
-        def act_fn(spatial, internal):
-            return net.get_action(spatial, internal)
-    elif alg == "ppo":
-        from RL.cleanrl_ppo import Agent
-        net = Agent(spatial_shape, internal_dim, n_agents, centralized=False)
+        if alg == "dqn":
+            from RL.cleanrl_dqn import QNetwork
+            net = QNetwork(spatial_shape, internal_dim, n_agents, centralized=False,
+                           use_radio=use_radio, n_radio_actions=n_radio_actions)
+            if use_radio:
+                def act_fn(spatial, internal):
+                    move, radio = net.get_action_radio(spatial, internal)
+                    return move[0].cpu().numpy(), radio[0].cpu().numpy()
+            else:
+                def act_fn(spatial, internal):
+                    return net.get_action(spatial, internal)[0].cpu().numpy(), None
+        elif alg == "ppo":
+            from RL.cleanrl_ppo import Agent
+            net = Agent(spatial_shape, internal_dim, n_agents, centralized=False,
+                        use_radio=use_radio, n_radio_actions=n_radio_actions)
+            if use_radio:
+                def act_fn(spatial, internal):
+                    out = net.get_action_and_value(spatial, internal)
+                    move, radio = out[0], out[4]
+                    return move[0].cpu().numpy(), radio[0].cpu().numpy()
+            else:
+                def act_fn(spatial, internal):
+                    action = net.get_action_and_value(spatial, internal)[0]
+                    return action[0].cpu().numpy(), None
+        elif alg == "sac":
+            from RL.cleanrl_sac import Actor
+            net = Actor(spatial_shape, internal_dim, n_agents, centralized=False,
+                        use_radio=use_radio, n_radio_actions=n_radio_actions)
+            if use_radio:
+                def act_fn(spatial, internal):
+                    out = net.get_action_radio(spatial, internal)
+                    move, radio = out[0], out[3]
+                    return move[0].cpu().numpy(), radio[0].cpu().numpy()
+            else:
+                def act_fn(spatial, internal):
+                    action = net.get_action(spatial, internal)[0]
+                    return action[0].cpu().numpy(), None
+        else:
+            raise ValueError(f"Unknown teammate algorithm: {alg}")
 
-        def act_fn(spatial, internal):
-            action, _, _, _ = net.get_action_and_value(spatial, internal)
-            return action
-    elif alg == "sac":
-        from RL.cleanrl_sac import Actor
-        net = Actor(spatial_shape, internal_dim, n_agents, centralized=False)
+        net.load_state_dict(strip_compile_prefix(state))
+        net.to(device).eval()
+        variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
+        print(f"[teammates] Loaded {alg} {variant} policy for '{level_name_of(level)}' "
+              f"(radio={'policy' if use_radio else 'heuristic'}).")
+        return TeammatePolicy(net, act_fn, has_radio=use_radio)
 
-        def act_fn(spatial, internal):
-            action, _, _ = net.get_action(spatial, internal)
-            return action
-    else:
-        raise ValueError(f"Unknown teammate algorithm: {alg}")
-
-    net.load_state_dict(strip_compile_prefix(state))
-    net.to(device).eval()
-    print(f"[teammates] Loaded {alg} decentralized_ego policy for '{level_name_of(level)}'.")
-    return TeammatePolicy(net, act_fn)
+    print(f"[teammates] No decentralized_ego{{,_radio}} {alg} checkpoint for "
+          f"'{level_name_of(level)}' run {run_number}; random movement + heuristic radio.")
+    return None
 
 
 def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channel,
@@ -203,31 +261,36 @@ def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channe
         ego_spatial = obs["spatial"][0, controlled_agent]      # (C, S, S) uint8
         ego_internal = obs["internal"][0, controlled_agent]    # (D,)
 
-        # Heuristic radio: broadcast the instant a survivor is in the ego view,
-        # else a random message to another agent every RANDOM_MESSAGE_PERIOD steps.
-        survivor_spotted = bool((ego_spatial[poi_channel] > 0).any().item())
-        if survivor_spotted:
-            radio = SPOTTED_CHANNEL
-        elif step > 0 and step % RANDOM_MESSAGE_PERIOD == 0 and n_agents > 1:
-            radio = random.randrange(1, n_agents)  # 1..n_agents-1 == "share with a peer"
-        else:
-            radio = 0
+        # Human radio: broadcast the instant a survivor is in the ego view, else
+        # a random peer message every RANDOM_MESSAGE_PERIOD steps.
+        radio = _heuristic_radio(ego_spatial, step, n_agents, poi_channel)
 
         move_actions = np.zeros((1, n_agents, 2), dtype=np.float32)
         radio_actions = np.zeros((1, n_agents), dtype=np.int32)
         move_actions[0, controlled_agent] = ACTION_MAP[move_idx]
         radio_actions[0, controlled_agent] = radio
 
+        # Teammates choose both movement and radio. Movement comes from the
+        # policy (or random); radio comes from the policy when it has a radio
+        # head, else the same heuristic on that teammate's own ego crop -- so
+        # teammates actually transmit and their info reaches the human's view.
+        team_move = team_radio = None
         if teammate_policy is not None:
             with torch.no_grad():
-                team_actions = teammate_policy.act(obs["spatial"], obs["internal"])
-            for a in range(n_agents):
-                if a != controlled_agent:
-                    move_actions[0, a] = ACTION_MAP[int(team_actions[a])]
-        else:
-            for a in range(n_agents):
-                if a != controlled_agent:
-                    move_actions[0, a] = np.random.uniform(-1.0, 1.0, size=(2,))
+                team_move, team_radio = teammate_policy.act(obs["spatial"], obs["internal"])
+        for a in range(n_agents):
+            if a == controlled_agent:
+                continue
+            if team_move is not None:
+                move_actions[0, a] = ACTION_MAP[int(team_move[a])]
+            else:
+                move_actions[0, a] = np.random.uniform(-1.0, 1.0, size=(2,))
+            if team_radio is not None:
+                radio_actions[0, a] = int(team_radio[a])
+            else:
+                radio_actions[0, a] = _heuristic_radio(
+                    obs["spatial"][0, a], step, n_agents, poi_channel
+                )
 
         next_obs, reward, terminated, truncated, _ = env.step(move_actions, radio_actions)
         done = bool(terminated[0].item() or truncated[0].item())
@@ -247,7 +310,9 @@ def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channe
 
         obs = next_obs
 
-        env.render(-1, env_idx=0)  # global map (ego-crop rendering is unsupported)
+        # Show exactly what the controlled agent perceives: its ego crop with
+        # discovered tiles, view-range ring, and radio-shared teammate/POI info.
+        env.render_ego(controlled_agent, env_idx=0)
         if record and imageio is not None:
             frame_data = pygame.surfarray.array3d(pygame.display.get_surface())
             frames.append(frame_data.swapaxes(0, 1))
