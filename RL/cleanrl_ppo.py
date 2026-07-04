@@ -15,7 +15,19 @@ torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from RL.MixedObservationEncoder import MixedObservationEncoder, cast_obs
-from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
+from RL.checkpoint_utils import (
+    CheckpointSaver,
+    variant_name,
+    results_dir_for,
+    module_state,
+    resume_checkpoint_path,
+    load_resume,
+    save_resume,
+    restore_resume,
+    restore_rng,
+)
+from RL.human_data import load_bc_batcher
+import torch.nn.functional as F
 
 
 @dataclass
@@ -87,6 +99,18 @@ class Args:
     """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
+
+    # --- Human-BC pre-training loop (all opt-in; defaults reproduce the
+    #     existing run_experiments.sh behavior exactly) ---
+    human_bc: bool = False
+    """add a behavior-cloning loss from recorded human data (decentralized only)"""
+    bc_coef: float = 1.0
+    """weight on the BC cross-entropy term"""
+    bc_batch_size: int = 256
+    """minibatch size for the BC term"""
+    resume: bool = False
+    """resume weights/optimizer/RNG from this run's resume checkpoint, and write
+    one at the end (for the 100k-frame-chunk loop)"""
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -213,8 +237,20 @@ class Agent(nn.Module):
             
         logprob = probs.log_prob(action) # [B, n_agents]
         entropy = probs.entropy() # [B, n_agents]
-        
+
         return action, logprob, entropy, self.critic(feats).view(B, self.n_agents)
+
+    def bc_logits(self, spatial, internal):
+        """Per-single-agent move logits for behavior cloning (decentralized).
+
+        Shared encoder + shared actor head on one agent's ego obs
+        (spatial: [B, C, S, S] uint8, internal: [B, D]); move slice only.
+        """
+        spatial = cast_obs(spatial)
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
+        feats = self.encoder(x)
+        return self.actor_heads[0](feats)[..., :self.num_actions_per_agent]
 
 
 ACTION_MAP = np.array(
@@ -294,8 +330,38 @@ if __name__ == "__main__":
     # 20/40/60/80/100% of training under that folder's checkpoints/.
     variant = variant_name(args.centralized, args.ego_view, use_radio)
     results_dir = results_dir_for(args.level, "ppo")
-    ckpt = CheckpointSaver(results_dir, f"ppo_{variant}_run_{args.run_number}", args.total_timesteps)
+    run_prefix = f"ppo_{variant}_run_{args.run_number}"
+    ckpt = CheckpointSaver(results_dir, run_prefix, args.total_timesteps)
     ckpt_state = lambda: module_state(agent=agent)
+
+    # --- Resumable-training checkpoint (opt-in via --resume). ---
+    resume_path = resume_checkpoint_path(results_dir, run_prefix)
+    cumulative_offset = 0
+    if args.resume:
+        state = load_resume(resume_path, map_location=device)
+        if state is not None:
+            restore_resume(state, {"agent": agent}, optimizers={"optimizer": optimizer})
+            restore_rng(state)
+            cumulative_offset = int(state.get("cumulative_step", 0))
+            print(f"[ppo] Resumed from {resume_path} at {cumulative_offset} cumulative frames.")
+        else:
+            print(f"[ppo] --resume set but no checkpoint at {resume_path}; starting fresh.")
+
+    # --- Behavior-cloning term (opt-in via --human-bc; decentralized only). ---
+    bc_batcher = None
+    if args.human_bc:
+        if args.centralized:
+            print("[ppo] --human-bc needs a decentralized model (ego human data); "
+                  "skipping BC. Re-run with --no-centralized.")
+        else:
+            bc_batcher = load_bc_batcher(
+                args.level, expected_spatial_shape=spatial_shape,
+                ego_size=args.ego_size if args.ego_view else None,
+            )
+            if bc_batcher is None:
+                print(f"[ppo] --human-bc set but no matching human data for '{args.level}'; skipping BC.")
+            else:
+                print(f"[ppo] BC enabled with {bc_batcher.n} human frames.")
 
     # ALGO Logic: Storage setup. The spatial rollout is the dominant on-GPU
     # tensor (num_steps x num_envs x C x H x W); storing it as uint8 cuts its
@@ -500,6 +566,11 @@ if __name__ == "__main__":
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
+                if bc_batcher is not None:
+                    bc_spatial, bc_internal, bc_actions = bc_batcher.sample(args.bc_batch_size, device)
+                    bc_loss = F.cross_entropy(agent.bc_logits(bc_spatial, bc_internal), bc_actions)
+                    loss = loss + args.bc_coef * bc_loss
+
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
@@ -531,6 +602,17 @@ if __name__ == "__main__":
 
     writer.close()
     ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
+
+    # Resume checkpoint for the next 100k-frame chunk (opt-in via --resume).
+    if args.resume:
+        save_resume(
+            resume_path,
+            models={"agent": agent},
+            optimizers={"optimizer": optimizer},
+            cumulative_step=cumulative_offset + args.total_timesteps,
+        )
+        print(f"[ppo] Saved resume checkpoint -> {resume_path} "
+              f"({cumulative_offset + args.total_timesteps} cumulative frames).")
 
     np.save(
         os.path.join(results_dir, f"ppo_{variant}_episodic_returns_run_{args.run_number}.npy"),

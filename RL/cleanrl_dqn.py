@@ -15,7 +15,18 @@ torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from RL.MixedObservationEncoder import MixedObservationEncoder, cast_obs
-from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
+from RL.checkpoint_utils import (
+    CheckpointSaver,
+    variant_name,
+    results_dir_for,
+    module_state,
+    resume_checkpoint_path,
+    load_resume,
+    save_resume,
+    restore_resume,
+    restore_rng,
+)
+from RL.human_data import load_bc_batcher
 
 
 @dataclass
@@ -50,6 +61,20 @@ class Args:
     exploration_fraction: float = 0.2
     learning_starts: int = 1000
     train_frequency: int = 128
+
+    # --- Human-BC pre-training loop (all opt-in; defaults reproduce the
+    #     existing run_experiments.sh behavior exactly) ---
+    human_bc: bool = False
+    """add a behavior-cloning loss from recorded human data (decentralized only)"""
+    bc_coef: float = 1.0
+    """weight on the BC cross-entropy term"""
+    bc_batch_size: int = 256
+    """minibatch size for the BC term"""
+    resume: bool = False
+    """resume optimizer/epsilon/RNG from this run's resume checkpoint, and write
+    one at the end (for the 100k-frame-chunk loop)"""
+    exploration_timesteps: int = 0
+    """epsilon-schedule horizon; 0 -> use total_timesteps (original behavior)"""
 
 
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
@@ -303,6 +328,20 @@ class QNetwork(nn.Module):
 
         return v_value, adv_values
 
+    def bc_logits(self, spatial, internal):
+        """Per-single-agent move logits for behavior cloning (decentralized).
+
+        Runs the shared encoder + shared advantage head on one agent's ego
+        observation (spatial: [B, C, S, S] uint8, internal: [B, D]) and returns
+        only the move slice. cast_obs handles the uint8->float conversion, exactly
+        as in rollouts.
+        """
+        spatial = cast_obs(spatial)
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
+        feats = self.encoder(x)
+        return self.adv_heads[0](feats)[..., :self.num_actions_per_agent]
+
 
 ACTION_MAP = np.array(
     [
@@ -367,8 +406,45 @@ if __name__ == "__main__":
     # 20/40/60/80/100% of training under that folder's checkpoints/.
     variant = variant_name(args.centralized, args.ego_view, use_radio)
     results_dir = results_dir_for(args.level, "dqn")
-    ckpt = CheckpointSaver(results_dir, f"dqn_{variant}_run_{args.run_number}", args.total_timesteps)
+    run_prefix = f"dqn_{variant}_run_{args.run_number}"
+    ckpt = CheckpointSaver(results_dir, run_prefix, args.total_timesteps)
     ckpt_state = lambda: module_state(q_network=q_network)
+
+    # --- Resumable-training checkpoint (opt-in via --resume): restore optimizer,
+    #     epsilon/cumulative-step and RNG so 100k-frame chunks continue cleanly. ---
+    resume_path = resume_checkpoint_path(results_dir, run_prefix)
+    cumulative_offset = 0
+    if args.resume:
+        state = load_resume(resume_path, map_location=device)
+        if state is not None:
+            restore_resume(state, {"q_network": q_network, "target_network": target_network},
+                           optimizers={"optimizer": optimizer})
+            restore_rng(state)
+            cumulative_offset = int(state.get("cumulative_step", 0))
+            print(f"[dqn] Resumed from {resume_path} at {cumulative_offset} cumulative frames.")
+        else:
+            print(f"[dqn] --resume set but no checkpoint at {resume_path}; starting fresh.")
+
+    # --- Behavior-cloning term (opt-in via --human-bc; decentralized only, since
+    #     human demos are per-agent ego observations). ---
+    bc_batcher = None
+    if args.human_bc:
+        if args.centralized:
+            print("[dqn] --human-bc needs a decentralized model (ego human data); "
+                  "skipping BC. Re-run with --no-centralized.")
+        else:
+            bc_batcher = load_bc_batcher(
+                args.level, expected_spatial_shape=spatial_shape,
+                ego_size=args.ego_size if args.ego_view else None,
+            )
+            if bc_batcher is None:
+                print(f"[dqn] --human-bc set but no matching human data for '{args.level}'; skipping BC.")
+            else:
+                print(f"[dqn] BC enabled with {bc_batcher.n} human frames.")
+
+    # Epsilon-schedule horizon; default reproduces the original math exactly.
+    epsilon_horizon = args.exploration_timesteps or args.total_timesteps
+    epsilon = args.start_e
 
     start_time = time.time()
     last_log_time = start_time
@@ -392,11 +468,14 @@ if __name__ == "__main__":
     for iteration in range(args.total_timesteps // args.num_envs):
         global_step = iteration * args.num_envs
 
+        # cumulative_offset is 0 unless --resume, so this reproduces the original
+        # schedule exactly for run_experiments.sh; when resuming, the 100k-frame
+        # chunks continue decaying along a fixed horizon.
         epsilon = linear_schedule(
             args.start_e,
             args.end_e,
-            args.exploration_fraction * args.total_timesteps,
-            global_step,
+            args.exploration_fraction * epsilon_horizon,
+            cumulative_offset + global_step,
         )
 
         if use_radio:
@@ -523,6 +602,11 @@ if __name__ == "__main__":
 
                 loss = F.mse_loss(td_target, old_val_sum)
 
+                if bc_batcher is not None:
+                    bc_spatial, bc_internal, bc_actions = bc_batcher.sample(args.bc_batch_size, device)
+                    bc_loss = F.cross_entropy(q_network.bc_logits(bc_spatial, bc_internal), bc_actions)
+                    loss = loss + args.bc_coef * bc_loss
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -556,6 +640,18 @@ if __name__ == "__main__":
         ckpt.maybe_save(global_step, ckpt_state)
 
     ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
+
+    # Resume checkpoint for the next 100k-frame chunk (opt-in via --resume).
+    if args.resume:
+        save_resume(
+            resume_path,
+            models={"q_network": q_network, "target_network": target_network},
+            optimizers={"optimizer": optimizer},
+            cumulative_step=cumulative_offset + args.total_timesteps,
+            extra={"epsilon": float(epsilon), "epsilon_horizon": int(epsilon_horizon)},
+        )
+        print(f"[dqn] Saved resume checkpoint -> {resume_path} "
+              f"({cumulative_offset + args.total_timesteps} cumulative frames).")
 
     # Plot episodic returns at the end (results in experiments/results/<level>/dqn/)
     base_name = f"dqn_{variant}_episodic_returns_run_{args.run_number}"

@@ -17,7 +17,18 @@ torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from RL.MixedObservationEncoder import MixedObservationEncoder, cast_obs
-from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
+from RL.checkpoint_utils import (
+    CheckpointSaver,
+    variant_name,
+    results_dir_for,
+    module_state,
+    resume_checkpoint_path,
+    load_resume,
+    save_resume,
+    restore_resume,
+    restore_rng,
+)
+from RL.human_data import load_bc_batcher
 
 
 @dataclass
@@ -76,6 +87,18 @@ class Args:
     """automatic tuning of the entropy coefficient"""
     target_entropy_scale: float = 0.5
     """coefficient for scaling the autotune entropy target"""
+
+    # --- Human-BC pre-training loop (all opt-in; defaults reproduce the
+    #     existing run_experiments.sh behavior exactly) ---
+    human_bc: bool = False
+    """add a behavior-cloning loss from recorded human data (decentralized only)"""
+    bc_coef: float = 1.0
+    """weight on the BC cross-entropy term"""
+    bc_batch_size: int = 256
+    """minibatch size for the BC term"""
+    resume: bool = False
+    """resume weights/optimizers/log_alpha/RNG from this run's resume checkpoint,
+    and write one at the end (for the 100k-frame-chunk loop)"""
 
 
 class CustomReplayBuffer:
@@ -391,8 +414,20 @@ class Actor(nn.Module):
         # Action probabilities for calculating the exact expectation in discrete SAC
         action_probs = policy_dist.probs
         log_prob = F.log_softmax(logits, dim=2)
-        
+
         return action, log_prob, action_probs
+
+    def bc_logits(self, spatial, internal):
+        """Per-single-agent move logits for behavior cloning (decentralized).
+
+        Shared encoder + shared actor head on one agent's ego obs
+        (spatial: [B, C, S, S] uint8, internal: [B, D]); move slice only.
+        """
+        spatial = cast_obs(spatial)
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
+        feats = self.encoder(x)
+        return self.actor_heads[0](feats)[..., :self.num_actions_per_agent]
 
 
 ACTION_MAP = np.array(
@@ -496,8 +531,49 @@ if __name__ == "__main__":
     # 20/40/60/80/100% of training under that folder's checkpoints/.
     variant = variant_name(args.centralized, args.ego_view, use_radio)
     results_dir = results_dir_for(args.level, "sac")
-    ckpt = CheckpointSaver(results_dir, f"sac_{variant}_run_{args.run_number}", args.total_timesteps)
+    run_prefix = f"sac_{variant}_run_{args.run_number}"
+    ckpt = CheckpointSaver(results_dir, run_prefix, args.total_timesteps)
     ckpt_state = lambda: module_state(actor=actor, qf1=qf1, qf2=qf2)
+
+    # --- Resumable-training checkpoint (opt-in via --resume). ---
+    resume_path = resume_checkpoint_path(results_dir, run_prefix)
+    cumulative_offset = 0
+    if args.resume:
+        state = load_resume(resume_path, map_location=device)
+        if state is not None:
+            restore_resume(
+                state,
+                {"actor": actor, "qf1": qf1, "qf2": qf2,
+                 "qf1_target": qf1_target, "qf2_target": qf2_target},
+                optimizers={"q_optimizer": q_optimizer, "actor_optimizer": actor_optimizer},
+            )
+            if args.autotune and "log_alpha" in state.get("extra", {}):
+                with torch.no_grad():
+                    log_alpha.copy_(state["extra"]["log_alpha"].to(device))
+                alpha = log_alpha.exp().item()
+                if "a_optimizer" in state.get("optimizers", {}):
+                    a_optimizer.load_state_dict(state["optimizers"]["a_optimizer"])
+            restore_rng(state)
+            cumulative_offset = int(state.get("cumulative_step", 0))
+            print(f"[sac] Resumed from {resume_path} at {cumulative_offset} cumulative frames.")
+        else:
+            print(f"[sac] --resume set but no checkpoint at {resume_path}; starting fresh.")
+
+    # --- Behavior-cloning term (opt-in via --human-bc; decentralized only). ---
+    bc_batcher = None
+    if args.human_bc:
+        if args.centralized:
+            print("[sac] --human-bc needs a decentralized model (ego human data); "
+                  "skipping BC. Re-run with --no-centralized.")
+        else:
+            bc_batcher = load_bc_batcher(
+                args.level, expected_spatial_shape=single_spatial_shape,
+                ego_size=args.ego_size if args.ego_view else None,
+            )
+            if bc_batcher is None:
+                print(f"[sac] --human-bc set but no matching human data for '{args.level}'; skipping BC.")
+            else:
+                print(f"[sac] BC enabled with {bc_batcher.n} human frames.")
 
     start_time = time.time()
     last_log_time = start_time
@@ -708,6 +784,11 @@ if __name__ == "__main__":
                 # Because expected values are entirely encapsulated, directly minimize the negative expected Q-value
                 actor_loss = -min_qf_values_sum.mean()
 
+                if bc_batcher is not None:
+                    bc_spatial, bc_internal, bc_actions = bc_batcher.sample(args.bc_batch_size, device)
+                    bc_loss = F.cross_entropy(actor.bc_logits(bc_spatial, bc_internal), bc_actions)
+                    actor_loss = actor_loss + args.bc_coef * bc_loss
+
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
                 actor_optimizer.step()
@@ -764,6 +845,24 @@ if __name__ == "__main__":
 
     writer.close()
     ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
+
+    # Resume checkpoint for the next 100k-frame chunk (opt-in via --resume).
+    if args.resume:
+        extra = {"alpha": float(alpha)}
+        optimizers = {"q_optimizer": q_optimizer, "actor_optimizer": actor_optimizer}
+        if args.autotune:
+            extra["log_alpha"] = log_alpha.detach().cpu()
+            optimizers["a_optimizer"] = a_optimizer
+        save_resume(
+            resume_path,
+            models={"actor": actor, "qf1": qf1, "qf2": qf2,
+                    "qf1_target": qf1_target, "qf2_target": qf2_target},
+            optimizers=optimizers,
+            cumulative_step=cumulative_offset + args.total_timesteps,
+            extra=extra,
+        )
+        print(f"[sac] Saved resume checkpoint -> {resume_path} "
+              f"({cumulative_offset + args.total_timesteps} cumulative frames).")
 
     np.save(
         os.path.join(results_dir, f"sac_{variant}_episodic_returns_run_{args.run_number}.npy"),

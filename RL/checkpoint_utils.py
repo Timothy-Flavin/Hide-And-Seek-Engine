@@ -8,6 +8,7 @@ Results layout (per level, per model):
 Weights are saved at 20/40/60/80/100% of training (5 checkpoints per run/seed).
 """
 import os
+import time
 import torch
 
 
@@ -86,3 +87,85 @@ def module_state(**modules):
     """Build a checkpoint dict of {name: state_dict} for the given (possibly
     torch.compile-wrapped) modules."""
     return {name: _unwrap(m).state_dict() for name, m in modules.items()}
+
+
+# --------------------------------------------------------------------------- #
+# Resumable training checkpoints (for the human-BC 100k-frame chunk loop)
+# --------------------------------------------------------------------------- #
+# CheckpointSaver above snapshots *weights only* at fixed fractions for
+# evaluation. Resuming a partially-trained agent for another chunk additionally
+# needs the optimizer state, the exploration/anneal bookkeeping (cumulative
+# frames trained across chunks), and the RNG state. Those live in a single
+# rolling file per run so each chunk overwrites the previous resume point.
+
+def resume_checkpoint_path(out_dir: str, prefix: str) -> str:
+    """<out_dir>/checkpoints/<prefix>_resume.pt (dir created)."""
+    d = os.path.join(out_dir, "checkpoints")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, f"{prefix}_resume.pt")
+
+
+def save_resume(path, *, models: dict, optimizers: dict, cumulative_step: int,
+                extra: dict | None = None):
+    """Write a resume checkpoint atomically. ``models``/``optimizers`` are dicts
+    of {name: module-or-optimizer}; modules may be torch.compile-wrapped."""
+    import numpy as np
+
+    state = {
+        "models": {n: _unwrap(m).state_dict() for n, m in models.items()},
+        "optimizers": {n: o.state_dict() for n, o in optimizers.items()},
+        "cumulative_step": int(cumulative_step),
+        "extra": extra or {},
+        "torch_rng": torch.get_rng_state(),
+        "numpy_rng": np.random.get_state(),
+        "timestamp": time.time(),
+    }
+    if torch.cuda.is_available():
+        state["cuda_rng"] = torch.cuda.get_rng_state_all()
+    tmp = path + ".tmp"
+    torch.save(state, tmp)
+    os.replace(tmp, path)
+    return path
+
+
+def load_resume(path, map_location="cpu"):
+    if not path or not os.path.exists(path):
+        return None
+    return torch.load(path, map_location=map_location, weights_only=False)
+
+
+def restore_resume(state: dict, models: dict, optimizers: dict | None = None) -> None:
+    """Load weights/optimizer state from a resume checkpoint in place. Modules are
+    unwrapped, so this works whether or not they are torch.compile-wrapped."""
+    for name, module in models.items():
+        if name in state.get("models", {}):
+            _unwrap(module).load_state_dict(state["models"][name])
+    if optimizers:
+        for name, opt in optimizers.items():
+            if name in state.get("optimizers", {}):
+                opt.load_state_dict(state["optimizers"][name])
+
+
+def restore_rng(state: dict) -> None:
+    """Restore torch/numpy/cuda RNG. RNG states must be CPU ByteTensors; a
+    checkpoint loaded onto CUDA has moved them, so bring them back."""
+    import numpy as np
+
+    if state.get("torch_rng") is not None:
+        torch.set_rng_state(state["torch_rng"].cpu().to(torch.uint8))
+    if state.get("numpy_rng") is not None:
+        np.random.set_state(state["numpy_rng"])
+    if state.get("cuda_rng") is not None and torch.cuda.is_available():
+        try:
+            torch.cuda.set_rng_state_all([s.cpu().to(torch.uint8) for s in state["cuda_rng"]])
+        except Exception:
+            pass
+
+
+def strip_compile_prefix(state_dict: dict) -> dict:
+    """Drop torch.compile's ``_orig_mod.`` prefix so weights load into an eager
+    module (used by the recorder's teammate policy)."""
+    p = "_orig_mod."
+    if any(k.startswith(p) for k in state_dict):
+        return {(k[len(p):] if k.startswith(p) else k): v for k, v in state_dict.items()}
+    return state_dict
