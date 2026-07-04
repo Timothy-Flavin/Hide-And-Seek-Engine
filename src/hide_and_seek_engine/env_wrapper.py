@@ -71,6 +71,11 @@ class SARBatchedGridEnv:
         # Whether the spatial obs tensor carries a per-agent dimension.
         obs_per_agent = (self.mode_val == 0) or self.ego_view
 
+        # Spatial obs is stored as uint8 (4x less memory than float32): every
+        # channel is binary (255=on) except altitude, which the C++ side
+        # quantizes to a byte. Consumers cast with `.float() / 255.0` (see
+        # OBS_UINT8_SCALE and the encoder's cast-on-consume). The `internal`
+        # vector and `state` tensor stay float32.
         if obs_per_agent and self.mode_val != 2:  # DECENTRALIZED, or ego CENTRALIZED
             self.obs_spatial = torch.empty(
                 (
@@ -80,7 +85,7 @@ class SARBatchedGridEnv:
                     obs_h,
                     obs_w,
                 ),
-                dtype=torch.float32,
+                dtype=torch.uint8,
                 pin_memory=True,
             ).contiguous()
         else:  # non-ego CENTRALIZED or NO_OBS
@@ -91,7 +96,7 @@ class SARBatchedGridEnv:
                     obs_h,
                     obs_w,
                 ),
-                dtype=torch.float32,
+                dtype=torch.uint8,
                 pin_memory=True,
             ).contiguous()
 

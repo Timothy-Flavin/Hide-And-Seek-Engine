@@ -12,10 +12,13 @@ N_RUNS = 5  # runs/seeds to average over (run_1 .. run_N)
 
 # (algorithm, color). Mode determines the line style.
 ALGS = [("ppo", "blue"), ("dqn", "red"), ("sac", "green")]
-# (variant suffix, human label, line style)
+# (variant suffix, human label, line style). All 5 supported configs are listed;
+# variants without result files are skipped automatically, so this stays correct
+# whichever subset run_experiments.sh trained.
 VARIANTS = [
     ("centralized", "Centralized", "-"),
     ("decentralized", "Decentralized", "--"),
+    ("decentralized_radio", "Decentralized+Radio", (0, (3, 1, 1, 1))),
     ("decentralized_ego", "Decentralized+Ego", ":"),
     ("decentralized_ego_radio", "Decentralized+Ego+Radio", "-."),
 ]
@@ -32,11 +35,12 @@ def discover_levels():
         for name in sorted(os.listdir(LEVELS_ROOT)):
             if os.path.isdir(os.path.join(LEVELS_ROOT, name)):
                 levels.append(name)
-    # Include any result subdir not present in levels/ (defensive).
+    # Include any result subdir not present in levels/ (defensive). Result
+    # files now live one level deeper: <level>/<alg>/*.npy.
     if os.path.isdir(RESULTS_ROOT):
         for name in sorted(os.listdir(RESULTS_ROOT)):
             d = os.path.join(RESULTS_ROOT, name)
-            if os.path.isdir(d) and name not in levels and glob.glob(os.path.join(d, "*_episodic_returns_run_*.npy")):
+            if os.path.isdir(d) and name not in levels and glob.glob(os.path.join(d, "*", "*_episodic_returns_run_*.npy")):
                 levels.append(name)
     return levels
 
@@ -46,7 +50,8 @@ def load_variant_runs(level_name, alg, variant):
     target_x = np.linspace(0, X_MAX, N_INTERP)
     runs = []
     for run_num in range(1, N_RUNS + 1):
-        fn = os.path.join(RESULTS_ROOT, level_name, f"{alg}_{variant}_episodic_returns_run_{run_num}.npy")
+        # Results are namespaced per model: <level>/<alg>/<alg>_<variant>_...npy
+        fn = os.path.join(RESULTS_ROOT, level_name, alg, f"{alg}_{variant}_episodic_returns_run_{run_num}.npy")
         if not os.path.exists(fn):
             continue
         returns = np.load(fn).astype(np.float64)

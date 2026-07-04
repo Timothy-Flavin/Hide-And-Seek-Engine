@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
-from RL.MixedObservationEncoder import MixedObservationEncoder
+from RL.MixedObservationEncoder import MixedObservationEncoder, cast_obs
 from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
 
 
@@ -86,7 +86,9 @@ class CustomReplayBuffer:
         self.device = device
         self.store_radio = store_radio
 
-        self.spatial_obs = torch.empty((capacity, *spatial_shape), dtype=torch.float32, pin_memory=True).contiguous()
+        # Spatial obs stored as uint8 (4x smaller pinned buffer); cast to float
+        # happens inside the network (cast_obs). Internal vector stays float32.
+        self.spatial_obs = torch.empty((capacity, *spatial_shape), dtype=torch.uint8, pin_memory=True).contiguous()
         self.internal_obs = torch.empty((capacity, *internal_dim), dtype=torch.float32, pin_memory=True).contiguous()
 
         self.next_spatial_obs = torch.empty_like(self.spatial_obs).contiguous()
@@ -228,6 +230,7 @@ class SoftQNetwork(nn.Module):
             self.forward = self._forward_decentralized
 
     def _forward_decentralized_radio(self, spatial, internal, move_log_pi=None, radio_log_pi=None, alpha=None):
+        spatial = cast_obs(spatial)
         # Decentralized radio ablation: ONE encoder pass, ONE fused advantage head;
         # split into move/radio factors, each mean-centered (and entropy-adjusted
         # when log-probs are supplied) exactly like the base move advantage.
@@ -254,6 +257,7 @@ class SoftQNetwork(nn.Module):
         return v_value, adv_move, adv_radio
 
     def _forward_centralized(self, spatial, internal, log_pi=None, alpha=None):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         B_eff = B
             
@@ -270,6 +274,7 @@ class SoftQNetwork(nn.Module):
         return v_value, adv_values  # [B, 1], [B, n_agents, num_actions]
 
     def _forward_decentralized(self, spatial, internal, log_pi=None, alpha=None):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         A = spatial.shape[1] if spatial.dim() == 5 else self.n_agents
         spatial = spatial.view(B * A, *spatial.shape[-3:])
@@ -327,6 +332,7 @@ class Actor(nn.Module):
             self.forward = self._forward_decentralized
 
     def get_action_radio(self, spatial, internal):
+        spatial = cast_obs(spatial)
         # Decentralized radio ablation: ONE encoder pass, ONE fused head; split the
         # logits into move/radio and return (action, log_prob, probs) for each.
         B = spatial.shape[0]
@@ -351,6 +357,7 @@ class Actor(nn.Module):
         )
 
     def _forward_centralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         B_eff = B
             
@@ -361,6 +368,7 @@ class Actor(nn.Module):
         return logits  # [B, n_agents, num_actions]
 
     def _forward_decentralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         A = spatial.shape[1] if spatial.dim() == 5 else self.n_agents
         spatial = spatial.view(B * A, *spatial.shape[-3:])
@@ -483,6 +491,13 @@ if __name__ == "__main__":
     rb = CustomReplayBuffer(
         args.buffer_size, args.num_envs, n_agents, spatial_shape, internal_dim, device, store_radio=use_radio
     )
+
+    # Result layout: experiments/results/<level>/sac/ ; weights checkpointed at
+    # 20/40/60/80/100% of training under that folder's checkpoints/.
+    variant = variant_name(args.centralized, args.ego_view, use_radio)
+    results_dir = results_dir_for(args.level, "sac")
+    ckpt = CheckpointSaver(results_dir, f"sac_{variant}_run_{args.run_number}", args.total_timesteps)
+    ckpt_state = lambda: module_state(actor=actor, qf1=qf1, qf2=qf2)
 
     start_time = time.time()
     last_log_time = start_time
@@ -744,20 +759,12 @@ if __name__ == "__main__":
             step_count = 0
             update_count = 0
 
-    writer.close()
+        # Periodic weight checkpoints (20/40/60/80/100% of training).
+        ckpt.maybe_save(global_step, ckpt_state)
 
-    level_name = os.path.basename(os.path.normpath(args.level))
-    # Compositional variant name, e.g. decentralized_ego_radio.
-    if args.centralized:
-        variant = "centralized"
-    else:
-        variant = "decentralized"
-        if args.ego_view:
-            variant += "_ego"
-        if use_radio:
-            variant += "_radio"
-    results_dir = os.path.join("experiments/results", level_name)
-    os.makedirs(results_dir, exist_ok=True)
+    writer.close()
+    ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
+
     np.save(
         os.path.join(results_dir, f"sac_{variant}_episodic_returns_run_{args.run_number}.npy"),
         np.array(episodic_returns),

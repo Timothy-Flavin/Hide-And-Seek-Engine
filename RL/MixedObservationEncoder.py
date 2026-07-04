@@ -2,6 +2,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+# Spatial observations are stored as uint8 (binary layers = 255, altitude
+# quantized to a byte) to cut rollout/replay memory 4x. cast_obs recovers the
+# float [0,1] tensor the networks expect. It is a no-op on already-float inputs,
+# so dummy/float paths keep working. Call it at each model method's entry, before
+# the spatial tensor is flattened and concatenated with the float internal vector.
+OBS_UINT8_SCALE = 255.0
+
+
+def cast_obs(spatial: torch.Tensor) -> torch.Tensor:
+    if spatial.dtype == torch.uint8:
+        return spatial.float().div_(OBS_UINT8_SCALE)
+    return spatial
+
 
 def infer_encoder_out_dim(encoder: nn.Module, input_dim: int) -> int:
     if hasattr(encoder, "output_dim"):

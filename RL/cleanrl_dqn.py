@@ -14,7 +14,7 @@ import tyro
 torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
-from RL.MixedObservationEncoder import MixedObservationEncoder
+from RL.MixedObservationEncoder import MixedObservationEncoder, cast_obs
 from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
 
 
@@ -69,8 +69,10 @@ class CustomReplayBuffer:
         if store_radio:
             self.radio_actions = torch.empty((capacity, n_agents), dtype=torch.int64).contiguous()
 
+        # Spatial obs stored as uint8 (4x smaller pinned buffer); cast to float
+        # happens inside the network (cast_obs). Internal vector stays float32.
         self.spatial_obs = torch.empty(
-            (capacity, *spatial_shape), dtype=torch.float32, pin_memory=True
+            (capacity, *spatial_shape), dtype=torch.uint8, pin_memory=True
         ).contiguous()
         self.internal_obs = torch.empty(
             (capacity, *internal_dim), dtype=torch.float32, pin_memory=True
@@ -218,6 +220,7 @@ class QNetwork(nn.Module):
             self.forward = self._forward_decentralized
 
     def get_action_radio(self, spatial, internal):
+        spatial = cast_obs(spatial)
         # Decentralized radio ablation: ONE encoder pass, ONE fused advantage head;
         # split the output into move/radio and take each greedy action.
         B = spatial.shape[0]
@@ -229,6 +232,7 @@ class QNetwork(nn.Module):
         return move_action, radio_action
 
     def _get_action_centralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         spatial_flat = spatial.view(B, -1)
         internal_flat = internal.view(B, -1)
@@ -239,6 +243,7 @@ class QNetwork(nn.Module):
         return torch.argmax(adv_values, dim=2)
 
     def _get_action_decentralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         spatial_flat = spatial.view(B * self.n_agents, -1)
         internal_flat = internal.view(B * self.n_agents, -1)
@@ -250,6 +255,7 @@ class QNetwork(nn.Module):
         return torch.argmax(adv_values, dim=2)
 
     def _forward_centralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         spatial_flat = spatial.view(B, -1)
         internal_flat = internal.view(B, -1)
@@ -267,6 +273,7 @@ class QNetwork(nn.Module):
         return v_value, adv_values
 
     def _forward_decentralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         spatial_flat = spatial.view(B * self.n_agents, -1)
         internal_flat = internal.view(B * self.n_agents, -1)
@@ -355,6 +362,13 @@ if __name__ == "__main__":
     rb = CustomReplayBuffer(
         args.buffer_size, args.num_envs, n_agents, buffer_spatial_shape, internal_dim, device, store_radio=use_radio
     )
+
+    # Result layout: experiments/results/<level>/dqn/ ; weights checkpointed at
+    # 20/40/60/80/100% of training under that folder's checkpoints/.
+    variant = variant_name(args.centralized, args.ego_view, use_radio)
+    results_dir = results_dir_for(args.level, "dqn")
+    ckpt = CheckpointSaver(results_dir, f"dqn_{variant}_run_{args.run_number}", args.total_timesteps)
+    ckpt_state = lambda: module_state(q_network=q_network)
 
     start_time = time.time()
     last_log_time = start_time
@@ -538,19 +552,12 @@ if __name__ == "__main__":
                     + (1.0 - args.tau) * target_network_param.data
                 )
 
-    # Plot episodic returns at the end (results namespaced per level + variant)
-    level_name = os.path.basename(os.path.normpath(args.level))
-    # Compositional variant name, e.g. decentralized_ego_radio.
-    if args.centralized:
-        variant = "centralized"
-    else:
-        variant = "decentralized"
-        if args.ego_view:
-            variant += "_ego"
-        if use_radio:
-            variant += "_radio"
-    results_dir = os.path.join("experiments/results", level_name)
-    os.makedirs(results_dir, exist_ok=True)
+        # Periodic weight checkpoints (20/40/60/80/100% of training).
+        ckpt.maybe_save(global_step, ckpt_state)
+
+    ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
+
+    # Plot episodic returns at the end (results in experiments/results/<level>/dqn/)
     base_name = f"dqn_{variant}_episodic_returns_run_{args.run_number}"
     np.save(os.path.join(results_dir, f"{base_name}.npy"), np.array(episodic_returns))
 

@@ -32,11 +32,25 @@ typedef ptrdiff_t ssize_t;
 
 namespace py = pybind11;
 
+// uint8 spatial-obs encoding: binary/one-hot layers store OBS_ON, altitude is
+// quantized into a byte. Consumers recover values with x.float()/255.
+static constexpr uint8_t OBS_ON = 255;
+static inline uint8_t alt_to_u8(float a)
+{
+    a = a < 0.0f ? 0.0f : (a > 1.0f ? 1.0f : a); // altitudes are in [0,1]
+    return static_cast<uint8_t>(a * 255.0f + 0.5f);
+}
+
 class BatchedEnvironment
 {
 private:
     std::unique_ptr<EnvironmentArena> arena;
-    float *torch_obs_spatial_base = nullptr;
+    // Spatial OBS is stored as uint8 to cut memory 4x (PPO on-GPU rollout and
+    // DQN/SAC pinned replay buffers). All obs spatial channels are binary except
+    // altitude: binary layers store OBS_ON (255) and altitude is quantized to a
+    // byte, so the consumer casts the whole tensor with a single x.float()/255.
+    // The STATE spatial tensor stays float32 (opt-in, not used by the benchmark).
+    uint8_t *torch_obs_spatial_base = nullptr;
     float *torch_obs_internal_base = nullptr;
     float *torch_state_spatial_base = nullptr;
     float *torch_state_internal_base = nullptr;
@@ -48,12 +62,12 @@ private:
     // per agent is written into the shared tensor each step.
     bool ego_view = false;
     int ego_size = 0;
-    std::vector<float> ego_full_obs;
+    std::vector<uint8_t> ego_full_obs;
     // Accumulation target for the incremental spatial-obs writes. In the
     // default (non-ego) path this simply aliases torch_obs_spatial_base so
     // behavior is unchanged and writes stay zero-copy. In ego mode it points
     // at ego_full_obs so the shared tensor can hold the smaller crop.
-    float *obs_accum_base = nullptr;
+    uint8_t *obs_accum_base = nullptr;
 
     Mode mode;
 
@@ -270,10 +284,10 @@ private:
                                 {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                    float *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + a * spatial_stride;
-                                    spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
-                                    spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
-                                    spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                                    uint8_t *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + a * spatial_stride;
+                                    spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = OBS_ON;
+                                    spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = alt_to_u8(t.altitude);
+                                    spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = OBS_ON;
                                 }
                             }
                         }
@@ -285,10 +299,10 @@ private:
                                 {
                                     ssize_t map_area = width * height;
                                     ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                    float *spat_base = obs_accum_base + e * spatial_stride;
-                                    spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
-                                    spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
-                                    spat_base[central_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                                    uint8_t *spat_base = obs_accum_base + e * spatial_stride;
+                                    spat_base[central_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = OBS_ON;
+                                    spat_base[central_obs_strides->ALTITUDE_TYPE_START + t_idx] = alt_to_u8(t.altitude);
+                                    spat_base[central_obs_strides->OBSERVED_START + t_idx] = OBS_ON;
                                 }
                                 if constexpr (ReqState)
                                 {
@@ -458,10 +472,10 @@ private:
                             {
                                 ssize_t map_area = width * height;
                                 ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-                                float *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
-                                spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = 1.0f;
-                                spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = t.altitude;
-                                spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = 1.0f;
+                                uint8_t *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + target_agent * spatial_stride;
+                                spat_base[decentral_obs_strides->TYLE_TYPE_START + t.get_type() * map_area + t_idx] = OBS_ON;
+                                spat_base[decentral_obs_strides->ALTITUDE_TYPE_START + t_idx] = alt_to_u8(t.altitude);
+                                spat_base[decentral_obs_strides->OBSERVED_START + t_idx] = OBS_ON;
                             }
                         }
                     }
@@ -508,27 +522,27 @@ private:
 
             for (int a = 0; a < n_agents; ++a)
             {
-                float *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + a * spatial_stride;
+                uint8_t *spat_base = obs_accum_base + e * (n_agents * spatial_stride) + a * spatial_stride;
                 float *int_base = torch_obs_internal_base + e * (n_agents * internal_stride) + a * internal_stride;
 
                 for (int p = 0; p < n_pois; ++p)
                 {
                     POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
-                    spat_base[decentral_obs_strides->PIO_START + pk.last_y * width + pk.last_x] = 0.0f;
+                    spat_base[decentral_obs_strides->PIO_START + pk.last_y * width + pk.last_x] = 0;
                     if (pk.knows_found && !pk.knows_saved)
                     {
                         int py = static_cast<int>(pk.y);
                         int px = static_cast<int>(pk.x);
-                        spat_base[decentral_obs_strides->PIO_START + py * width + px] = 1.0f;
+                        spat_base[decentral_obs_strides->PIO_START + py * width + px] = OBS_ON;
                         pk.last_y = py;
                         pk.last_x = px;
                     }
                 }
 
-                spat_base[decentral_obs_strides->MY_LOCATION_START + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
+                spat_base[decentral_obs_strides->MY_LOCATION_START + view.agents[a].last_y * width + view.agents[a].last_x] = 0;
                 int my_y = static_cast<int>(view.agents[a].y);
                 int my_x = static_cast<int>(view.agents[a].x);
-                spat_base[decentral_obs_strides->MY_LOCATION_START + my_y * width + my_x] = 1.0f;
+                spat_base[decentral_obs_strides->MY_LOCATION_START + my_y * width + my_x] = OBS_ON;
                 view.agents[a].last_y = my_y;
                 view.agents[a].last_x = my_x;
 
@@ -542,8 +556,8 @@ private:
                     {
                         int oy = static_cast<int>(ak.y);
                         int ox = static_cast<int>(ak.x);
-                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + ak.last_y * width + ak.last_x] = 0.0f;
-                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + oy * width + ox] = 1.0f;
+                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + ak.last_y * width + ak.last_x] = 0;
+                        spat_base[decentral_obs_strides->OTHER_LOCATIONS_START + other_idx * map_area + oy * width + ox] = OBS_ON;
                         ak.last_y = oy;
                         ak.last_x = ox;
                         ak.has_encountered = 1;
@@ -562,18 +576,18 @@ private:
         else if (mode == Mode::CENTRALIZED)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-            float *spat_base = obs_accum_base + e * spatial_stride;
+            uint8_t *spat_base = obs_accum_base + e * spatial_stride;
             float *int_base = torch_obs_internal_base + e * (n_agents * 6);
 
             for (int p = 0; p < n_pois; ++p)
             {
-                spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
+                spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0;
                 if (view.pois[p].is_found() && !view.pois[p].is_saved())
                 {
                     int py = static_cast<int>(view.pois[p].y);
                     int px = static_cast<int>(view.pois[p].x);
-                    spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0.0f;
-                    spat_base[central_obs_strides->PIO_START + py * width + px] = 1.0f;
+                    spat_base[central_obs_strides->PIO_START + view.pois[p].last_y * width + view.pois[p].last_x] = 0;
+                    spat_base[central_obs_strides->PIO_START + py * width + px] = OBS_ON;
                     view.pois[p].last_y = py;
                     view.pois[p].last_x = px;
                 }
@@ -581,11 +595,11 @@ private:
 
             for (int a = 0; a < n_agents; ++a)
             {
-                spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0.0f;
+                spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + view.agents[a].last_y * width + view.agents[a].last_x] = 0;
 
                 int ay = static_cast<int>(view.agents[a].y);
                 int ax = static_cast<int>(view.agents[a].x);
-                spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + ay * width + ax] = 1.0f;
+                spat_base[central_obs_strides->AGENT_LOCATIONS_START + a * map_area + ay * width + ax] = OBS_ON;
                 view.agents[a].last_y = ay;
                 view.agents[a].last_x = ax;
 
@@ -622,15 +636,15 @@ private:
         {
             // Decentralized: each agent has its own accumulated map.
             // Centralized: all agents crop from the single shared map.
-            const float *src_map =
+            const uint8_t *src_map =
                 (mode == Mode::DECENTRALIZED)
                     ? obs_accum_base + e * (n_agents * full_agent_stride) + a * full_agent_stride
                     : obs_accum_base + e * full_agent_stride;
 
-            float *dst = torch_obs_spatial_base + e * (n_agents * ego_agent_stride) + a * ego_agent_stride;
+            uint8_t *dst = torch_obs_spatial_base + e * (n_agents * ego_agent_stride) + a * ego_agent_stride;
 
             // Fully overwrite the agent's crop each step; zero handles OOB padding.
-            std::memset(dst, 0, ego_agent_stride * sizeof(float));
+            std::memset(dst, 0, ego_agent_stride * sizeof(uint8_t));
 
             const int cy = static_cast<int>(view.agents[a].y);
             const int cx = static_cast<int>(view.agents[a].x);
@@ -647,13 +661,13 @@ private:
             const int span = c1 - c0;
             for (ssize_t ch = 0; ch < channels; ++ch)
             {
-                const float *src_ch = src_map + ch * map_area;
-                float *dst_ch = dst + ch * ego_plane;
+                const uint8_t *src_ch = src_map + ch * map_area;
+                uint8_t *dst_ch = dst + ch * ego_plane;
                 for (int r = r0; r < r1; ++r)
                 {
-                    const float *src_row = src_ch + static_cast<ssize_t>(y0 + r) * width + (x0 + c0);
-                    float *dst_row = dst_ch + static_cast<ssize_t>(r) * S + c0;
-                    std::memcpy(dst_row, src_row, span * sizeof(float));
+                    const uint8_t *src_row = src_ch + static_cast<ssize_t>(y0 + r) * width + (x0 + c0);
+                    uint8_t *dst_row = dst_ch + static_cast<ssize_t>(r) * S + c0;
+                    std::memcpy(dst_row, src_row, span * sizeof(uint8_t));
                 }
             }
         }
@@ -793,7 +807,7 @@ public:
         current_frames.resize(num_envs, 0);
         radio_logs.resize(num_envs, "");
 
-        torch_obs_spatial_base = reinterpret_cast<float *>(obs_spatial_ptr);
+        torch_obs_spatial_base = reinterpret_cast<uint8_t *>(obs_spatial_ptr);
         torch_obs_internal_base = reinterpret_cast<float *>(obs_internal_ptr);
         torch_state_spatial_base = reinterpret_cast<float *>(state_spatial_ptr);
         torch_state_internal_base = reinterpret_cast<float *>(state_internal_ptr);
@@ -827,7 +841,7 @@ public:
             {
                 // obs_spatial_stride is the per-env full-map size (matches the
                 // tensor shape used in the non-ego path).
-                ego_full_obs.assign(static_cast<size_t>(num_envs) * obs_spatial_stride, 0.0f);
+                ego_full_obs.assign(static_cast<size_t>(num_envs) * obs_spatial_stride, static_cast<uint8_t>(0));
                 obs_accum_base = ego_full_obs.data();
             }
         }
@@ -842,7 +856,7 @@ public:
             for (int e = 0; e < num_envs; ++e)
             {
                 if (obs_accum_base)
-                    std::memset(obs_accum_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+                    std::memset(obs_accum_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(uint8_t));
                 if (torch_obs_internal_base)
                     std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
                 if (torch_state_spatial_base && requires_state)
@@ -864,7 +878,7 @@ public:
             for (int e = 0; e < num_envs; ++e)
             {
                 if (obs_accum_base)
-                    std::memset(obs_accum_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(float));
+                    std::memset(obs_accum_base + e * obs_spatial_stride, 0, obs_spatial_stride * sizeof(uint8_t));
                 if (torch_obs_internal_base)
                     std::memset(torch_obs_internal_base + e * obs_internal_stride, 0, obs_internal_stride * sizeof(float));
                 if (torch_state_spatial_base && requires_state)
@@ -1053,15 +1067,15 @@ public:
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
             for (int a = 0; a < n_agents; ++a)
             {
-                float *spat_base = obs_accum_base + env_idx * (n_agents * spatial_stride) + a * spatial_stride;
-                std::memset(spat_base, 0, spatial_stride * sizeof(float));
+                uint8_t *spat_base = obs_accum_base + env_idx * (n_agents * spatial_stride) + a * spatial_stride;
+                std::memset(spat_base, 0, spatial_stride * sizeof(uint8_t));
             }
         }
         else if (mode == Mode::CENTRALIZED && obs_accum_base != nullptr)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_size;
-            float *spat_base = obs_accum_base + env_idx * spatial_stride;
-            std::memset(spat_base, 0, spatial_stride * sizeof(float));
+            uint8_t *spat_base = obs_accum_base + env_idx * spatial_stride;
+            std::memset(spat_base, 0, spatial_stride * sizeof(uint8_t));
         }
 
         // In ego mode the shared tensor holds the crop, not the accumulation
@@ -1070,7 +1084,7 @@ public:
         if (ego_view && torch_obs_spatial_base != nullptr && mode != Mode::NO_OBS)
         {
             ssize_t ego_env_stride = static_cast<ssize_t>(n_agents) * (n_tiles + 3 + n_agents) * ego_size * ego_size;
-            std::memset(torch_obs_spatial_base + env_idx * ego_env_stride, 0, ego_env_stride * sizeof(float));
+            std::memset(torch_obs_spatial_base + env_idx * ego_env_stride, 0, ego_env_stride * sizeof(uint8_t));
         }
 
         if (requires_state && torch_state_spatial_base != nullptr)

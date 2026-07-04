@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 torch.set_float32_matmul_precision("high")
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
-from RL.MixedObservationEncoder import MixedObservationEncoder
+from RL.MixedObservationEncoder import MixedObservationEncoder, cast_obs
 from RL.checkpoint_utils import CheckpointSaver, variant_name, results_dir_for, module_state
 
 
@@ -143,6 +143,7 @@ class Agent(nn.Module):
             self.get_action_and_value = self._get_action_and_value_decentralized
 
     def _get_action_and_value_radio(self, spatial, internal, action=None, radio_action=None):
+        spatial = cast_obs(spatial)
         # Decentralized radio ablation: ONE encoder pass, ONE fused actor head of
         # width (move + radio); split the logits (views) into the two factors.
         B = spatial.shape[0]
@@ -167,18 +168,21 @@ class Agent(nn.Module):
         )
 
     def _get_value_centralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
         return self.critic(feats)
 
     def _get_value_decentralized(self, spatial, internal):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
         feats = self.encoder(x)
         return self.critic(feats).view(B, self.n_agents)
 
     def _get_action_and_value_centralized(self, spatial, internal, action=None):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
@@ -196,6 +200,7 @@ class Agent(nn.Module):
         return action, logprob, entropy, self.critic(feats).expand(B, self.n_agents)
 
     def _get_action_and_value_decentralized(self, spatial, internal, action=None):
+        spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
         feats = self.encoder(x)
@@ -285,12 +290,22 @@ if __name__ == "__main__":
     agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    # ALGO Logic: Storage setup
+    # Result layout: experiments/results/<level>/ppo/ ; weights checkpointed at
+    # 20/40/60/80/100% of training under that folder's checkpoints/.
+    variant = variant_name(args.centralized, args.ego_view, use_radio)
+    results_dir = results_dir_for(args.level, "ppo")
+    ckpt = CheckpointSaver(results_dir, f"ppo_{variant}_run_{args.run_number}", args.total_timesteps)
+    ckpt_state = lambda: module_state(agent=agent)
+
+    # ALGO Logic: Storage setup. The spatial rollout is the dominant on-GPU
+    # tensor (num_steps x num_envs x C x H x W); storing it as uint8 cuts its
+    # VRAM 4x. The network casts to float on read (cast_obs). obs_internal stays
+    # float32.
     if args.centralized:
-        obs_spatial = torch.empty((args.num_steps, args.num_envs) + spatial_shape).to(device)
+        obs_spatial = torch.empty((args.num_steps, args.num_envs) + spatial_shape, dtype=torch.uint8).to(device)
         obs_internal = torch.empty((args.num_steps, args.num_envs) + internal_dim).to(device)
     else:
-        obs_spatial = torch.empty((args.num_steps, args.num_envs, n_agents) + spatial_shape).to(device)
+        obs_spatial = torch.empty((args.num_steps, args.num_envs, n_agents) + spatial_shape, dtype=torch.uint8).to(device)
         obs_internal = torch.empty((args.num_steps, args.num_envs, n_agents, env.agent_internal_dim)).to(device)
     
     actions = torch.empty((args.num_steps, args.num_envs, n_agents)).to(device)
@@ -511,20 +526,12 @@ if __name__ == "__main__":
         print(f"global_step={global_step}, SPS={sps}")
         writer.add_scalar("charts/SPS", sps, global_step)
 
-    writer.close()
+        # Periodic weight checkpoints (20/40/60/80/100% of training).
+        ckpt.maybe_save(global_step, ckpt_state)
 
-    level_name = os.path.basename(os.path.normpath(args.level))
-    # Compositional variant name, e.g. decentralized_ego_radio.
-    if args.centralized:
-        variant = "centralized"
-    else:
-        variant = "decentralized"
-        if args.ego_view:
-            variant += "_ego"
-        if use_radio:
-            variant += "_radio"
-    results_dir = os.path.join("experiments/results", level_name)
-    os.makedirs(results_dir, exist_ok=True)
+    writer.close()
+    ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
+
     np.save(
         os.path.join(results_dir, f"ppo_{variant}_episodic_returns_run_{args.run_number}.npy"),
         np.array(episodic_returns),

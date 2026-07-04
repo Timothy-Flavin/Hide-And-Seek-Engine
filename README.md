@@ -76,8 +76,8 @@ radio_actions = np.array([[1, 1]], dtype=np.int32)
 
 The `obs` returned by `reset()` and `step()` is a dictionary separating spatial feature maps from internal vector states:
 
-  * `obs["spatial"]`: Shape depends on the `mode` and `ego_view` (see Observation Modes below). The `C = n_tiles + 3 + n_agents` channels are: one-hot tile-type layers (`n_tiles`), altitude, survivor (person-of-interest) layer, observed/FOV mask, and one location layer per agent.
-  * `obs["internal"]`: Shape `[num_envs, n_agents, 6]`. Per-agent vector data in order `[y, x, battery, view_range, deploy_remaining, stuck]`.
+  * `obs["spatial"]`: Shape depends on the `mode` and `ego_view` (see Observation Modes below). The `C = n_tiles + 3 + n_agents` channels are: one-hot tile-type layers (`n_tiles`), altitude, survivor (person-of-interest) layer, observed/FOV mask, and one location layer per agent. **Stored as `uint8`** (binary layers = 255, altitude quantized to a byte) to cut rollout/replay memory 4×; recover the float tensor with `spatial.float() / 255.0` (the provided `RL.MixedObservationEncoder.cast_obs` does this, and the reference encoders call it internally).
+  * `obs["internal"]`: Shape `[num_envs, n_agents, 6]`, `float32`. Per-agent vector data in order `[y, x, battery, view_range, deploy_remaining, stuck]`.
 
 ### State Space (Critic Input)
 
@@ -103,7 +103,7 @@ The observation footprint is controlled by three initialization parameters: `mod
 
 #### Ego-centric observations (`ego_view=True`)
 
-By default the spatial observation spans the entire `H×W` map. Setting `ego_view=True` instead returns a fixed `ego_size × ego_size` window **centered on each agent** (out-of-bounds cells are zero-padded), so the input size is independent of the map size. This is an opt-in flag; the default behavior is byte-for-byte unchanged.
+By default the spatial observation spans the entire `H×W` map. Setting `ego_view=True` instead returns a fixed `ego_size × ego_size` window **centered on each agent** (out-of-bounds cells are zero-padded), so the input size is independent of the map size. This is an opt-in flag; the default behavior is full-map.
 
 ```python
 env = SARBatchedGridEnv(..., mode="decentralized", ego_view=True, ego_size=32)
@@ -131,7 +131,7 @@ pip install pygame pillow pettingzoo imageio
 
 ## Benchmark Experiments (Reproducing the Results)
 
-The benchmark trains **3 MARL algorithms** (PPO, DQN, SAC) under **4 observation/communication configurations** on **4 environments** for **5 seeds** each, at **5,000,000 environment frames** per run on a single GPU. That is `3 × 4 × 4 × 5 = 240` training runs, all launched by one script (`RL/run_experiments.sh`).
+The benchmark trains **3 MARL algorithms** (PPO, DQN, SAC) under **3 active observation/communication configurations** on **4 environments** for **5 seeds** each, at **5,000,000 environment frames** per run on a single GPU. That is `3 × 3 × 4 × 5 = 180` training runs, all launched by one script (`RL/run_experiments.sh`).
 
 ### Environments
 
@@ -162,18 +162,23 @@ Episodes **truncate** at 250 frames and **terminate** early when all survivors a
 
 ### Action space used by the benchmark
 
-Movement is a continuous `[dy, dx]`, but the RL agents select from a **discrete 5-action** movement set (stay, N, S, E, W) mapped to `[dy, dx]`. The **radio** action is a discrete target `∈ {0 … n_agents−1}`; sending your own ID is the no-op, any other ID broadcasts that agent's discovered tiles/survivor knowledge to that peer.
+Movement is a continuous `[dy, dx]`, but the discrete RL agents select from a **discrete 5-action** movement set (stay, N, S, E, W) mapped to `[dy, dx]`. The **radio** action is a discrete target `∈ {0 … n_agents−1}`; sending your own ID is the no-op, any other ID broadcasts that agent's discovered tiles/survivor knowledge to that peer.
 
-### The four configurations
+### The configurations
+
+The runner supports **5** observation/communication configurations — centralized, plus decentralized × {full-map, ego-centric} × {no-radio, radio}:
 
 | Config | Runner flags | Description |
 | :--- | :--- | :--- |
 | Centralized | `--centralized` | Single shared fog-of-war map observation; per-agent policy heads. |
 | Decentralized | `--no-centralized` | Per-agent local FOV over the full map (radio disabled). |
+| Decentralized + Radio | `--no-centralized --use-radio` | Full-map FOV plus a trainable radio head. |
 | Decentralized + Ego | `--no-centralized --ego-view --ego-size 32` | Per-agent 32×32 ego-centric crop (radio disabled). |
 | Decentralized + Ego + Radio | `--no-centralized --ego-view --ego-size 32 --use-radio` | Ego crop plus a **trainable per-agent radio head** that learns which peer to share observations with. |
 
-In the first three configurations the radio is fixed to the no-op; only the fourth learns a radio policy.
+Whenever the radio is disabled it is fixed to the no-op (each agent transmits its own ID); only the `+ Radio` configs learn a radio policy.
+
+**Active set (default).** The maps range up to 128×128, where a full-map observation is expensive, so the default sweep runs the **three** configs that keep large-map cost bounded — **Centralized**, **Decentralized + Ego**, and **Decentralized + Ego + Radio** (only Centralized uses the full map). The full set is wired up and selectable without code changes via the `CONFIGS` environment variable, e.g. `CONFIGS="centralized decentralized decentralized_radio decentralized_ego decentralized_ego_radio"`.
 
 ### Model configurations
 
@@ -199,7 +204,7 @@ Shared across algorithms: **5M frames**, **128 parallel envs**, **γ = 0.99**, r
 bash RL/run_experiments.sh
 ```
 
-**Seed is the outermost loop:** the script runs every environment/model/config once for seed 1, then seed 2, and so on — so after the first pass you have exercised all 48 combinations and can confirm everything works before waiting on all 5 seeds. Runs continue on error and a failure summary is printed after each seed pass; per-level combined plots are regenerated after every seed.
+**Seed is the outermost loop:** the script runs every environment/model/config once for seed 1, then seed 2, and so on — so after the first pass you have exercised all 36 combinations (3 configs × 3 algorithms × 4 levels) and can confirm everything works before waiting on all 5 seeds. Runs continue on error and a failure summary is printed after each seed pass; per-level combined plots are regenerated after every seed.
 
 Override any axis via environment variables, e.g. a single quick verification pass:
 
