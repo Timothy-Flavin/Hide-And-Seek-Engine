@@ -14,9 +14,12 @@ agent the human controlled that episode):
                                              /frames.json          (running total)
 
 Each recording session appends a new immutable ``segment_XXXX`` -- previously
-collected frames are never rewritten, so 4 runs of 2.5k accumulate to the 10k
-pre-training target. ``obs_spatial``/``next_obs_spatial`` are stored as uint8
-(the env's compressed obs); the networks cast on read (``cast_obs``).
+collected frames are never rewritten, so repeated sessions accumulate toward the
+pre-training target (the recorder collects a per-agent-type quota per session).
+``obs_spatial``/``next_obs_spatial`` are stored as uint8 (the env's compressed
+obs); the networks cast on read (``cast_obs``). Per-session team episodic-return
+summaries are appended to ``<level>/human_returns.jsonl`` (see
+``append_return_stats``).
 """
 
 from __future__ import annotations
@@ -91,6 +94,21 @@ def append_human_segment(level: str, agent_type: str, data: dict, meta: dict | N
     return seg_dir
 
 
+def append_return_stats(level: str, stats: dict) -> str:
+    """Append one episodic-return summary to the level's returns log (JSON lines).
+
+    Written by the recorder after each session so team performance can be tracked
+    over the record -> train -> record loop. Returns the log path.
+    """
+    base = os.path.join(RESULTS_ROOT, level_name_of(level))
+    os.makedirs(base, exist_ok=True)
+    path = os.path.join(base, "human_returns.jsonl")
+    entry = {"timestamp": time.time(), **stats}
+    with open(path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return path
+
+
 def _read_meta(seg_dir: str) -> dict:
     path = os.path.join(seg_dir, "meta.json")
     if not os.path.exists(path):
@@ -107,7 +125,12 @@ def _refresh_frame_index(bucket: str) -> int:
     return total
 
 
-def count_human_frames(level: str, agent_type: str | None = None, ego_size: int | None = None) -> int:
+def count_human_frames(level: str, agent_type: str | None = None, ego_size: int | None = None,
+                       checkpoint: str | None = None) -> int:
+    """Total recorded frames for a level, optionally restricted to one bucket,
+    a matching ``ego_size``, and/or a matching ``checkpoint`` tag (the teammate
+    checkpoint the demos were recorded against). ``checkpoint`` lets the recorder
+    count only the demos gathered for the *current* policy checkpoint."""
     base = os.path.join(RESULTS_ROOT, level_name_of(level))
     if not os.path.isdir(base):
         return 0
@@ -119,6 +142,8 @@ def count_human_frames(level: str, agent_type: str | None = None, ego_size: int 
         for seg in glob.glob(os.path.join(base, bucket, "segment_*")):
             meta = _read_meta(seg)
             if ego_size is not None and meta.get("ego_size") != ego_size:
+                continue
+            if checkpoint is not None and meta.get("checkpoint") != checkpoint:
                 continue
             total += int(meta.get("frames", 0))
     return total

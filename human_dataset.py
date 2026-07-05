@@ -13,14 +13,19 @@ agents, then supports the iterative record -> train -> record loop. One run:
   from the policy's radio head when a decentralized_ego_radio checkpoint is
   loaded, else the same heuristic -- so their shared location/tiles/POIs reach
   the controlled agent's ego view;
-* records 2500 frames (``--frames-per-run``) and *appends* them under
-  ``experiments/results/<level>/<agent_type>/`` as immutable segments -- run it
-  4x to reach the 10k pre-training target.
+* records ``--frames-per-agent`` frames *per agent type* (default 2500) and
+  *appends* them under ``experiments/results/<level>/<agent_type>/`` as immutable
+  segments; the session ends once every agent type hits its quota;
+* logs the mean/std team episodic return for the session to
+  ``experiments/results/<level>/human_returns.jsonl`` so team performance can be
+  tracked as the RL improves over the record -> train -> record loop.
 
 The recorded ego observation is the uint8 crop the network consumes, so the same
 files feed the trainers' ``--human-bc`` term directly. The player sees exactly
 that ego crop -- the agent centered in its view-range ring, discovered tiles,
-and teammate/POI info shared over the radio -- i.e. what an artificial agent sees.
+and teammate/POI info shared over the radio -- plus a text panel of the vectorized
+observation (position, battery, view range, known POI/teammate coords), i.e. all
+the same data an artificial agent sees.
 
 Controls: WASD move, close the window to stop (partial data is still appended).
 Radio is automatic.
@@ -47,7 +52,13 @@ from RL.checkpoint_utils import (
     strip_compile_prefix,
     variant_name,
 )
-from RL.human_data import HUMAN_FIELDS, append_human_segment, count_human_frames, level_name_of
+from RL.human_data import (
+    HUMAN_FIELDS,
+    append_human_segment,
+    append_return_stats,
+    count_human_frames,
+    level_name_of,
+)
 
 try:
     import pygame
@@ -163,6 +174,29 @@ def _load_policy_state(level, alg, run_number, use_radio):
     return None
 
 
+def _current_checkpoint_id(level, alg, run_number):
+    """Stable id for the teammate checkpoint currently driving the level, so
+    recorded demos can be tagged with (and counted against) the checkpoint they
+    were gathered for. Mirrors ``_build_teammate_policy``'s load order (radio
+    variant preferred). Returns ``"none"`` when no checkpoint exists yet."""
+    import torch
+
+    key = POLICY_KEY[alg]
+    for use_radio in (True, False):
+        variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
+        results_dir = results_dir_for(level, alg)
+        prefix = f"{alg}_{variant}_run_{run_number}"
+
+        resume = load_resume(resume_checkpoint_path(results_dir, prefix), map_location="cpu")
+        if resume is not None and key in resume.get("models", {}):
+            return f"{prefix}_step{int(resume.get('cumulative_step', 0))}"
+
+        pct100 = os.path.join(results_dir, "checkpoints", f"{prefix}_pct100.pt")
+        if os.path.exists(pct100):
+            return f"{prefix}_pct100"
+    return "none"
+
+
 def _build_teammate_policy(env, level, alg, run_number, device):
     """Build the teammate policy, preferring a radio-enabled checkpoint.
 
@@ -232,9 +266,14 @@ def _build_teammate_policy(env, level, alg, run_number, device):
     return None
 
 
-def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channel,
-                max_steps=250, record=False, step_delay_ms=132):
-    """Play one episode, collecting up to ``frame_budget`` ego transitions."""
+def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
+                max_steps=250, record=False, step_delay_ms=132, progress_line=""):
+    """Play one full episode, collecting the controlled agent's ego transitions.
+
+    Returns (data, frames, n_frames, episodic_return, quit_requested) where
+    ``episodic_return`` is the per-agent summed reward over the episode (shape
+    (n_agents,)), used to report team performance.
+    """
     import torch
 
     env.reset()
@@ -244,10 +283,11 @@ def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channe
     data = {f: [] for f in HUMAN_FIELDS}
     frames = []
     quit_requested = False
+    episodic_return = np.zeros(n_agents, dtype=np.float64)
 
     step = 0
     done = False
-    while not done and step < max_steps and len(data["obs_spatial"]) < frame_budget:
+    while not done and step < max_steps:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 quit_requested = True
@@ -294,6 +334,7 @@ def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channe
 
         next_obs, reward, terminated, truncated, _ = env.step(move_actions, radio_actions)
         done = bool(terminated[0].item() or truncated[0].item())
+        episodic_return += reward[0].cpu().numpy()
 
         data["obs_spatial"].append(ego_spatial.cpu().numpy())
         data["obs_internal"].append(ego_internal.cpu().numpy())
@@ -311,8 +352,15 @@ def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channe
         obs = next_obs
 
         # Show exactly what the controlled agent perceives: its ego crop with
-        # discovered tiles, view-range ring, and radio-shared teammate/POI info.
-        env.render_ego(controlled_agent, env_idx=0)
+        # discovered tiles, view-range ring, radio-shared teammate/POI info, and
+        # a text panel of the vectorized obs (position, battery, known coords).
+        info_lines = [
+            f"controlling: {agent_type} (agent {controlled_agent})",
+            f"episode step {step + 1}  team return={episodic_return.sum():.2f}",
+        ]
+        if progress_line:
+            info_lines.append(progress_line)
+        env.render_ego(controlled_agent, env_idx=0, info_lines=info_lines)
         if record and imageio is not None:
             frame_data = pygame.surfarray.array3d(pygame.display.get_surface())
             frames.append(frame_data.swapaxes(0, 1))
@@ -320,7 +368,7 @@ def run_episode(env, controlled_agent, frame_budget, teammate_policy, poi_channe
         pygame.time.wait(step_delay_ms)
         step += 1
 
-    return data, frames, len(data["obs_spatial"]), quit_requested
+    return data, frames, len(data["obs_spatial"]), episodic_return, quit_requested
 
 
 def _stack_bucket(field_lists: dict) -> dict:
@@ -336,7 +384,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--level", default=None,
                         help="Level dir path (e.g. levels/test_level). Random if omitted.")
-    parser.add_argument("--frames-per-run", type=int, default=2500)
+    parser.add_argument("--frames-per-agent", type=int, default=2500,
+                        help="Frames to collect PER agent type this session; the "
+                             "session ends once every type reaches this quota.")
     parser.add_argument("--max-steps", type=int, default=250)
     parser.add_argument("--ego-size", type=int, default=32,
                         help="Ego window side length (match the trainer's --ego-size).")
@@ -391,45 +441,101 @@ def main():
     if not args.no_teammate_policy:
         teammate_policy = _build_teammate_policy(env, level, args.teammate_alg, args.teammate_run, device)
 
+    # Demos are tagged with (and counted against) the current teammate checkpoint,
+    # so re-running the recorder tops up only the agents that still lack data for
+    # THIS checkpoint -- once an agent hits its quota it drops out of the pool.
+    checkpoint_id = ("none" if args.no_teammate_policy
+                     else _current_checkpoint_id(level, args.teammate_alg, args.teammate_run))
+
+    target = args.frames_per_agent
+    # One bucket per agent type (== agent name). Seed each bucket's count with the
+    # frames already on disk for the current checkpoint so prior sessions count.
+    collected = {
+        name: count_human_frames(level, name, ego_size=ego_size, checkpoint=checkpoint_id)
+        for name in agent_names
+    }
     existing = count_human_frames(level, ego_size=ego_size)
     print(f"Level '{level_name_of(level)}' ({env.config.width}x{env.config.height}), "
           f"agents={agent_names}, ego={'off' if args.no_ego else args.ego_size}. "
-          f"Already recorded (matching): {existing} frames.")
+          f"Recorded (matching): {existing} frames; for current checkpoint "
+          f"'{checkpoint_id}': {collected}.")
     print("Controls: WASD move, close window to stop. Radio is automatic.")
 
     buckets = defaultdict(lambda: {f: [] for f in HUMAN_FIELDS})
     gif_buckets = defaultdict(list)
+    episode_returns = []            # per-episode per-agent summed reward, (n_agents,)
     total = 0
     quit_requested = False
 
-    while total < args.frames_per_run and not quit_requested:
-        controlled_agent = random.randrange(env.config.n_agents)
-        agent_type = agent_names[controlled_agent]
-        remaining = args.frames_per_run - total
-        print(f"Episode: controlling agent_{controlled_agent} ({agent_type}); "
-              f"{total}/{args.frames_per_run} frames.")
+    def _needs_more():
+        return [name for name in agent_names if collected[name] < target]
 
-        data, frames, n, quit_requested = run_episode(
+    while _needs_more() and not quit_requested:
+        # Control the agent whose type is furthest from its quota (ties random),
+        # so every bucket fills instead of only the ones randomly picked.
+        deficit = max(target - collected[name] for name in _needs_more())
+        candidates = [a for a in range(env.config.n_agents)
+                      if target - collected[agent_names[a]] == deficit]
+        controlled_agent = random.choice(candidates)
+        agent_type = agent_names[controlled_agent]
+
+        progress = "  ".join(f"{name}:{collected[name]}/{target}" for name in agent_names)
+        progress_line = f"session frames -> {progress}"
+        print(f"Episode: controlling agent_{controlled_agent} ({agent_type}); {progress}")
+
+        data, frames, n, ep_return, quit_requested = run_episode(
             env,
             controlled_agent=controlled_agent,
-            frame_budget=remaining,
+            agent_type=agent_type,
             teammate_policy=teammate_policy,
             poi_channel=poi_channel,
             max_steps=args.max_steps,
             record=args.record,
             step_delay_ms=args.step_delay_ms,
+            progress_line=progress_line,
         )
         for f in HUMAN_FIELDS:
             buckets[agent_type][f].extend(data[f])
         if args.record:
             gif_buckets[agent_type].extend(frames)
+        collected[agent_type] += n
         total += n
+        if n > 0:
+            episode_returns.append(ep_return)
+
+    # --- Team episodic-return summary (tracks performance as the RL improves) ---
+    if episode_returns:
+        returns_arr = np.stack(episode_returns, axis=0)          # (n_episodes, n_agents)
+        per_agent_mean = returns_arr.mean(axis=0)
+        per_agent_std = returns_arr.std(axis=0)
+        team = returns_arr.sum(axis=1)                            # (n_episodes,)
+        print(f"\nEpisodic return over {len(episode_returns)} episodes "
+              f"(teammates: {args.teammate_alg} run {args.teammate_run}):")
+        for a, name in enumerate(agent_names):
+            print(f"  agent {a} ({name}): mean={per_agent_mean[a]:.3f} std={per_agent_std[a]:.3f}")
+        print(f"  TEAM (sum over agents): mean={team.mean():.3f} std={team.std():.3f}")
+        stats = {
+            "level": level_name_of(level),
+            "n_episodes": len(episode_returns),
+            "teammate_alg": args.teammate_alg,
+            "teammate_run": args.teammate_run,
+            "checkpoint": checkpoint_id,
+            "agent_names": agent_names,
+            "per_agent_return_mean": [float(x) for x in per_agent_mean],
+            "per_agent_return_std": [float(x) for x in per_agent_std],
+            "team_return_mean": float(team.mean()),
+            "team_return_std": float(team.std()),
+            "frames_this_session": total,
+        }
+        log_path = append_return_stats(level, stats)
+        print(f"  logged -> {log_path}")
 
     if total == 0:
         print("No frames recorded; nothing to save.")
         return
 
-    meta = {"ego_size": ego_size, "ego_view": ego_view, "level": level_name_of(level)}
+    meta = {"ego_size": ego_size, "ego_view": ego_view, "level": level_name_of(level),
+            "checkpoint": checkpoint_id}
     for agent_type, field_lists in buckets.items():
         stacked = _stack_bucket(field_lists)
         if not stacked:

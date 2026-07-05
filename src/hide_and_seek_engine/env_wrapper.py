@@ -1,3 +1,4 @@
+import math
 import time
 import numpy as np
 import torch
@@ -274,16 +275,19 @@ class SARBatchedGridEnv:
             ),
         }
 
-    def _init_renderer(self, grid_w=None, grid_h=None, tile_px=8):
+    def _init_renderer(self, grid_w=None, grid_h=None, tile_px=8, extra_h=0):
         """Create (or resize) the pygame window.
 
         ``grid_w``/``grid_h`` default to the full map; the ego renderer passes
         the ego window side so the display matches the crop the agent consumes.
-        The window is (re)created whenever the requested grid or tile size
-        changes, so the same env can render either the global map or an ego crop.
+        ``extra_h`` reserves pixels below the grid for a text panel (the ego
+        renderer's vectorized-obs readout). The window is (re)created whenever
+        the requested grid, tile size, or panel height changes, so the same env
+        can render either the global map or an ego crop.
         """
         grid_w = self.config.width if grid_w is None else int(grid_w)
         grid_h = self.config.height if grid_h is None else int(grid_h)
+        extra_h = int(extra_h)
 
         already = getattr(self, "render_initialized", False)
         same = (
@@ -291,16 +295,20 @@ class SARBatchedGridEnv:
             and getattr(self, "_render_grid_w", None) == grid_w
             and getattr(self, "_render_grid_h", None) == grid_h
             and getattr(self, "_pygame_tile_px", None) == tile_px
+            and getattr(self, "_render_extra_h", None) == extra_h
         )
         if same:
             return
 
         pygame.init()
+        pygame.font.init()
         self._pygame_tile_px = tile_px
         self._render_grid_w = grid_w
         self._render_grid_h = grid_h
+        self._render_extra_h = extra_h
+        self._render_font = pygame.font.SysFont("consolas,dejavusansmono,monospace", 13)
         window_width = grid_w * self._pygame_tile_px
-        window_height = grid_h * self._pygame_tile_px
+        window_height = grid_h * self._pygame_tile_px + extra_h
         self._pygame_screen = pygame.display.set_mode((window_width, window_height))
         pygame.display.set_caption("SAR Batched Environment Viewer")
 
@@ -356,7 +364,12 @@ class SARBatchedGridEnv:
         else:
             self._render_centralized_obs(env_idx, agent_pos)
 
-    def render_ego(self, pov, env_idx=0, tile_px=16):
+    # Text panel geometry for the ego renderer's vectorized-obs readout.
+    _EGO_PANEL_LINES = 8
+    _EGO_PANEL_LINE_H = 15
+    _EGO_PANEL_PAD = 6
+
+    def render_ego(self, pov, env_idx=0, tile_px=16, info_lines=None):
         """Render exactly the ego-centric observation agent ``pov`` consumes.
 
         This draws the uint8 ego crop the network receives -- the agent sits at
@@ -364,6 +377,13 @@ class SARBatchedGridEnv:
         (terrain, survivors, teammates) is whatever has accumulated in the
         agent's observation buffer, including tiles/POIs shared over the radio.
         The agent's circular view range is overlaid as a ring.
+
+        Below the crop a text panel prints the *vectorized* observation the
+        network also receives -- the internal state vector (position, battery,
+        view range, deployment, stuck) plus the known survivor (POI) and
+        teammate locations decoded from the obs channels -- so the human has
+        access to all the same data the agent does. ``info_lines`` appends
+        caller-supplied context lines (e.g. agent type, running return).
 
         Falls back to the full-map POV render when the env is not in ego mode.
         """
@@ -375,9 +395,11 @@ class SARBatchedGridEnv:
             return
 
         S = self.ego_size
-        self._init_renderer(grid_w=S, grid_h=S, tile_px=tile_px)
+        extra_h = self._EGO_PANEL_LINES * self._EGO_PANEL_LINE_H + 2 * self._EGO_PANEL_PAD
+        self._init_renderer(grid_w=S, grid_h=S, tile_px=tile_px, extra_h=extra_h)
 
         spatial = self.obs_spatial[env_idx, pov].cpu().numpy()  # (C, S, S) uint8
+        internal = self.obs_internal[env_idx, pov].cpu().numpy()  # (D,)
         n_tiles = self.config.n_tiles
         idx_poi = n_tiles + 1
         idx_obs = n_tiles + 2
@@ -399,15 +421,63 @@ class SARBatchedGridEnv:
         for k, a in enumerate(others):
             agent_layers.append((spatial[idx_others + k] > 0, a))
 
-        view_range = float(self.obs_internal[env_idx, pov, 3].item())
-        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range)
+        view_range = float(internal[3]) if internal.shape[0] > 3 else 0.0
+        text_lines = self._ego_panel_lines(pov, internal, poi_mask, agent_layers, info_lines)
+        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range, text_lines)
 
-    def _draw_ego_to_screen(self, rgb_grid, poi_mask, agent_layers, view_range):
+    def _crop_to_global(self, cy, cx, agent_gy, agent_gx):
+        """Ego-crop cell -> global (y, x). The agent sits at the crop center."""
+        half = self.ego_size // 2
+        return int(round(agent_gy + (cy - half))), int(round(agent_gx + (cx - half)))
+
+    def _ego_panel_lines(self, pov, internal, poi_mask, agent_layers, info_lines):
+        """Human-readable lines for the vectorized-obs text panel.
+
+        Internal layout matches the C++ obs writer: [y, x, battery, view_range,
+        deployment_remaining, stuck].
+        """
+        gy = float(internal[0]) if internal.shape[0] > 0 else 0.0
+        gx = float(internal[1]) if internal.shape[0] > 1 else 0.0
+        batt = float(internal[2]) if internal.shape[0] > 2 else 0.0
+        vr = float(internal[3]) if internal.shape[0] > 3 else 0.0
+        deploy = float(internal[4]) if internal.shape[0] > 4 else 0.0
+        stuck = int(internal[5]) if internal.shape[0] > 5 else 0
+
+        poi_ys, poi_xs = np.where(poi_mask)
+        poi_coords = [self._crop_to_global(cy, cx, gy, gx) for cy, cx in zip(poi_ys, poi_xs)]
+        # agent_layers[0] is self; the rest are teammates.
+        tm_coords = []
+        for mask, a in agent_layers[1:]:
+            ys, xs = np.where(mask)
+            for cy, cx in zip(ys, xs):
+                tm_coords.append((a, *self._crop_to_global(cy, cx, gy, gx)))
+
+        def _fmt(coords, n=6):
+            if not coords:
+                return "none"
+            shown = ", ".join(f"({y},{x})" for y, x in coords[:n])
+            return shown + (f" +{len(coords) - n} more" if len(coords) > n else "")
+
+        lines = [
+            f"agent {pov}  internal obs vector (what the net sees):",
+            f"  pos(y,x)=({gy:.1f},{gx:.1f})  battery={batt:.0f}  view_range={vr:.1f}",
+            f"  deploy_left={deploy:.1f}  stuck={stuck}",
+            f"  known POIs (y,x): {_fmt(poi_coords)}",
+            f"  known teammates (id:y,x): "
+            + ("none" if not tm_coords
+               else ", ".join(f"{a}:({y},{x})" for a, y, x in tm_coords[:6])),
+        ]
+        if info_lines:
+            lines.extend(str(s) for s in info_lines)
+        return lines
+
+    def _draw_ego_to_screen(self, rgb_grid, poi_mask, agent_layers, view_range, text_lines=None):
         import pygame
         pygame.event.pump()
 
         S = self.ego_size
         tile = self._pygame_tile_px
+        self._pygame_screen.fill((0, 0, 0))
         surface = pygame.surfarray.make_surface(rgb_grid.transpose(1, 0, 2))
         scaled_surface = pygame.transform.scale(surface, (S * tile, S * tile))
         self._pygame_screen.blit(scaled_surface, (0, 0))
@@ -433,7 +503,54 @@ class SARBatchedGridEnv:
                 rect = pygame.Rect(x * tile + 2, y * tile + 2, tile - 4, tile - 4)
                 pygame.draw.rect(self._pygame_screen, color, rect)
 
+        # Small bearing arrows from the agent (center) toward each known target.
+        # Survivors are white (matching the POI dots); each ally uses its own
+        # agent color -- so survivor vs ally, and ally vs ally, are all distinct.
+        arrow_max = max(2.5 * tile, tile + 4)
+        for y, x in zip(poi_ys, poi_xs):
+            tgt = (x * tile + tile // 2, y * tile + tile // 2)
+            self._draw_arrow(center, tgt, (255, 255, 255), arrow_max)
+        for mask, a in agent_layers[1:]:  # skip self (center)
+            color = tuple(int(c) for c in self._agent_colors[a])
+            ys, xs = np.where(mask)
+            for y, x in zip(ys, xs):
+                tgt = (x * tile + tile // 2, y * tile + tile // 2)
+                self._draw_arrow(center, tgt, color, arrow_max)
+
+        # Vectorized-obs text panel below the crop.
+        if text_lines and getattr(self, "_render_font", None) is not None:
+            y0 = S * tile + self._EGO_PANEL_PAD
+            for i, line in enumerate(text_lines[: self._EGO_PANEL_LINES]):
+                surf = self._render_font.render(str(line), True, (220, 220, 220))
+                self._pygame_screen.blit(surf, (self._EGO_PANEL_PAD, y0 + i * self._EGO_PANEL_LINE_H))
+
         pygame.display.flip()
+
+    def _draw_arrow(self, start, end, color, max_len):
+        """Draw a short bearing arrow from ``start`` toward ``end`` (capped at
+        ``max_len`` px), with an arrowhead at the tip."""
+        sx, sy = float(start[0]), float(start[1])
+        ex, ey = float(end[0]), float(end[1])
+        dx, dy = ex - sx, ey - sy
+        dist = math.hypot(dx, dy)
+        if dist < 1e-3:
+            return
+        ux, uy = dx / dist, dy / dist
+        length = min(dist, max_len)
+        # Start a few px out from the center so the arrow doesn't sit under the
+        # agent marker; skip if the target is essentially on top of the agent.
+        base = min(self._pygame_tile_px * 0.4, length * 0.3)
+        if length - base < 2:
+            return
+        sx2, sy2 = sx + ux * base, sy + uy * base
+        tipx, tipy = sx + ux * length, sy + uy * length
+        pygame.draw.line(self._pygame_screen, color, (sx2, sy2), (tipx, tipy), 2)
+        head = max(4, self._pygame_tile_px // 2)
+        ang = math.atan2(uy, ux)
+        for da in (math.radians(150), math.radians(-150)):
+            hx = tipx + head * math.cos(ang + da)
+            hy = tipy + head * math.sin(ang + da)
+            pygame.draw.line(self._pygame_screen, color, (tipx, tipy), (hx, hy), 2)
 
     def _render_true_state(self, env_idx, agent_pos):
         spatial = self.state_spatial[env_idx].cpu().numpy()
