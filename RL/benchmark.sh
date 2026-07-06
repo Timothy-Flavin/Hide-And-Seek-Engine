@@ -19,6 +19,7 @@
 #
 # Override the sweep from the environment, e.g.:
 #   ALGS="dqn" LEVELS="levels/test_level" ./benchmark.sh --machine lab-comp
+source .venv/bin/activate
 set -uo pipefail
 
 MACHINE=""
