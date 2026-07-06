@@ -126,10 +126,12 @@ class CustomReplayBuffer:
         self.device = device
         self.store_radio = store_radio
 
+        # Pinned (page-locked) host memory only pays off for host->device copies,
+        pin = torch.device(device).type == "cuda"
         # Spatial obs stored as uint8 (4x smaller pinned buffer); cast to float
         # happens inside the network (cast_obs). Internal vector stays float32.
-        self.spatial_obs = torch.empty((capacity, *spatial_shape), dtype=torch.uint8, pin_memory=True).contiguous()
-        self.internal_obs = torch.empty((capacity, *internal_dim), dtype=torch.float32, pin_memory=True).contiguous()
+        self.spatial_obs = torch.empty((capacity, *spatial_shape), dtype=torch.uint8, pin_memory=pin).contiguous()
+        self.internal_obs = torch.empty((capacity, *internal_dim), dtype=torch.float32, pin_memory=pin).contiguous()
 
         self.next_spatial_obs = torch.empty_like(self.spatial_obs).contiguous()
         self.next_internal_obs = torch.empty_like(self.internal_obs).contiguous()
