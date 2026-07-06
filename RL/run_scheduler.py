@@ -47,7 +47,7 @@ LEVELS = [
     "levels/warehouse_level",
 ]
 ALGS = ["ppo", "dqn", "sac"]
-CONFIGS = ["centralized", "decentralized_ego", "decentralized_ego_radio"]
+CONFIGS = ["decentralized_ego", "decentralized_ego_radio"]
 EGO_SIZE = 32
 
 # Per-map tuning (the big neighborhood map uses fewer envs / more minibatches).
@@ -79,10 +79,10 @@ MACHINES = {
     # node 0 (its own memory controller). They run side by side. Both inherit the
     # visible GPU (the CPU device needs it for pinned memory; --no-cuda keeps its
     # compute on the CPU cores).
-    "lab-comp": {
-        "lab-comp_gpu": {"omp": 8, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
-        "lab-comp_cpu": {"omp": 16, "wrap": "numactl --preferred=0 taskset -c 0-15,32-47", "cpu": True},
-    },
+    # "lab-comp": {
+    #     "lab-comp_gpu": {"omp": 8, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
+    #     "lab-comp_cpu": {"omp": 16, "wrap": "numactl --preferred=0 taskset -c 0-15,32-47", "cpu": True},
+    # },
     # Two GPUs: split the logical cores so each GPU is fed by its own half.
     "white-machine": {
         "white-machine_gpu0": {"cuda": "0", "omp": 8, "wrap": "taskset -c 0-3,8-11"},
