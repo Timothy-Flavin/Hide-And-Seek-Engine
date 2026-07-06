@@ -24,6 +24,7 @@
 # Results -> experiments/results/<level>/<alg>/ ; one combined plot per level.
 # Runs continue on error; a failure summary is printed after each seed pass and
 # at the end (the script exits non-zero if anything failed).
+source .venv/bin/activate
 
 # Run everything from the repo root so relative paths (levels/, experiments/)
 # and the `RL` namespace package resolve correctly.
