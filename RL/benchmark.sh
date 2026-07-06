@@ -19,7 +19,10 @@
 #
 # Override the sweep from the environment, e.g.:
 #   ALGS="dqn" LEVELS="levels/test_level" ./benchmark.sh --machine lab-comp
-source .venv/bin/activate
+#
+# Uses the repo-local virtualenv (<repo>/.venv) so the CUDA-enabled torch is
+# picked up, NOT whatever python is on PATH (e.g. anaconda base). Point VENV=... at
+# your venv if it lives elsewhere.
 set -uo pipefail
 
 MACHINE=""
@@ -43,7 +46,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}" || exit 1
 export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
-source .venv/bin/activate
+
+# Activate the repo-local venv so we run its (CUDA-enabled) python, not whatever
+# is on PATH. Fall back to an already-active venv/conda env rather than silently
+# using system python; warn loudly if neither is available.
+VENV="${VENV:-${REPO_ROOT}/.venv}"
+if [ -f "${VENV}/bin/activate" ]; then
+    # shellcheck disable=SC1091
+    source "${VENV}/bin/activate"
+elif [ -n "${VIRTUAL_ENV:-}" ]; then
+    echo "Note: ${VENV}/bin/activate not found; using already-active venv ${VIRTUAL_ENV}"
+elif [ -n "${CONDA_PREFIX:-}" ]; then
+    echo "Note: ${VENV}/bin/activate not found; using already-active conda env ${CONDA_PREFIX}"
+else
+    echo "WARNING: no venv at ${VENV} and none active; using system python ($(command -v python))" >&2
+fi
+
+# Make the environment explicit up front so a wrong python / missing CUDA is
+# obvious instead of surfacing as a mid-run 'No CUDA GPUs are available'.
+python - <<'PY' || true
+import sys
+line = f"  python : {sys.executable}"
+try:
+    import torch
+    line += (f"\n  torch  : {torch.__version__} (cuda build {torch.version.cuda}) "
+             f"is_available={torch.cuda.is_available()} device_count={torch.cuda.device_count()}")
+except Exception as e:
+    line += f"\n  torch  : import failed: {e}"
+print(line)
+PY
 
 # Pull this machine's devices + per-device pinning from the scheduler topology
 # (single source of truth). One line per device: "device|prefix|flags".

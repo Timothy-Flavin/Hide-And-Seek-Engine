@@ -274,7 +274,13 @@ def write_machine_schedule(machine, assignment, bench):
         'REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"',
         'cd "${REPO_ROOT}" || exit 1',
         'export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"',
-        "source .venv/bin/activate",
+        '# Use the repo-local venv (its CUDA torch), not whatever python is on PATH.',
+        '# Set VENV=... if your venv lives elsewhere.',
+        'VENV="${VENV:-${REPO_ROOT}/.venv}"',
+        'if [ -f "${VENV}/bin/activate" ]; then source "${VENV}/bin/activate";',
+        'elif [ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]; then',
+        '  echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;',
+        'fi',
         "",
     ]
 
