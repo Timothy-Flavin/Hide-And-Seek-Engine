@@ -59,22 +59,29 @@ PPO_MINIBATCHES_OVERRIDES = {"neighborhood": 16}
 # --------------------------------------------------------------------------- #
 # Topology: physical machine -> {device: pinning}. No MPS; one job per device.
 # All devices of a machine run concurrently (benchmark and real sweep alike).
-#   cuda : CUDA_VISIBLE_DEVICES value ("" hides all GPUs for CPU devices)
+#   cuda : CUDA_VISIBLE_DEVICES value; omit to inherit the environment's value
+#          (right for single-GPU boxes and shared/allocated nodes). Set it only
+#          to split the GPUs on a multi-GPU box.
 #   omp  : OMP_NUM_THREADS (match the pinned logical-core count)
 #   wrap : CPU/NUMA pinning wrapper (taskset / numactl ...)
 #   cpu  : True -> CPU-only device (runner gets --no-cuda)
+# NOTE: even a CPU device must keep a GPU visible -- the env/replay buffers
+# allocate pinned host memory (pin_memory=True), which needs a live CUDA
+# context. --no-cuda keeps all *compute* on the CPU; do not hide the GPU.
 # Core lists mirror each box's original taskset/numactl layout.
 # --------------------------------------------------------------------------- #
 MACHINES = {
-    # Single GPU, single NUMA node -> one device, no pinning needed.
+    # Single GPU, single NUMA node -> one device, inherit CUDA_VISIBLE_DEVICES.
     "timpc": {
-        "timpc_gpu": {"cuda": "0"},
+        "timpc_gpu": {},
     },
     # lab-comp: GPU device on the GPU-affine NUMA node (node 1) + CPU device on
-    # node 0 (its own memory controller). They run side by side.
+    # node 0 (its own memory controller). They run side by side. Both inherit the
+    # visible GPU (the CPU device needs it for pinned memory; --no-cuda keeps its
+    # compute on the CPU cores).
     "lab-comp": {
-        "lab-comp_gpu": {"cuda": "0", "omp": 8, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
-        "lab-comp_cpu": {"cuda": "", "omp": 16, "wrap": "numactl --preferred=0 taskset -c 0-15,32-47", "cpu": True},
+        "lab-comp_gpu": {"omp": 8, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
+        "lab-comp_cpu": {"omp": 16, "wrap": "numactl --preferred=0 taskset -c 0-15,32-47", "cpu": True},
     },
     # Two GPUs: split the logical cores so each GPU is fed by its own half.
     "white-machine": {
