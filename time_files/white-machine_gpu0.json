@@ -1,0 +1,218 @@
+{
+  "island_level_dqn_centralized": {
+    "num_envs": 128,
+    "seconds": 20.06448769569397,
+    "steps": 16640,
+    "steps_per_sec": 829.3259340766075
+  },
+  "island_level_dqn_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 20.09081482887268,
+    "steps": 20224,
+    "steps_per_sec": 1006.6291572672263
+  },
+  "island_level_dqn_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 20.05123496055603,
+    "steps": 20224,
+    "steps_per_sec": 1008.6161794913793
+  },
+  "island_level_ppo_centralized": {
+    "num_envs": 128,
+    "seconds": 20.523536920547485,
+    "steps": 98304,
+    "steps_per_sec": 4789.817680089112
+  },
+  "island_level_ppo_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 22.269990921020508,
+    "steps": 114688,
+    "steps_per_sec": 5149.889840850662
+  },
+  "island_level_ppo_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 22.849010467529297,
+    "steps": 114688,
+    "steps_per_sec": 5019.385857561884
+  },
+  "island_level_sac_centralized": {
+    "num_envs": 128,
+    "seconds": 20.25670099258423,
+    "steps": 5760,
+    "steps_per_sec": 284.3503491564928
+  },
+  "island_level_sac_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 20.141945362091064,
+    "steps": 7040,
+    "steps_per_sec": 349.5193673422383
+  },
+  "island_level_sac_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 20.20534920692444,
+    "steps": 6400,
+    "steps_per_sec": 316.74780447777164
+  },
+  "neighborhood_level_dqn_centralized": {
+    "num_envs": 64,
+    "seconds": 20.18573236465454,
+    "steps": 5376,
+    "steps_per_sec": 266.32672537625837
+  },
+  "neighborhood_level_dqn_decentralized_ego": {
+    "num_envs": 64,
+    "seconds": 20.05198359489441,
+    "steps": 25344,
+    "steps_per_sec": 1263.9148581017707
+  },
+  "neighborhood_level_dqn_decentralized_ego_radio": {
+    "num_envs": 64,
+    "seconds": 20.03624653816223,
+    "steps": 25344,
+    "steps_per_sec": 1264.9075739674247
+  },
+  "neighborhood_level_ppo_centralized": {
+    "num_envs": 64,
+    "seconds": 24.24005937576294,
+    "steps": 32768,
+    "steps_per_sec": 1351.8118702615038
+  },
+  "neighborhood_level_ppo_decentralized_ego": {
+    "num_envs": 64,
+    "seconds": 21.352849006652832,
+    "steps": 90112,
+    "steps_per_sec": 4220.139428322849
+  },
+  "neighborhood_level_ppo_decentralized_ego_radio": {
+    "num_envs": 64,
+    "seconds": 20.62542462348938,
+    "steps": 81920,
+    "steps_per_sec": 3971.797017294129
+  },
+  "neighborhood_level_sac_centralized": {
+    "num_envs": 64,
+    "seconds": 20.966151237487793,
+    "steps": 1664,
+    "steps_per_sec": 79.36602102844432
+  },
+  "neighborhood_level_sac_decentralized_ego": {
+    "num_envs": 64,
+    "seconds": 20.069342851638794,
+    "steps": 7936,
+    "steps_per_sec": 395.42899130610914
+  },
+  "neighborhood_level_sac_decentralized_ego_radio": {
+    "num_envs": 64,
+    "seconds": 20.00677990913391,
+    "steps": 7424,
+    "steps_per_sec": 371.07420752955056
+  },
+  "test_level_dqn_centralized": {
+    "num_envs": 128,
+    "seconds": 20.034823894500732,
+    "steps": 64768,
+    "steps_per_sec": 3232.7711159855953
+  },
+  "test_level_dqn_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 20.108501195907593,
+    "steps": 21376,
+    "steps_per_sec": 1063.032982505447
+  },
+  "test_level_dqn_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 20.106569528579712,
+    "steps": 21504,
+    "steps_per_sec": 1069.5011881282862
+  },
+  "test_level_ppo_centralized": {
+    "num_envs": 128,
+    "seconds": 20.16999125480652,
+    "steps": 229376,
+    "steps_per_sec": 11372.141767554787
+  },
+  "test_level_ppo_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 21.21729564666748,
+    "steps": 114688,
+    "steps_per_sec": 5405.401419196117
+  },
+  "test_level_ppo_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 21.903987646102905,
+    "steps": 114688,
+    "steps_per_sec": 5235.9415944249295
+  },
+  "test_level_sac_centralized": {
+    "num_envs": 128,
+    "seconds": 20.07940435409546,
+    "steps": 20608,
+    "steps_per_sec": 1026.325265261005
+  },
+  "test_level_sac_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 20.226879119873047,
+    "steps": 6656,
+    "steps_per_sec": 329.06707755327585
+  },
+  "test_level_sac_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 20.183810710906982,
+    "steps": 6016,
+    "steps_per_sec": 298.0606628831025
+  },
+  "warehouse_level_dqn_centralized": {
+    "num_envs": 128,
+    "seconds": 20.01593780517578,
+    "steps": 16896,
+    "steps_per_sec": 844.1273231589969
+  },
+  "warehouse_level_dqn_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 20.09606385231018,
+    "steps": 20096,
+    "steps_per_sec": 999.9968226459346
+  },
+  "warehouse_level_dqn_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 20.056421995162964,
+    "steps": 20224,
+    "steps_per_sec": 1008.3553290251597
+  },
+  "warehouse_level_ppo_centralized": {
+    "num_envs": 128,
+    "seconds": 20.403244256973267,
+    "steps": 98304,
+    "steps_per_sec": 4818.057303137093
+  },
+  "warehouse_level_ppo_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 22.165481090545654,
+    "steps": 114688,
+    "steps_per_sec": 5174.171475525447
+  },
+  "warehouse_level_ppo_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 22.559924364089966,
+    "steps": 114688,
+    "steps_per_sec": 5083.7049871743375
+  },
+  "warehouse_level_sac_centralized": {
+    "num_envs": 128,
+    "seconds": 20.25167489051819,
+    "steps": 5632,
+    "steps_per_sec": 278.10045492271337
+  },
+  "warehouse_level_sac_decentralized_ego": {
+    "num_envs": 128,
+    "seconds": 20.09561848640442,
+    "steps": 8320,
+    "steps_per_sec": 414.02059884988614
+  },
+  "warehouse_level_sac_decentralized_ego_radio": {
+    "num_envs": 128,
+    "seconds": 20.196683645248413,
+    "steps": 8832,
+    "steps_per_sec": 437.2995168480478
+  }
+}
