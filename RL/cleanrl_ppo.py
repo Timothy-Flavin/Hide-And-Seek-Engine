@@ -1,5 +1,6 @@
 import os
 import random
+import sys
 import time
 from dataclasses import dataclass
 
@@ -27,6 +28,7 @@ from RL.checkpoint_utils import (
     restore_rng,
 )
 from RL.human_data import load_bc_batcher
+from RL.benchmark_utils import BenchmarkClock, write_benchmark
 import torch.nn.functional as F
 
 
@@ -35,6 +37,13 @@ class Args:
     exp_name: str = "custom_ppo"
     torch_threads: int = 0
     """the name of this experiment"""
+
+    # --- Throughput benchmark (see RL/benchmark_utils.py and benchmark.sh) ---
+    benchmark: bool = False
+    """time ~20s of steady-state throughput and write steps/sec to
+    time_files/<machine>.json, then exit (no training or plots)"""
+    machine: str = ""
+    """machine name for the --benchmark output file (time_files/<machine>.json)"""
     centralized: bool = True
     """whether to use centralized or individual PPO"""
     ego_view: bool = False
@@ -271,6 +280,9 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    if args.benchmark:
+        # Loop until the steady-state benchmark clock says stop (see below).
+        args.num_iterations = 10 ** 9
     run_name = f"GridWorld__{args.exp_name}__{args.run_number}__{int(time.time())}"
     
     if args.track:
@@ -398,6 +410,8 @@ if __name__ == "__main__":
     episode_rewards = np.zeros(args.num_envs, dtype=np.float32)
     episode_lengths = np.zeros(args.num_envs, dtype=np.int32)
     episodic_returns = []
+
+    bench = BenchmarkClock() if args.benchmark else None
 
     for iteration in range(1, args.num_iterations + 1):
         if args.anneal_lr:
@@ -600,6 +614,19 @@ if __name__ == "__main__":
 
         # Periodic weight checkpoints (20/40/60/80/100% of training).
         ckpt.maybe_save(global_step, ckpt_state)
+
+        # PPO runs one full update per iteration, so every iteration is
+        # update-containing; count env-frames as the whole rollout batch.
+        if bench is not None and bench.tick(args.batch_size, True):
+            break
+
+    if args.benchmark:
+        summary = bench.summary(args.num_envs)
+        path, key = write_benchmark(args.machine, args.level, "ppo", variant, summary)
+        print(f"[benchmark] {key}: {summary['steps_per_sec']:.1f} steps/s "
+              f"({summary['steps']} steps / {summary['seconds']:.1f}s) -> {path}")
+        writer.close()
+        sys.exit(0)
 
     writer.close()
     ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists

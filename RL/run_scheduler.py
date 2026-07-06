@@ -1,277 +1,372 @@
-import os
+"""Split the experiment sweep across machines using benchmarked throughput.
+
+Reads the per-device steady-state benchmarks written by ``benchmark.sh`` /
+``--benchmark`` (``time_files/<device>.json``), estimates how long each
+``level x alg x config x seed`` job takes on each device, then assigns jobs to
+devices to minimise the wall-clock makespan. One auto-generated bash schedule is
+written per physical machine into ``time_files/run_<machine>_experiments.sh``.
+
+Model
+-----
+* A **device** is one scheduling atom: a single physical GPU, or a CPU NUMA
+  node. Each device runs exactly one job at a time (no CUDA MPS) and has its own
+  benchmark file ``time_files/<device>.json``.
+* A **physical machine** groups the devices that live in the same box and run
+  *concurrently*. Two-GPU boxes have two GPU devices; lab-comp has a GPU device
+  (on the GPU-affine NUMA node) plus a CPU device (on the other node, its own
+  memory controller). The generated run script launches all of a machine's
+  devices at once, each pinned with ``taskset``/``numactl`` so they don't
+  contend, exactly as they were benchmarked.
+
+Because the devices on a machine run together during both benchmarking and the
+real sweep, the recorded steps/sec already reflect the true memory-bandwidth /
+cache contention of the concurrent configuration.
+
+Usage (from the repo root):
+    python -m RL.run_scheduler                        # generate schedules
+    python -m RL.run_scheduler --benchmark-plan lab-comp   # (used by benchmark.sh)
+    ./time_files/run_<machine>_experiments.sh         # on each machine
+"""
+import argparse
 import json
-import yaml
-from ortools.linear_solver import pywraplp
+import os
+import sys
 
-def solve_scheduling_problem():
-    # ---------------------------------------------------
-    # 1. Hardware Topology & Capacity Setup
-    # ---------------------------------------------------
-    # 'capacity': Concurrent jobs the device can handle.
-    # 'efficiency': Multiplier for steps_per_sec (e.g., 0.85 = 15% slower per job).
-    # 'use_mps': Strictly defines if the bash script should wrap execution in the MPS daemon.
-    device_config = {
-        "timpc_gpu": {"capacity": 2, "efficiency": 1.0, "use_mps": True},
-        #"lab-comp_gpu": {"capacity": 4, "efficiency": 0.85, "use_mps": True},
-        #"lab-comp_cpu": {"capacity": 1, "efficiency": 1.0, "use_mps": False},
-        #"white-machine_gpu": {"capacity": 2, "efficiency": 1.0, "use_mps": False},
-        #"alienware_gpu": {"capacity": 2, "efficiency": 1.0, "use_mps": False},
-        #"mac_cpu": {"capacity": 1, "efficiency": 1.0, "use_mps": False},
-        #"laptop_cpu": {"capacity": 1, "efficiency": 1.0, "use_mps": False},
-    }
-    
-    devices = list(device_config.keys())
-    # Explicitly map the new logical names to your existing folder structure
-    benchmark_folders = {
-        "timpc_gpu": "timpc",
-        "lab-comp_gpu": "lab-comp_gpu",
-        "lab-comp_cpu": "lab-comp_cpu",
-        "white-machine_gpu": "white-machine_gpu0", # Just read gpu0's file for the unified estimate
-        "alienware_gpu": "alienware_gpu_0",       # Just read gpu0's file for the unified estimate
-        "mac_cpu": "mac",
-        "laptop_cpu": "laptop"
-    }
-    
-    env_activations = {
-        "timpc_gpu": "source .venv/bin/activate",
-        "lab-comp_gpu": "source .venv/bin/activate",
-        "lab-comp_cpu": "source .venv/bin/activate",
-        "white-machine_gpu": "source .venv/bin/activate",
-        "alienware_gpu": "source .venv/bin/activate",
-        "mac_cpu": "source ../.venv/bin/activate",
-        "laptop_cpu": "source .venv/bin/activate",
-    }
-    
-    # Preambles map directly to the concurrency queues. 
-    # Queue 0 takes index 0, Queue 1 takes index 1, strictly enforcing hardware boundaries.
-    command_pre_appends = {
-        "timpc_gpu": [
-            "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=50 taskset -c 0-7,16-23 ",
-            "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=50 taskset -c 8-15,24-31 "
-        ],
-        "lab-comp_gpu": [
-            "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=25 numactl --preferred=1 taskset -c 16-19,48-51 ",
-            "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=25 numactl --preferred=1 taskset -c 20-23,52-55 ",
-            "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=25 numactl --preferred=1 taskset -c 24-27,56-59 ",
-            "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=25 numactl --preferred=1 taskset -c 28-31,60-63 "
-        ],
-        "lab-comp_cpu": [
-            "CUDA_VISIBLE_DEVICES=\"\" numactl --preferred=0 taskset -c 0-15,32-47 "
-        ],
-        "white-machine_gpu": [
-            "OMP_NUM_THREADS=8 CUDA_VISIBLE_DEVICES=0 taskset -c 0-3,8-11 ",
-            "OMP_NUM_THREADS=8 CUDA_VISIBLE_DEVICES=1 taskset -c 4-7,12-15 "
-        ],
-        "alienware_gpu": [
-            "OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=0 taskset -c 0,1,4,5 ",
-            "OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=1 taskset -c 2,3,6,7 "
-        ],
-        "mac_cpu": [
-            ""
-        ],
-        "laptop_cpu": [
-            ""
-        ]
-    }
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TIME_DIR = os.path.join(REPO_ROOT, "time_files")
 
-    envs = ["nchain"] # "minigrid", "cartpole", "mujoco", 
-    models = ["dqn", "sac", "ppo"]
-    ablations = [0, 1, 2, 3, 4, 5, 6]
-    runs = [6,7,8,9,10,11,12,13,14,15]
+# --------------------------------------------------------------------------- #
+# Sweep definition -- keep in sync with RL/run_experiments.sh and benchmark.sh
+# --------------------------------------------------------------------------- #
+FRAMES = 5_000_000                       # total env frames per job
+SEEDS = [1, 2, 3, 4, 5]
+LEVELS = [
+    "levels/test_level",
+    "levels/neighborhood_level",
+    "levels/island_level",
+    "levels/warehouse_level",
+]
+ALGS = ["ppo", "dqn", "sac"]
+CONFIGS = ["centralized", "decentralized_ego", "decentralized_ego_radio"]
+EGO_SIZE = 32
 
-    experiments = [
-        {"env": env, "model": model, "ablation": abl, "run": run}
-        for env in envs for model in models for abl in ablations for run in runs
-    ]
+# Per-map tuning (the big neighborhood map uses fewer envs / more minibatches).
+NUM_ENVS_DEFAULT = 128
+NUM_ENVS_OVERRIDES = {"neighborhood": 64}
+PPO_MINIBATCHES_DEFAULT = 8
+PPO_MINIBATCHES_OVERRIDES = {"neighborhood": 16}
 
-    num_experiments = len(experiments)
-    num_devices = len(devices)
+# --------------------------------------------------------------------------- #
+# Topology: physical machine -> {device: pinning}. No MPS; one job per device.
+# All devices of a machine run concurrently (benchmark and real sweep alike).
+#   cuda : CUDA_VISIBLE_DEVICES value ("" hides all GPUs for CPU devices)
+#   omp  : OMP_NUM_THREADS (match the pinned logical-core count)
+#   wrap : CPU/NUMA pinning wrapper (taskset / numactl ...)
+#   cpu  : True -> CPU-only device (runner gets --no-cuda)
+# Core lists mirror each box's original taskset/numactl layout.
+# --------------------------------------------------------------------------- #
+MACHINES = {
+    # Single GPU, single NUMA node -> one device, no pinning needed.
+    "timpc": {
+        "timpc_gpu": {"cuda": "0"},
+    },
+    # lab-comp: GPU device on the GPU-affine NUMA node (node 1) + CPU device on
+    # node 0 (its own memory controller). They run side by side.
+    "lab-comp": {
+        "lab-comp_gpu": {"cuda": "0", "omp": 8, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
+        "lab-comp_cpu": {"cuda": "", "omp": 16, "wrap": "numactl --preferred=0 taskset -c 0-15,32-47", "cpu": True},
+    },
+    # Two GPUs: split the logical cores so each GPU is fed by its own half.
+    "white-machine": {
+        "white-machine_gpu0": {"cuda": "0", "omp": 8, "wrap": "taskset -c 0-3,8-11"},
+        "white-machine_gpu1": {"cuda": "1", "omp": 8, "wrap": "taskset -c 4-7,12-15"},
+    },
+    "alienware": {
+        "alienware_gpu0": {"cuda": "0", "omp": 4, "wrap": "taskset -c 0,1,4,5"},
+        "alienware_gpu1": {"cuda": "1", "omp": 4, "wrap": "taskset -c 2,3,6,7"},
+    },
+}
 
-    try:
-        with open(os.path.join(os.path.dirname(__file__), "../env_config.yaml"), "r") as f:
-            ENV_CONFIG = yaml.safe_load(f)
-    except FileNotFoundError:
-        print("Warning: env_config.yaml not found. Using fallback step counts.")
-        ENV_CONFIG = {}
+# Flattened device views.
+DEVICES = {dev: cfg for machine in MACHINES for dev, cfg in MACHINES[machine].items()}
+DEVICE_NAMES = list(DEVICES.keys())
+DEVICE_MACHINE = {dev: machine for machine in MACHINES for dev in MACHINES[machine]}
 
-    def get_runtime_minutes(device, experiment):
-        env = experiment["env"]
-        model = experiment["model"]
-        abl = experiment["ablation"]
+DEFAULT_SPS = 200.0  # fallback when a benchmark entry is missing
 
-        # Use the explicit mapping dictionary instead of string splitting
-        folder_name = benchmark_folders[device]
-        json_path = os.path.join("time_files", folder_name, f"{env}_{model}_best.json")
 
-        default_sps = 30.0
+def device_prefix(device):
+    """Env + CPU-pinning prefix for a device, e.g.
+    ``OMP_NUM_THREADS=8 CUDA_VISIBLE_DEVICES=0 taskset -c 0-3,8-11``.
+    Contains no quotes, so it is safe both pasted into a generated script and
+    expanded unquoted from a shell variable (benchmark.sh wraps it in `env`)."""
+    cfg = DEVICES[device]
+    parts = []
+    if "omp" in cfg:
+        parts.append(f"OMP_NUM_THREADS={cfg['omp']}")
+    if "cuda" in cfg:
+        parts.append(f"CUDA_VISIBLE_DEVICES={cfg['cuda']}")
+    if cfg.get("wrap"):
+        parts.append(cfg["wrap"])
+    return " ".join(parts)
+
+
+def device_flags(device):
+    """Extra runner flags for a device (CPU devices force --no-cuda)."""
+    return "--no-cuda" if DEVICES[device].get("cpu") else ""
+
+
+# --------------------------------------------------------------------------- #
+# Sweep helpers
+# --------------------------------------------------------------------------- #
+def level_name(level):
+    return os.path.basename(os.path.normpath(level))
+
+
+def _override(overrides, level, default):
+    ln = level_name(level)
+    for token, value in overrides.items():
+        if token in ln:
+            return value
+    return default
+
+
+def num_envs_for(level):
+    return _override(NUM_ENVS_OVERRIDES, level, NUM_ENVS_DEFAULT)
+
+
+def ppo_minibatches_for(level):
+    return _override(PPO_MINIBATCHES_OVERRIDES, level, PPO_MINIBATCHES_DEFAULT)
+
+
+def config_flags(config):
+    return {
+        "centralized": "--centralized",
+        "decentralized": "--no-centralized",
+        "decentralized_radio": "--no-centralized --use-radio",
+        "decentralized_ego": f"--no-centralized --ego-view --ego-size {EGO_SIZE}",
+        "decentralized_ego_radio": f"--no-centralized --ego-view --ego-size {EGO_SIZE} --use-radio",
+    }[config]
+
+
+EXPERIMENTS = [
+    {"level": lv, "alg": al, "config": cf, "seed": sd}
+    for sd in SEEDS
+    for lv in LEVELS
+    for al in ALGS
+    for cf in CONFIGS
+]
+
+
+# --------------------------------------------------------------------------- #
+# Benchmarks -> per-job runtime
+# --------------------------------------------------------------------------- #
+def load_benchmarks():
+    data = {}
+    for device in DEVICE_NAMES:
+        path = os.path.join(TIME_DIR, device + ".json")
         try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
-                abl_key = f"ablation_{abl}"
-                steps_per_sec = data.get(abl_key, {}).get("steps_per_sec", default_sps)
-        except Exception:
-            # Print a loud warning if the benchmark is missing so it doesn't fail silently
-            print(f"[!] Warning: Missing benchmark {json_path}. Defaulting to {default_sps} SPS.")
-            steps_per_sec = default_sps
-            
-        if steps_per_sec <= 0:
-            steps_per_sec = 1.0
+            with open(path) as f:
+                data[device] = json.load(f)
+        except (OSError, ValueError):
+            print(f"[!] Missing/invalid benchmark for '{device}': {path} "
+                  f"(jobs there fall back to {DEFAULT_SPS} sps)")
+            data[device] = {}
+    return data
 
-        efficiency = device_config[device]["efficiency"]
-        adjusted_sps = steps_per_sec * efficiency
 
-        env_dict = ENV_CONFIG.get(env, {})
-        max_steps_val = env_dict.get("max_steps", 300000)
-        if isinstance(max_steps_val, dict):
-            total_steps = int(max_steps_val.get(model, 300000))
-        else:
-            total_steps = int(max_steps_val)
-            
-        return (total_steps / adjusted_sps) / 60.0
-    
-    
-    runtime_matrix = [
-        [get_runtime_minutes(device, exp) for device in devices] for exp in experiments
-    ]
+def steps_per_sec(bench, device, exp):
+    key = f"{level_name(exp['level'])}_{exp['alg']}_{exp['config']}"
+    entry = bench.get(device, {}).get(key)
+    if not entry:
+        return DEFAULT_SPS
+    sps = entry.get("steps_per_sec", DEFAULT_SPS)
+    return sps if sps and sps > 0 else DEFAULT_SPS
 
-    # ---------------------------------------------------
-    # 2. Solver Setup
-    # ---------------------------------------------------
+
+def runtime_minutes(bench, device, exp):
+    return (FRAMES / steps_per_sec(bench, device, exp)) / 60.0
+
+
+# --------------------------------------------------------------------------- #
+# Assignment: minimise makespan across devices (each device runs one job at a time)
+# --------------------------------------------------------------------------- #
+def assign_ilp(experiments, devices, runtime):
+    """Exact assignment via OR-Tools; returns {device: [exp, ...]} or None."""
+    try:
+        from ortools.linear_solver import pywraplp
+    except ImportError:
+        return None
+
     solver = pywraplp.Solver.CreateSolver("SCIP")
-    if not solver:
-        print("SCIP solver not available.")
-        return
+    if solver is None:
+        return None
 
-    solver.EnableOutput()
-    solver.SetTimeLimit(600000) 
-
-    # ---------------------------------------------------
-    # 3. Variables & Constraints
-    # ---------------------------------------------------
-    x = {}
-    for i in range(num_experiments):
-        for j in range(num_devices):
-            x[i, j] = solver.IntVar(0, 1, f"x_{i}_{j}")
-
+    n, m = len(experiments), len(devices)
+    x = {(i, j): solver.IntVar(0, 1, f"x_{i}_{j}") for i in range(n) for j in range(m)}
     makespan = solver.NumVar(0, solver.infinity(), "makespan")
 
-    for i in range(num_experiments):
-        solver.Add(sum(x[i, j] for j in range(num_devices)) == 1)
+    for i in range(n):
+        solver.Add(sum(x[i, j] for j in range(m)) == 1)
+    for j in range(m):
+        solver.Add(sum(runtime[i][j] * x[i, j] for i in range(n)) <= makespan)
 
-    for j in range(num_devices):
-        device_name = devices[j]
-        capacity = device_config[device_name]["capacity"]
-        
-        total_sequential_time = sum(
-            runtime_matrix[i][j] * x[i, j] for i in range(num_experiments)
-        )
-        
-        solver.Add(total_sequential_time <= makespan * capacity)
-
-    # ---------------------------------------------------
-    # 4. Objective & Execution
-    # ---------------------------------------------------
     solver.Minimize(makespan)
-
-    print(f"Assigning {num_experiments} experiments across {num_devices} device profiles.")
-    print("Solving...\n" + "-" * 50)
-    
+    solver.SetTimeLimit(120000)
     status = solver.Solve()
-    
-    print("-" * 50)
+    if status not in (pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE):
+        return None
 
-    if status in [pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE]:
-        print("Status: Optimal/Feasible Schedule Found!")
-        print(f"Estimated true wall-clock time to finish all: {makespan.solution_value():.2f} minutes\n")
-
-        os.makedirs("time_files", exist_ok=True)
-
+    assignment = {device: [] for device in devices}
+    for i, exp in enumerate(experiments):
         for j, device in enumerate(devices):
-            capacity = device_config[device]["capacity"]
-            use_mps = device_config[device]["use_mps"]
-            activation_cmd = env_activations.get(device, "source .venv/bin/activate")
-            preambles = command_pre_appends.get(device, [""])
-            
-            assigned_jobs = []
-            total_device_sequential_time = 0
-            for i, exp in enumerate(experiments):
-                if x[i, j].solution_value() > 0.5:
-                    time_taken = runtime_matrix[i][j]
-                    total_device_sequential_time += time_taken
-                    assigned_jobs.append((exp, time_taken))
-            
-            if not assigned_jobs:
-                continue
-                
-            queues = [[] for _ in range(capacity)]
-            for idx, job in enumerate(assigned_jobs):
-                queues[idx % capacity].append(job)
+            if x[i, j].solution_value() > 0.5:
+                assignment[device].append(exp)
+                break
+    return assignment
 
-            sh_lines = [
-                "#!/usr/bin/env bash\n",
-                f"# Auto-generated multi-process schedule for {device}\n",
-                "# Capacity: " + str(capacity) + "\n",
-                "set -euo pipefail\n\n",
-                f"{activation_cmd}\n\n",
-            ]
-            
-            # Only trigger MPS logic if explicitly allowed in the config map
-            if use_mps:
-                sh_lines.extend([
-                    "export CUDA_VISIBLE_DEVICES=0\n",
-                    "sudo nvidia-smi -i 0 -c EXCLUSIVE_PROCESS || true\n",
-                    "nvidia-cuda-mps-control -d || true\n",
-                    "sleep 2\n\n"
-                ])
 
-            for q_idx, queue_jobs in enumerate(queues):
-                if not queue_jobs: 
-                    continue
-                
-                preamble = preambles[q_idx] if q_idx < len(preambles) else preambles[-1]
-                
-                sh_lines.append(f"# --- Concurrency Queue {q_idx} ---\n")
-                sh_lines.append("(\n")
-                
-                for exp, time_taken in queue_jobs:
-                    sh_lines.append(f"  echo \"[{device} - Q{q_idx}] Running {exp['model']} on {exp['env']} | Abl {exp['ablation']} | Run {exp['run']}\"\n")
-                    
-                    extra_args = ""
-                    if exp['env'] == "nchain":
-                        extra_args = " --num_envs 1"
-                        if exp['model'] == "dqn":
-                            extra_args += " --rnd_burn_in 20 --update_every 1 --dqn_batch_size 32"
-                        elif exp['model'] == "ppo":
-                            extra_args += " --num_steps 128 --ppo_lr 1e-3"
-                            
-                    cmd = f"  {preamble}python runner.py --algo {exp['model']} --env_name {exp['env']} --ablation {exp['ablation']} --run {exp['run']} --device_name {device}{extra_args}\n"
-                    sh_lines.append(cmd)
-                
-                sh_lines.append(") &\n\n")
+def assign_greedy(experiments, devices, runtime):
+    """Fallback: longest-job-first onto the least-loaded device (list scheduling)."""
+    order = sorted(range(len(experiments)), key=lambda i: -min(runtime[i]))
+    load = {device: 0.0 for device in devices}
+    assignment = {device: [] for device in devices}
+    for i in order:
+        best_j = min(range(len(devices)), key=lambda j: load[devices[j]] + runtime[i][j])
+        device = devices[best_j]
+        assignment[device].append(experiments[i])
+        load[device] += runtime[i][best_j]
+    return assignment
 
-            sh_lines.append("echo \"All queues launched. Waiting for completion...\"\n")
-            sh_lines.append("wait\n\n")
-            
-            if use_mps:
-                sh_lines.extend([
-                    "echo quit | nvidia-cuda-mps-control || true\n",
-                    "sudo nvidia-smi -i 0 -c DEFAULT || true\n"
-                ])
-                
-            sh_lines.append("echo \"All tasks completed on this machine.\"\n")
 
-            sh_filename = os.path.join("time_files", f"run_{device}_experiments.sh")
-            with open(sh_filename, "w", newline="\n") as sh_file:
-                sh_file.writelines(sh_lines)
+# --------------------------------------------------------------------------- #
+# Schedule generation
+# --------------------------------------------------------------------------- #
+def job_command(exp, device):
+    prefix = device_prefix(device)
+    parts = [
+        "python", "-m", f"RL.cleanrl_{exp['alg']}",
+        "--run-number", str(exp["seed"]),
+        "--total-timesteps", str(FRAMES),
+        "--level", exp["level"],
+        "--num-envs", str(num_envs_for(exp["level"])),
+    ]
+    if exp["alg"] == "ppo":
+        parts += ["--num-minibatches", str(ppo_minibatches_for(exp["level"]))]
+    parts += config_flags(exp["config"]).split()
+    flags = device_flags(device)
+    if flags:
+        parts += flags.split()
+    cmd = " ".join(parts)
+    return f"{prefix} {cmd}".strip()
 
-            print(f"--- Device: {device} ---")
-            print(f"  Jobs Assigned: {len(assigned_jobs)}")
-            print(f"  Raw Sequential Time: {total_device_sequential_time:.2f} mins")
-            print(f"  Estimated Wall-Clock Time: {(total_device_sequential_time / capacity):.2f} mins")
-            print(f"  Generated parallel shell script saved to {sh_filename}\n")
 
+def write_machine_schedule(machine, assignment, bench):
+    """One script per physical machine: each device is a concurrent subshell
+    that runs its assigned jobs sequentially (longest first)."""
+    lines = [
+        "#!/usr/bin/env bash",
+        f"# Auto-generated schedule for {machine} (devices run concurrently, no MPS).",
+        "# Regenerate with: python -m RL.run_scheduler",
+        "set -uo pipefail",
+        "",
+        'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        'REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"',
+        'cd "${REPO_ROOT}" || exit 1',
+        'export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"',
+        "source .venv/bin/activate",
+        "",
+    ]
+
+    machine_est = 0.0
+    active = 0
+    for device in MACHINES[machine]:
+        jobs = assignment.get(device, [])
+        if not jobs:
+            continue
+        active += 1
+        order = sorted(jobs, key=lambda e: -runtime_minutes(bench, device, e))
+        load = sum(runtime_minutes(bench, device, e) for e in order)
+        machine_est = max(machine_est, load)
+
+        lines.append(f"# --- Device {device} [{device_prefix(device) or 'no pinning'}]: "
+                     f"{len(order)} jobs, ~{load:.1f} min ---")
+        lines.append("(")
+        for n, exp in enumerate(order, 1):
+            desc = f"{level_name(exp['level'])}/{exp['alg']}/{exp['config']} seed {exp['seed']}"
+            lines.append(f'  echo "[{machine}:{device}] {n}/{len(order)}: {desc}"')
+            lines.append(f'  {job_command(exp, device)} \\')
+            lines.append(f'    || echo "[{machine}:{device}] FAILED: {desc}"')
+        lines.append(") &")
+        lines.append("")
+
+    lines.append(f'echo "Launched {active} device(s) on {machine}; waiting..."')
+    lines.append("wait")
+    lines.append(f'echo "All jobs on {machine} complete."')
+    lines.append("")
+
+    os.makedirs(TIME_DIR, exist_ok=True)
+    path = os.path.join(TIME_DIR, f"run_{machine}_experiments.sh")
+    with open(path, "w", newline="\n") as f:
+        f.write("\n".join(lines))
+    os.chmod(path, 0o755)
+    return path, machine_est
+
+
+# --------------------------------------------------------------------------- #
+def generate_schedules():
+    bench = load_benchmarks()
+    runtime = [
+        [runtime_minutes(bench, device, exp) for device in DEVICE_NAMES]
+        for exp in EXPERIMENTS
+    ]
+
+    print(f"Assigning {len(EXPERIMENTS)} jobs across {len(DEVICE_NAMES)} devices "
+          f"on {len(MACHINES)} machines.")
+    assignment = assign_ilp(EXPERIMENTS, DEVICE_NAMES, runtime)
+    if assignment is None:
+        print("OR-Tools unavailable or no solution; using greedy assignment.")
+        assignment = assign_greedy(EXPERIMENTS, DEVICE_NAMES, runtime)
     else:
-        print("The solver could not find a feasible solution.")
+        print("Optimal/feasible assignment found via OR-Tools (SCIP).")
+
+    print("-" * 68)
+    overall = 0.0
+    for machine in MACHINES:
+        if not any(assignment[dev] for dev in MACHINES[machine]):
+            continue
+        path, est = write_machine_schedule(machine, assignment, bench)
+        overall = max(overall, est)
+        devs = ", ".join(f"{dev}:{len(assignment[dev])}" for dev in MACHINES[machine])
+        print(f"{machine:<15} ~{est:7.1f} min | {devs}")
+        print(f"{'':<15}   -> {os.path.relpath(path, REPO_ROOT)}")
+    print("-" * 68)
+    print(f"Estimated overall wall-clock makespan: {overall:.1f} min "
+          f"({overall / 60.0:.1f} h)")
+
+
+def cmd_benchmark_plan(machine):
+    """Emit `device|prefix|flags` lines for benchmark.sh (one per device)."""
+    if machine not in MACHINES:
+        print(f"unknown machine '{machine}'; known: {', '.join(MACHINES)}", file=sys.stderr)
+        sys.exit(2)
+    for device in MACHINES[machine]:
+        print(f"{device}|{device_prefix(device)}|{device_flags(device)}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Generate per-machine experiment schedules.")
+    ap.add_argument("--benchmark-plan", metavar="MACHINE",
+                    help="print 'device|prefix|flags' lines for MACHINE's devices and exit "
+                         "(used by benchmark.sh to run them concurrently under pinning)")
+    args = ap.parse_args()
+
+    if args.benchmark_plan is not None:
+        cmd_benchmark_plan(args.benchmark_plan)
+        return
+
+    generate_schedules()
+
 
 if __name__ == "__main__":
-    solve_scheduling_problem()
+    main()

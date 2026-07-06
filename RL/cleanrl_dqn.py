@@ -1,5 +1,6 @@
 import os
 import random
+import sys
 import time
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
@@ -27,12 +28,20 @@ from RL.checkpoint_utils import (
     restore_rng,
 )
 from RL.human_data import load_bc_batcher
+from RL.benchmark_utils import BenchmarkClock, write_benchmark
 
 
 @dataclass
 class Args:
     exp_name: str = "custom_dqn"
     run_number: int = 1
+
+    # --- Throughput benchmark (see RL/benchmark_utils.py and benchmark.sh) ---
+    benchmark: bool = False
+    """time ~20s of steady-state throughput and write steps/sec to
+    time_files/<machine>.json, then exit (no training or plots)"""
+    machine: str = ""
+    """machine name for the --benchmark output file (time_files/<machine>.json)"""
     torch_deterministic: bool = True
     cuda: bool = True
     centralized: bool = True
@@ -466,8 +475,15 @@ if __name__ == "__main__":
 
     episode_rewards = np.zeros(args.num_envs, dtype=np.float32)
 
-    for iteration in range(args.total_timesteps // args.num_envs):
+    # Benchmark mode: loop until the steady-state clock says stop (see below).
+    bench = BenchmarkClock() if args.benchmark else None
+    n_iterations = args.total_timesteps // args.num_envs
+    if args.benchmark:
+        n_iterations = 10 ** 9
+
+    for iteration in range(n_iterations):
         global_step = iteration * args.num_envs
+        updated = False  # did a gradient update run this iteration? (benchmark warmup)
 
         # cumulative_offset is 0 unless --resume, so this reproduces the original
         # schedule exactly for run_experiments.sh; when resuming, the 100k-frame
@@ -613,6 +629,7 @@ if __name__ == "__main__":
                 optimizer.step()
                 q_losses.append(loss.item())
                 update_count += 1
+                updated = True
             cached_logical_steps -= args.train_frequency
 
         # --- Logging steps/sec and updates/sec every 1000 env steps ---
@@ -639,6 +656,16 @@ if __name__ == "__main__":
 
         # Periodic weight checkpoints (20/40/60/80/100% of training).
         ckpt.maybe_save(global_step, ckpt_state)
+
+        if bench is not None and bench.tick(args.num_envs, updated):
+            break
+
+    if args.benchmark:
+        summary = bench.summary(args.num_envs)
+        path, key = write_benchmark(args.machine, args.level, "dqn", variant, summary)
+        print(f"[benchmark] {key}: {summary['steps_per_sec']:.1f} steps/s "
+              f"({summary['steps']} steps / {summary['seconds']:.1f}s) -> {path}")
+        sys.exit(0)
 
     ckpt.flush_remaining(ckpt_state)  # guarantee the 100% checkpoint exists
 
