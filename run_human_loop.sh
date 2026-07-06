@@ -76,6 +76,20 @@ train_all () {
     done
 }
 
+# ----- phase dispatch -----
+# Split the loop into single passes so an orchestrator (e.g. run_human_loop_remote.sh)
+# can run recording on one machine and training on another:
+#   PHASE=record : one recording pass over all levels, then exit.
+#   PHASE=train  : train one resumable chunk per level, then exit.
+#   PHASE=loop   : (default) the full local record<->train loop below.
+PHASE="${PHASE:-loop}"
+case "${PHASE}" in
+    record) record_all; exit $? ;;
+    train)  train_all;  exit $? ;;
+    loop)   ;;
+    *) echo "unknown PHASE='${PHASE}' (want record|train|loop)" >&2; exit 2 ;;
+esac
+
 echo "Human-in-the-loop pre-training:"
 echo "  levels=[${LEVELS}] alg=${ALG} run=${RUN} ego=${EGO_SIZE} radio=${USE_RADIO}"
 echo "  iters=${ITERS} chunk=${CHUNK} frames/agent=${FRAMES_PER_AGENT} explore_total=${EXPLORE_TOTAL}"
