@@ -7,8 +7,9 @@ agents, then supports the iterative record -> train -> record loop. One run:
   reaches its per-agent-type quota; each episode hands the player a random agent
   (from those still short of quota) to control from its ego POV;
 * auto-radios for the controlled agent via a heuristic: the instant a survivor
-  enters its ego view it broadcasts, and every 20 steps it also sends a random
-  message to another agent;
+  enters its ego view it broadcasts, and otherwise sends a random message to
+  another agent with ~0.1 probability per step (~1 every 10 frames), so the BC
+  targets contain enough radio use for the policy to learn its radio head;
 * drives the non-controlled teammates with the latest decentralized_ego policy
   checkpoint for the level (random fallback). Teammates also transmit radio:
   from the policy's radio head when a decentralized_ego_radio checkpoint is
@@ -82,7 +83,7 @@ ACTION_MAP = np.array(
 )
 
 SPOTTED_CHANNEL = 1                 # radio channel broadcast when a survivor is seen
-RANDOM_MESSAGE_PERIOD = 20
+RANDOM_MESSAGE_PROB = 0.1           # per-step chance of an idle peer message (~1 / 10 frames)
 # Model-dict key that holds the policy weights, per algorithm (matches the
 # trainers' module_state / ckpt_state calls).
 POLICY_KEY = {"dqn": "q_network", "ppo": "agent", "sac": "actor"}
@@ -109,17 +110,21 @@ def _discretize_move(move_xy: np.ndarray) -> int:
 def _heuristic_radio(ego_spatial, step: int, n_agents: int, poi_channel: int) -> int:
     """Heuristic radio action for one agent from its ego crop.
 
-    Broadcasts the instant a survivor is in the agent's ego view; otherwise
-    sends a random peer message every RANDOM_MESSAGE_PERIOD steps. Radio value
-    0 == silent, 1..n_agents-1 == share with a peer (decoded engine-side). Used
-    for the human and for teammates when the loaded policy has no radio head.
+    Broadcasts the instant a survivor is in the agent's ego view; otherwise, on
+    each step, sends a random peer message with probability RANDOM_MESSAGE_PROB
+    (~1 every 10 frames). The steady background chatter plus the on-sighting
+    broadcast guarantee the BC targets contain plenty of non-silent radio
+    actions, so a policy cloning them actually learns to use the radio head.
+    Radio value 0 == silent, 1..n_agents-1 == share with a peer (decoded
+    engine-side). Used for the human and for teammates when the loaded policy
+    has no radio head.
     """
     if n_agents <= 1:
         return 0
     survivor_spotted = bool((ego_spatial[poi_channel] > 0).any().item())
     if survivor_spotted:
         return SPOTTED_CHANNEL
-    if step > 0 and step % RANDOM_MESSAGE_PERIOD == 0:
+    if step > 0 and random.random() < RANDOM_MESSAGE_PROB:
         return random.randrange(1, n_agents)
     return 0
 
@@ -276,8 +281,12 @@ def _build_teammate_policy(env, level, alg, run_number, device):
 
 
 def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
-                max_steps=250, record=False, step_delay_ms=132, progress_line=""):
+                max_steps=0, record=False, step_delay_ms=100, progress_line=""):
     """Play one full episode, collecting the controlled agent's ego transitions.
+
+    ``max_steps <= 0`` caps the episode at the controlled agent's battery life
+    (its max battery), i.e. the number of steps it can actually act for; pass a
+    positive value to force a fixed cap instead.
 
     Returns (data, frames, n_frames, episodic_return, quit_requested) where
     ``episodic_return`` is the per-agent summed reward over the episode (shape
@@ -289,10 +298,40 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
     obs = env._get_obs_dict()
     n_agents = env.config.n_agents
 
+    # Cap the episode at the controlled agent's battery life unless the caller
+    # forced a fixed max_steps: an agent can't act past a dead battery, so this
+    # matches recorded episode length to how long it can actually operate.
+    if max_steps <= 0:
+        max_steps = int(env.config.agent_max_batteries[controlled_agent])
+
     data = {f: [] for f in HUMAN_FIELDS}
     frames = []
     quit_requested = False
     episodic_return = np.zeros(n_agents, dtype=np.float64)
+
+    # AFK gate: don't start recording until the human signals they're present.
+    # Recording steps on a timer once running, so without this an unattended
+    # recorder (e.g. an auto-started record phase, or a synced-back checkpoint
+    # kicking off the next iteration) would log a whole episode of no-op frames.
+    # Blocks at ~0% CPU until a keypress; closing the window still stops cleanly.
+    ready_lines = [
+        f"Ready to record: {agent_type} (agent {controlled_agent})",
+        "Press any key to START this episode  |  close window to stop",
+    ]
+    if progress_line:
+        ready_lines.append(progress_line)
+    env.render_ego(controlled_agent, env_idx=0, info_lines=ready_lines)
+    while True:
+        event = pygame.event.wait(200)          # blocks; wakes to keep window live
+        if event.type == pygame.QUIT:
+            quit_requested = True
+            break
+        if event.type == pygame.KEYDOWN:
+            break
+        if event.type == pygame.NOEVENT:
+            env.render_ego(controlled_agent, env_idx=0, info_lines=ready_lines)
+    if quit_requested:
+        return data, frames, 0, episodic_return, quit_requested
 
     step = 0
     done = False
@@ -311,7 +350,7 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
         ego_internal = obs["internal"][0, controlled_agent]    # (D,)
 
         # Human radio: broadcast the instant a survivor is in the ego view, else
-        # a random peer message every RANDOM_MESSAGE_PERIOD steps.
+        # a random peer message with probability RANDOM_MESSAGE_PROB per step.
         radio = _heuristic_radio(ego_spatial, step, n_agents, poi_channel)
 
         move_actions = np.zeros((1, n_agents, 2), dtype=np.float32)
@@ -538,13 +577,16 @@ def main():
     parser.add_argument("--frames-per-agent", type=int, default=2500,
                         help="Frames to collect PER agent type this session; the "
                              "session ends once every type reaches this quota.")
-    parser.add_argument("--max-steps", type=int, default=250)
+    parser.add_argument("--max-steps", type=int, default=0,
+                        help="Max steps per episode. 0 (default) caps each episode "
+                             "at the controlled agent's battery life; a positive "
+                             "value forces a fixed cap.")
     parser.add_argument("--ego-size", type=int, default=32,
                         help="Ego window side length (match the trainer's --ego-size).")
     parser.add_argument("--no-ego", action="store_true",
                         help="Record the full-map per-agent FOV instead of an ego crop.")
     parser.add_argument("--record", action="store_true", help="Save a replay GIF per bucket.")
-    parser.add_argument("--teammate-alg", default="dqn", choices=["dqn", "ppo", "sac"])
+    parser.add_argument("--teammate-alg", default="ppo", choices=["ppo", "dqn", "sac"])
     parser.add_argument("--teammate-run", type=int, default=1)
     parser.add_argument("--no-teammate-policy", action="store_true")
     parser.add_argument("--step-delay-ms", type=int, default=132)

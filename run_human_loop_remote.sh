@@ -27,17 +27,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}" || exit 1
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 
-# ----- remote target -----
+# ----- local (this machine, e.g. WSL) -----
+# Recording runs here and needs torch/pygame/the engine, so activate the local
+# venv. On WSL Ubuntu this is a Linux venv (linuxvenv), distinct from the Windows
+# .venv that lives in the same folder. Override LOCAL_VENV to point elsewhere.
+LOCAL_VENV="${LOCAL_VENV:-${SCRIPT_DIR}/linuxvenv}"
+if [ -f "${LOCAL_VENV}/bin/activate" ]; then
+    # shellcheck disable=SC1091
+    source "${LOCAL_VENV}/bin/activate"
+elif [ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]; then
+    echo "WARNING: no local venv at ${LOCAL_VENV} and none active; recording will use $(command -v python)" >&2
+fi
+
+# ----- remote target (the lab) -----
 REMOTE_HOST="${REMOTE_HOST:-lab-comp}"                       # ~/.ssh/config profile
 REMOTE_DIR="${REMOTE_DIR:-/home/tflavin/Hide-And-Seek-Engine}"
-REMOTE_VENV="${REMOTE_VENV:-${REMOTE_DIR}/.venv}"           # activated before training
+REMOTE_VENV="${REMOTE_VENV:-${REMOTE_DIR}/.venv}"           # the LAB's venv (unrelated to LOCAL_VENV)
 
 # ----- loop / model config (same names + defaults as run_human_loop.sh) -----
 # Exported so the local `PHASE=record run_human_loop.sh` and the remote
 # `PHASE=train run_human_loop.sh` both inherit them.
 export LEVELS="${LEVELS:-levels/test_level levels/neighborhood_level levels/island_level levels/warehouse_level}"
 [ -n "${LEVEL:-}" ] && export LEVELS="${LEVEL}"
-export ALG="${ALG:-dqn}"
+export ALG="${ALG:-ppo}"                 # ppo | dqn | sac
 export RUN="${RUN:-1}"
 export EGO_SIZE="${EGO_SIZE:-32}"
 export FRAMES_PER_AGENT="${FRAMES_PER_AGENT:-2500}"

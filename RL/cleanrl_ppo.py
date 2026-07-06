@@ -258,16 +258,20 @@ class Agent(nn.Module):
         return action, logprob, entropy, self.critic(feats).view(B, self.n_agents)
 
     def bc_logits(self, spatial, internal):
-        """Per-single-agent move logits for behavior cloning (decentralized).
+        """Per-single-agent BC logits (decentralized): (move, radio).
 
         Shared encoder + shared actor head on one agent's ego obs
-        (spatial: [B, C, S, S] uint8, internal: [B, D]); move slice only.
+        (spatial: [B, C, S, S] uint8, internal: [B, D]); returns the move slice
+        and, when ``use_radio``, the radio slice (else None).
         """
         spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
-        return self.actor_heads[0](feats)[..., :self.num_actions_per_agent]
+        out = self.actor_heads[0](feats)
+        move = out[..., :self.num_actions_per_agent]
+        radio = out[..., self.num_actions_per_agent:] if self.use_radio else None
+        return move, radio
 
 
 ACTION_MAP = np.array(
@@ -590,8 +594,13 @@ if __name__ == "__main__":
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
                 if bc_batcher is not None:
-                    bc_spatial, bc_internal, bc_actions = bc_batcher.sample(args.bc_batch_size, device)
-                    bc_loss = F.cross_entropy(agent.bc_logits(bc_spatial, bc_internal), bc_actions)
+                    bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
+                    bc_move_logits, bc_radio_logits = agent.bc_logits(bc_spatial, bc_internal)
+                    bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
+                    # Clone the human's radio action too, so the radio head learns
+                    # to broadcast from demos (not RL alone).
+                    if bc_radio_logits is not None and bc_radio is not None:
+                        bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
                     loss = loss + args.bc_coef * bc_loss
 
                 optimizer.zero_grad()

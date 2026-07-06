@@ -348,18 +348,22 @@ class QNetwork(nn.Module):
         return v_value, adv_values
 
     def bc_logits(self, spatial, internal):
-        """Per-single-agent move logits for behavior cloning (decentralized).
+        """Per-single-agent BC logits (decentralized): (move, radio).
 
         Runs the shared encoder + shared advantage head on one agent's ego
-        observation (spatial: [B, C, S, S] uint8, internal: [B, D]) and returns
-        only the move slice. cast_obs handles the uint8->float conversion, exactly
-        as in rollouts.
+        observation (spatial: [B, C, S, S] uint8, internal: [B, D]) and splits
+        the output into the move slice and, when ``use_radio``, the radio slice
+        (else None). cast_obs handles the uint8->float conversion, exactly as in
+        rollouts.
         """
         spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
         feats = self.encoder(x)
-        return self.adv_heads[0](feats)[..., :self.num_actions_per_agent]
+        out = self.adv_heads[0](feats)
+        move = out[..., :self.num_actions_per_agent]
+        radio = out[..., self.num_actions_per_agent:] if self.use_radio else None
+        return move, radio
 
 
 ACTION_MAP = np.array(
@@ -630,8 +634,13 @@ if __name__ == "__main__":
                 loss = F.mse_loss(td_target, old_val_sum)
 
                 if bc_batcher is not None:
-                    bc_spatial, bc_internal, bc_actions = bc_batcher.sample(args.bc_batch_size, device)
-                    bc_loss = F.cross_entropy(q_network.bc_logits(bc_spatial, bc_internal), bc_actions)
+                    bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
+                    bc_move_logits, bc_radio_logits = q_network.bc_logits(bc_spatial, bc_internal)
+                    bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
+                    # Clone the human's radio action too, so the radio head learns
+                    # to broadcast from demos (not RL alone).
+                    if bc_radio_logits is not None and bc_radio is not None:
+                        bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
                     loss = loss + args.bc_coef * bc_loss
 
                 optimizer.zero_grad()

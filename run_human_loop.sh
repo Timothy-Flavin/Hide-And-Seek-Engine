@@ -32,7 +32,7 @@ export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 LEVELS="${LEVELS:-levels/test_level levels/neighborhood_level levels/island_level levels/warehouse_level}"
 # LEVEL is a single-level override (records/trains just that one).
 [ -n "${LEVEL:-}" ] && LEVELS="${LEVEL}"
-ALG="${ALG:-dqn}"                        # dqn | ppo | sac
+ALG="${ALG:-ppo}"                        # ppo | dqn | sac
 RUN="${RUN:-1}"                          # run/seed number (recorder teammate-run must match)
 EGO_SIZE="${EGO_SIZE:-32}"               # ego window side (recorder and trainer must match)
 FRAMES_PER_AGENT="${FRAMES_PER_AGENT:-2500}"  # demos per agent type, per level, per checkpoint

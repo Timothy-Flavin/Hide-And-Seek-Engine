@@ -50,8 +50,9 @@ HUMAN_FIELDS = [
     "controlled_agent",
 ]
 
-# Minimal field set a decentralized learner needs for a BC pass.
-BC_FIELDS = ["obs_spatial", "obs_internal", "actions_move"]
+# Minimal field set a decentralized learner needs for a BC pass. ``radio`` is the
+# human's emitted radio action, cloned by the radio head when --use-radio is set.
+BC_FIELDS = ["obs_spatial", "obs_internal", "actions_move", "radio"]
 
 
 def level_name_of(level: str) -> str:
@@ -192,19 +193,25 @@ class BCBatcher:
     float conversion, exactly as in RL rollouts).
     """
 
-    def __init__(self, spatial: np.ndarray, internal: np.ndarray, actions: np.ndarray):
+    def __init__(self, spatial: np.ndarray, internal: np.ndarray, actions: np.ndarray,
+                 radio: np.ndarray | None = None):
         self.spatial = torch.as_tensor(np.asarray(spatial))          # uint8 [N,C,S,S]
         self.internal = torch.as_tensor(np.asarray(internal), dtype=torch.float32)
         self.actions = torch.as_tensor(np.asarray(actions), dtype=torch.long)
+        # Optional radio BC target (the human's emitted radio action per frame).
+        self.radio = None if radio is None else torch.as_tensor(np.asarray(radio), dtype=torch.long)
         self.n = int(self.spatial.shape[0])
         self.spatial_shape = tuple(self.spatial.shape[1:])
 
     def sample(self, batch_size: int, device):
+        """Return (spatial, internal, move, radio); radio is None when unavailable."""
         idx = torch.randint(0, self.n, (min(batch_size, self.n),))
+        radio = None if self.radio is None else self.radio[idx].to(device)
         return (
             self.spatial[idx].to(device),
             self.internal[idx].to(device),
             self.actions[idx].to(device),
+            radio,
         )
 
 
@@ -221,7 +228,12 @@ def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | Non
     data = load_human_dataset(level, fields=BC_FIELDS, ego_size=ego_size)
     if not data or "obs_spatial" not in data or len(data["obs_spatial"]) == 0:
         return None
-    batcher = BCBatcher(data["obs_spatial"], data["obs_internal"], data["actions_move"])
+    n = len(data["obs_spatial"])
+    # Only clone radio when a per-frame radio target aligns with the obs.
+    radio = data.get("radio")
+    if radio is not None and len(radio) != n:
+        radio = None
+    batcher = BCBatcher(data["obs_spatial"], data["obs_internal"], data["actions_move"], radio=radio)
     if expected_spatial_shape is not None and tuple(batcher.spatial_shape) != tuple(expected_spatial_shape):
         print(
             f"[human-bc] recorded obs shape {batcher.spatial_shape} != model input "
