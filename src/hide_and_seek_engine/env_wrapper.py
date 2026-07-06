@@ -28,6 +28,8 @@ class SARBatchedGridEnv:
         init_mode="parallel_first_touch",
         ego_view=False,
         ego_size=32,
+        max_allies=10,
+        max_entities=10,
     ):
         self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
         self.num_envs = num_envs
@@ -57,8 +59,22 @@ class SARBatchedGridEnv:
         # Spatial Channels: Tiles + Altitude + POI + Observed Mask + Agents
         self.spatial_channels = self.config.n_tiles + 3 + self.config.n_agents
 
-        # Internal channels per agent: y, x, battery, view_range, deploy, stuck
-        self.agent_internal_dim = 6
+        # Internal (vectorized) obs per agent: 6 base values (y, x, battery,
+        # view_range, deploy, stuck) plus -- ONLY in ego-centric decentralized
+        # mode -- a fixed-size relative-entity belief block: for up to max_allies
+        # teammates then max_entities survivors, the last-known location as
+        # (dx, dy, seen). These come from the engine's per-agent knowledge tables,
+        # updated by sight AND radio with no range limit, so shared locations
+        # survive the ego crop (which drops off-window spatial channels). dx/dy are
+        # honest relative offsets (same units as the raw x/y here); unseen slots
+        # are (0, 0, 0), so the seen flag separates "unknown" from an entity on the
+        # agent's own cell. Non-ego / centralized modes keep the plain 6 values.
+        entity_block = self.ego_view and self.mode_val == 0
+        self.max_allies = int(max_allies) if entity_block else 0
+        self.max_entities = int(max_entities) if entity_block else 0
+        self.rel_ally_start = 6                              # first ally slot index
+        self.rel_poi_start = 6 + 3 * self.max_allies        # first survivor slot index
+        self.agent_internal_dim = 6 + 3 * (self.max_allies + self.max_entities)
 
         # 2. Allocate contiguous PyTorch memory for zero-copy C++ updates.
         # Spatial obs footprint. In ego mode the per-agent window replaces the
@@ -192,6 +208,8 @@ class SARBatchedGridEnv:
                 self.init_mode_val,
                 self.ego_view,
                 self.ego_size,
+                self.max_allies,
+                self.max_entities,
             )
 
     def _get_obs_dict(self):
@@ -422,19 +440,50 @@ class SARBatchedGridEnv:
             agent_layers.append((spatial[idx_others + k] > 0, a))
 
         view_range = float(internal[3]) if internal.shape[0] > 3 else 0.0
-        text_lines = self._ego_panel_lines(pov, internal, poi_mask, agent_layers, info_lines)
-        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range, text_lines)
+        # Range-unlimited known entity locations, decoded from the internal vector
+        # (radio-shared, not limited to the ego crop). Used for both the arrows
+        # and the panel readout.
+        entities = self._decode_entities(internal, pov, others)
+        text_lines = self._ego_panel_lines(pov, internal, entities, info_lines)
+        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range, entities, text_lines)
 
-    def _crop_to_global(self, cy, cx, agent_gy, agent_gx):
-        """Ego-crop cell -> global (y, x). The agent sits at the crop center."""
-        half = self.ego_size // 2
-        return int(round(agent_gy + (cy - half))), int(round(agent_gx + (cx - half)))
+    def _decode_entities(self, internal, pov, others):
+        """Decode the internal vector's relative-entity block into a list of
+        ``(kind, ident, dx, dy, gy, gx, color)`` for each *seen* entity, where
+        dx/dy are tile-space offsets from the agent and (gy, gx) the implied
+        global cell. Empty when the env carries no entity block."""
+        ents = []
+        if (self.max_allies == 0 and self.max_entities == 0) or internal.shape[0] <= 6:
+            return ents
+        gy = float(internal[0])
+        gx = float(internal[1])
 
-    def _ego_panel_lines(self, pov, internal, poi_mask, agent_layers, info_lines):
+        for k in range(self.max_allies):
+            b = self.rel_ally_start + 3 * k
+            if internal[b + 2] <= 0:      # seen flag
+                continue
+            dx = float(internal[b + 0])   # honest relative offset (dx, dy)
+            dy = float(internal[b + 1])
+            a = others[k] if k < len(others) else None
+            color = (tuple(int(c) for c in self._agent_colors[a]) if a is not None
+                     else (0, 255, 255))
+            ents.append(("ally", a, dx, dy, int(round(gy + dy)), int(round(gx + dx)), color))
+
+        for p in range(self.max_entities):
+            b = self.rel_poi_start + 3 * p
+            if internal[b + 2] <= 0:
+                continue
+            dx = float(internal[b + 0])
+            dy = float(internal[b + 1])
+            ents.append(("poi", p, dx, dy, int(round(gy + dy)), int(round(gx + dx)),
+                         (255, 255, 255)))
+        return ents
+
+    def _ego_panel_lines(self, pov, internal, entities, info_lines):
         """Human-readable lines for the vectorized-obs text panel.
 
         Internal layout matches the C++ obs writer: [y, x, battery, view_range,
-        deployment_remaining, stuck].
+        deployment_remaining, stuck, <relative-entity block>].
         """
         gy = float(internal[0]) if internal.shape[0] > 0 else 0.0
         gx = float(internal[1]) if internal.shape[0] > 1 else 0.0
@@ -443,14 +492,8 @@ class SARBatchedGridEnv:
         deploy = float(internal[4]) if internal.shape[0] > 4 else 0.0
         stuck = int(internal[5]) if internal.shape[0] > 5 else 0
 
-        poi_ys, poi_xs = np.where(poi_mask)
-        poi_coords = [self._crop_to_global(cy, cx, gy, gx) for cy, cx in zip(poi_ys, poi_xs)]
-        # agent_layers[0] is self; the rest are teammates.
-        tm_coords = []
-        for mask, a in agent_layers[1:]:
-            ys, xs = np.where(mask)
-            for cy, cx in zip(ys, xs):
-                tm_coords.append((a, *self._crop_to_global(cy, cx, gy, gx)))
+        poi_coords = [(e[4], e[5]) for e in entities if e[0] == "poi"]
+        ally_coords = [(e[1], e[4], e[5]) for e in entities if e[0] == "ally"]
 
         def _fmt(coords, n=6):
             if not coords:
@@ -462,16 +505,17 @@ class SARBatchedGridEnv:
             f"agent {pov}  internal obs vector (what the net sees):",
             f"  pos(y,x)=({gy:.1f},{gx:.1f})  battery={batt:.0f}  view_range={vr:.1f}",
             f"  deploy_left={deploy:.1f}  stuck={stuck}",
-            f"  known POIs (y,x): {_fmt(poi_coords)}",
-            f"  known teammates (id:y,x): "
-            + ("none" if not tm_coords
-               else ", ".join(f"{a}:({y},{x})" for a, y, x in tm_coords[:6])),
+            f"  known survivors (y,x): {_fmt(poi_coords)}",
+            f"  known allies (id:y,x): "
+            + ("none" if not ally_coords
+               else ", ".join(f"{a}:({y},{x})" for a, y, x in ally_coords[:6])),
         ]
         if info_lines:
             lines.extend(str(s) for s in info_lines)
         return lines
 
-    def _draw_ego_to_screen(self, rgb_grid, poi_mask, agent_layers, view_range, text_lines=None):
+    def _draw_ego_to_screen(self, rgb_grid, poi_mask, agent_layers, view_range, entities=None,
+                            text_lines=None):
         import pygame
         pygame.event.pump()
 
@@ -503,19 +547,14 @@ class SARBatchedGridEnv:
                 rect = pygame.Rect(x * tile + 2, y * tile + 2, tile - 4, tile - 4)
                 pygame.draw.rect(self._pygame_screen, color, rect)
 
-        # Small bearing arrows from the agent (center) toward each known target.
-        # Survivors are white (matching the POI dots); each ally uses its own
-        # agent color -- so survivor vs ally, and ally vs ally, are all distinct.
+        # Small bearing arrows from the agent (center) toward every KNOWN entity,
+        # decoded from the internal vector's relative-entity block -- so they work
+        # for radio-shared locations well outside the ego crop, not just what is
+        # visible in the window. Survivors are white; each ally uses its own color.
         arrow_max = max(2.5 * tile, tile + 4)
-        for y, x in zip(poi_ys, poi_xs):
-            tgt = (x * tile + tile // 2, y * tile + tile // 2)
-            self._draw_arrow(center, tgt, (255, 255, 255), arrow_max)
-        for mask, a in agent_layers[1:]:  # skip self (center)
-            color = tuple(int(c) for c in self._agent_colors[a])
-            ys, xs = np.where(mask)
-            for y, x in zip(ys, xs):
-                tgt = (x * tile + tile // 2, y * tile + tile // 2)
-                self._draw_arrow(center, tgt, color, arrow_max)
+        for kind, ident, dx, dy, gy, gx, color in (entities or []):
+            tgt = (center[0] + dx * tile, center[1] + dy * tile)
+            self._draw_arrow(center, tgt, color, arrow_max)
 
         # Vectorized-obs text panel below the crop.
         if text_lines and getattr(self, "_render_font", None) is not None:

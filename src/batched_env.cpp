@@ -63,6 +63,20 @@ private:
     bool ego_view = false;
     int ego_size = 0;
     std::vector<uint8_t> ego_full_obs;
+
+    // Fixed-size relative-entity block appended to each agent's internal obs
+    // vector in EGO-CENTRIC (decentralized) mode ONLY -- so the agent carries a
+    // vectorized belief to make sense of information outside its local window.
+    // Non-ego and centralized modes keep the original 6-value vector unchanged.
+    // For up to max_allies teammates then max_entities survivors we store the
+    // last-known location as (dx, dy, seen) relative to the observing agent, from
+    // AgentKnowledge/POIKnowledge (updated by sight AND radio, so no range limit).
+    // dx/dy are honest floats in the same units as the raw x/y already in the
+    // vector; unseen slots are (0, 0, 0), so the seen flag distinguishes "unknown"
+    // from an entity sharing the agent's own cell. obs_internal_dim = full width.
+    int max_allies = 0;
+    int max_entities = 0;
+    ssize_t obs_internal_dim = 6;
     // Accumulation target for the incremental spatial-obs writes. In the
     // default (non-ego) path this simply aliases torch_obs_spatial_base so
     // behavior is unchanged and writes stay zero-copy. In ego mode it points
@@ -127,43 +141,99 @@ private:
 
             uint32_t current_tile_type = view.grid[cy * width + cx].get_type();
             float speed = view.agent_speeds[a * n_tiles + current_tile_type];
-            float ny = agent.y + dy * speed;
-            float nx = agent.x + dx * speed;
-
-            ny = std::max(0.0f, std::min(static_cast<float>(height) - 0.001f, ny));
-            nx = std::max(0.0f, std::min(static_cast<float>(width) - 0.001f, nx));
-
-            int target_y = static_cast<int>(ny);
-            int target_x = static_cast<int>(nx);
-
-            Tile &target_tile = view.grid[target_y * width + target_x];
-
-            bool can_enter = false;
             float max_alt = fp16_to_float(agent.max_alt_fp16);
 
-            // Dynamic Movement Restrictions & Blockers evaluated in Precedence: Flying > Walking > Swimming
-            if (agent.can_fly() && target_tile.is_flyable() && target_tile.altitude <= max_alt)
-            {
-                can_enter = true;
-            }
-            else if (agent.can_walk() && target_tile.is_walkable())
-            {
-                can_enter = true;
-            }
-            else if (agent.can_swim() && target_tile.is_aquatic())
-            {
-                can_enter = true;
-            }
+            // Bounds-clamp helpers keep positions inside the map.
+            auto clamp_y = [&](float v)
+            { return std::max(0.0f, std::min(static_cast<float>(height) - 0.001f, v)); };
+            auto clamp_x = [&](float v)
+            { return std::max(0.0f, std::min(static_cast<float>(width) - 0.001f, v)); };
 
-            if (!can_enter || target_tile.is_blocking())
+            // Full displacement along the (already unit) direction.
+            float full_ny = clamp_y(agent.y + dy * speed);
+            float full_nx = clamp_x(agent.x + dx * speed);
+
+            // A cell is occupiable iff it is not a blocker AND locomotion permits
+            // it (fly > walk > swim). This is the original "!can_enter ||
+            // is_blocking()" test, negated.
+            auto can_occupy = [&](int ty, int tx) -> bool
             {
-                if (target_y != cy)
+                const Tile &t = view.grid[ty * width + tx];
+                if (t.is_blocking())
+                    return false;
+                if (agent.can_fly() && t.is_flyable() && t.altitude <= max_alt)
+                    return true;
+                if (agent.can_walk() && t.is_walkable())
+                    return true;
+                if (agent.can_swim() && t.is_aquatic())
+                    return true;
+                return false;
+            };
+
+            float ny, nx;
+            if (speed <= 1.0f)
+            {
+                // Fast path: displacement <= 1 tile -> single destination check
+                // (unchanged behavior, zero added cost for the common case).
+                ny = full_ny;
+                nx = full_nx;
+                int ty = static_cast<int>(ny);
+                int tx = static_cast<int>(nx);
+                if (!can_occupy(ty, tx))
                 {
-                    ny = (dy > 0) ? target_y - 0.001f : target_y + 1.001f;
+                    if (ty != cy)
+                        ny = (dy > 0) ? ty - 0.001f : ty + 1.001f;
+                    if (tx != cx)
+                        nx = (dx > 0) ? tx - 0.001f : tx + 1.001f;
                 }
-                if (target_x != cx)
+            }
+            else
+            {
+                // Swept path: walk the ray in 1.0-tile increments (reusing the
+                // unit direction -- no trig, no extra sqrt/division) and stop at
+                // the first impassable cell, clamping to the last passable cell.
+                // Fixes tunneling through, and lodging inside, blockers at
+                // speed > 1. Cost is ceil(speed) cheap tile checks.
+                int last_y = cy, last_x = cx;
+                bool blocked = false;
+                for (float d = 1.0f;; d += 1.0f)
                 {
-                    nx = (dx > 0) ? target_x - 0.001f : target_x + 1.001f;
+                    bool final_step = (d >= speed);
+                    float sy = final_step ? full_ny : clamp_y(agent.y + dy * d);
+                    float sx = final_step ? full_nx : clamp_x(agent.x + dx * d);
+                    int ty = static_cast<int>(sy);
+                    int tx = static_cast<int>(sx);
+                    if (ty == last_y && tx == last_x)
+                    {
+                        if (final_step)
+                            break;
+                        continue;
+                    }
+                    if (!can_occupy(ty, tx))
+                    {
+                        blocked = true;
+                        break;
+                    }
+                    last_y = ty;
+                    last_x = tx;
+                    if (final_step)
+                        break;
+                }
+                if (!blocked)
+                {
+                    ny = full_ny;
+                    nx = full_nx;
+                }
+                else
+                {
+                    // Stop at the interior boundary of the last passable cell, on
+                    // the side facing the blocker; only the moving axes shift.
+                    ny = (dy != 0.0f)
+                             ? ((dy > 0) ? last_y + 1.0f - 0.001f : last_y + 0.001f)
+                             : agent.y;
+                    nx = (dx != 0.0f)
+                             ? ((dx > 0) ? last_x + 1.0f - 0.001f : last_x + 0.001f)
+                             : agent.x;
                 }
             }
 
@@ -518,7 +588,9 @@ private:
         if (mode == Mode::DECENTRALIZED)
         {
             ssize_t spatial_stride = (n_tiles + 3 + n_agents) * map_area;
-            ssize_t internal_stride = 6;
+            ssize_t internal_stride = obs_internal_dim;
+            const ssize_t ally_block_start = 6;
+            const ssize_t poi_block_start = 6 + 3 * max_allies;
 
             for (int a = 0; a < n_agents; ++a)
             {
@@ -571,6 +643,59 @@ private:
                 int_base[3] = view.agents[a].view_range;
                 int_base[4] = view.agents[a].deployment_remaining;
                 int_base[5] = static_cast<float>(view.agents[a].flags & 1U); // expose 'stuck' bit to tensor layer
+
+                // Relative-entity block: last-known (dx, dy, seen) for up to
+                // max_allies teammates then max_entities survivors, from the
+                // range-unlimited knowledge tables. Unseen slots are (0, 0, 0).
+                const float ax = view.agents[a].x;
+                const float ay = view.agents[a].y;
+
+                int slot = 0;
+                for (int a2 = 0; a2 < n_agents && slot < max_allies; ++a2)
+                {
+                    if (a2 == a)
+                        continue;
+                    AgentKnowledge &ak = view.agent_knowledge[a * n_agents + a2];
+                    float *dst = int_base + ally_block_start + slot * 3;
+                    if (ak.has_encountered)
+                    {
+                        dst[0] = ak.x - ax;   // honest relative offset (dx)
+                        dst[1] = ak.y - ay;   // honest relative offset (dy)
+                        dst[2] = 1.0f;        // seen
+                    }
+                    else
+                    {
+                        dst[0] = dst[1] = dst[2] = 0.0f;
+                    }
+                    ++slot;
+                }
+                for (; slot < max_allies; ++slot)
+                {
+                    float *dst = int_base + ally_block_start + slot * 3;
+                    dst[0] = dst[1] = dst[2] = 0.0f;
+                }
+
+                int pslot = 0;
+                for (int p = 0; p < n_pois && pslot < max_entities; ++p, ++pslot)
+                {
+                    POIKnowledge &pk = view.poi_knowledge[a * n_pois + p];
+                    float *dst = int_base + poi_block_start + pslot * 3;
+                    if (pk.knows_found && !pk.knows_saved)
+                    {
+                        dst[0] = pk.x - ax;   // honest relative offset (dx)
+                        dst[1] = pk.y - ay;   // honest relative offset (dy)
+                        dst[2] = 1.0f;        // seen
+                    }
+                    else
+                    {
+                        dst[0] = dst[1] = dst[2] = 0.0f;
+                    }
+                }
+                for (; pslot < max_entities; ++pslot)
+                {
+                    float *dst = int_base + poi_block_start + pslot * 3;
+                    dst[0] = dst[1] = dst[2] = 0.0f;
+                }
             }
         }
         else if (mode == Mode::CENTRALIZED)
@@ -783,7 +908,9 @@ public:
         int mode_value = 0,
         int init_mode = 0,
         bool ego_view_val = false,
-        int ego_size_val = 0)
+        int ego_size_val = 0,
+        int max_allies_val = 0,
+        int max_entities_val = 0)
         : num_envs(n_envs), seed(sim_seed), width(w), height(h),
           supports_walking(std::move(supports_walk)), supports_aquatic(std::move(supports_aqua)),
           supports_flying(std::move(supports_fly)), is_blocking(std::move(is_block)),
@@ -821,9 +948,17 @@ public:
         padded_terminated.resize(num_envs * padded_byte_stride, 0);
         padded_truncated.resize(num_envs * padded_byte_stride, 0);
 
+        // Relative-entity belief block is added ONLY in ego-centric decentralized
+        // mode (the local window drops off-screen info; the belief vector restores
+        // it). Every other mode keeps the original 6-value vector byte-for-byte.
+        const bool entity_block = ego_view_val && (mode == Mode::DECENTRALIZED);
+        max_allies = entity_block ? std::max(0, max_allies_val) : 0;
+        max_entities = entity_block ? std::max(0, max_entities_val) : 0;
+        obs_internal_dim = 6 + 3 * (max_allies + max_entities);
+
         ssize_t spatial_channels = n_tiles + 3 + n_agents;
         ssize_t obs_spatial_stride = (mode == Mode::DECENTRALIZED) ? (n_agents * spatial_channels * map_size) : (spatial_channels * map_size);
-        ssize_t obs_internal_stride = n_agents * 6;
+        ssize_t obs_internal_stride = n_agents * obs_internal_dim;
         ssize_t state_spatial_stride = spatial_channels * map_size;
         ssize_t state_internal_stride = n_agents * 6 + n_pois * 4;
 
@@ -1220,6 +1355,8 @@ PYBIND11_MODULE(cpp_engine, m)
                  int,
                  int,
                  bool,
+                 int,
+                 int,
                  int>(),
              py::arg("n_envs"),
              py::arg("sim_seed"),
@@ -1255,7 +1392,9 @@ PYBIND11_MODULE(cpp_engine, m)
              py::arg("mode_value") = 0,
              py::arg("init_mode") = 0,
              py::arg("ego_view") = false,
-             py::arg("ego_size") = 0)
+             py::arg("ego_size") = 0,
+             py::arg("max_allies") = 0,
+             py::arg("max_entities") = 0)
         .def("reset", &BatchedEnvironment::reset)
         .def("reset_env", &BatchedEnvironment::reset_env, py::arg("env_idx"))
         .def("step", &BatchedEnvironment::step, py::arg("move_actions_array"), py::arg("radio_actions_array"));

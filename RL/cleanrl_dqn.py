@@ -436,6 +436,7 @@ if __name__ == "__main__":
             bc_batcher = load_bc_batcher(
                 args.level, expected_spatial_shape=spatial_shape,
                 ego_size=args.ego_size if args.ego_view else None,
+                expected_internal_dim=env.agent_internal_dim,
             )
             if bc_batcher is None:
                 print(f"[dqn] --human-bc set but no matching human data for '{args.level}'; skipping BC.")

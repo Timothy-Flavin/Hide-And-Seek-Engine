@@ -208,12 +208,15 @@ class BCBatcher:
         )
 
 
-def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | None = None):
+def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | None = None,
+                    expected_internal_dim: int | None = None):
     """Build a :class:`BCBatcher` from a level's human data, or return None.
 
-    ``expected_spatial_shape`` (the trainer's per-agent ``map_spatial_shape``) is
-    checked so a shape mismatch (e.g. wrong ego size or level) is caught early
-    with a clear message rather than a cryptic runtime error.
+    ``expected_spatial_shape`` (the trainer's per-agent ``map_spatial_shape``) and
+    ``expected_internal_dim`` (the trainer's ``agent_internal_dim``) are checked so
+    a shape mismatch -- e.g. wrong ego size, or demos recorded before the internal
+    vector gained the relative-entity block -- is caught early with a clear message
+    rather than a cryptic runtime error.
     """
     data = load_human_dataset(level, fields=BC_FIELDS, ego_size=ego_size)
     if not data or "obs_spatial" not in data or len(data["obs_spatial"]) == 0:
@@ -224,6 +227,14 @@ def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | Non
             f"[human-bc] recorded obs shape {batcher.spatial_shape} != model input "
             f"{tuple(expected_spatial_shape)}; skipping BC. (Record with matching "
             f"--ego-size / config.)"
+        )
+        return None
+    internal_dim = int(batcher.internal.shape[-1])
+    if expected_internal_dim is not None and internal_dim != int(expected_internal_dim):
+        print(
+            f"[human-bc] recorded internal dim {internal_dim} != model input "
+            f"{int(expected_internal_dim)}; skipping BC. (Re-record: the internal "
+            f"vector changed, e.g. added the relative-entity block.)"
         )
         return None
     return batcher

@@ -3,8 +3,9 @@
 Collects human demos to behavior-clone (BC) pre-train the decentralized_ego
 agents, then supports the iterative record -> train -> record loop. One run:
 
-* loads a random level (unless ``--level``) and, each episode, hands the player a
-  random agent to control from its ego POV;
+* records one ``--level``, or -- when omitted -- sweeps ALL levels so every env
+  reaches its per-agent-type quota; each episode hands the player a random agent
+  (from those still short of quota) to control from its ego POV;
 * auto-radios for the controlled agent via a heuristic: the instant a survivor
   enters its ego view it broadcasts, and every 20 steps it also sends a random
   message to another agent;
@@ -13,9 +14,9 @@ agents, then supports the iterative record -> train -> record loop. One run:
   from the policy's radio head when a decentralized_ego_radio checkpoint is
   loaded, else the same heuristic -- so their shared location/tiles/POIs reach
   the controlled agent's ego view;
-* records ``--frames-per-agent`` frames *per agent type* (default 2500) and
-  *appends* them under ``experiments/results/<level>/<agent_type>/`` as immutable
-  segments; the session ends once every agent type hits its quota;
+* records ``--frames-per-agent`` frames *per agent type, per level* (default
+  2500) and *appends* them under ``experiments/results/<level>/<agent_type>/`` as
+  immutable segments; a level is done once every agent type hits its quota;
 * logs the mean/std team episodic return for the session to
   ``experiments/results/<level>/human_returns.jsonl`` so team performance can be
   tracked as the RL improves over the record -> train -> record loop.
@@ -254,7 +255,15 @@ def _build_teammate_policy(env, level, alg, run_number, device):
         else:
             raise ValueError(f"Unknown teammate algorithm: {alg}")
 
-        net.load_state_dict(strip_compile_prefix(state))
+        try:
+            net.load_state_dict(strip_compile_prefix(state))
+        except (RuntimeError, KeyError) as exc:
+            # Checkpoint architecture no longer matches (e.g. recorded before the
+            # internal vector gained the relative-entity block). Skip it rather
+            # than crash; teammates fall back to random movement + heuristic radio.
+            print(f"[teammates] Incompatible {alg} checkpoint (retrain needed): {exc}. "
+                  f"Falling back to random movement + heuristic radio.")
+            return None
         net.to(device).eval()
         variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
         print(f"[teammates] Loaded {alg} {variant} policy for '{level_name_of(level)}' "
@@ -380,47 +389,14 @@ def _stack_bucket(field_lists: dict) -> dict:
     return out
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--level", default=None,
-                        help="Level dir path (e.g. levels/test_level). Random if omitted.")
-    parser.add_argument("--frames-per-agent", type=int, default=2500,
-                        help="Frames to collect PER agent type this session; the "
-                             "session ends once every type reaches this quota.")
-    parser.add_argument("--max-steps", type=int, default=250)
-    parser.add_argument("--ego-size", type=int, default=32,
-                        help="Ego window side length (match the trainer's --ego-size).")
-    parser.add_argument("--no-ego", action="store_true",
-                        help="Record the full-map per-agent FOV instead of an ego crop.")
-    parser.add_argument("--record", action="store_true", help="Save a replay GIF per bucket.")
-    parser.add_argument("--teammate-alg", default="dqn", choices=["dqn", "ppo", "sac"])
-    parser.add_argument("--teammate-run", type=int, default=1)
-    parser.add_argument("--no-teammate-policy", action="store_true")
-    parser.add_argument("--step-delay-ms", type=int, default=132)
-    parser.add_argument("--seed", type=int, default=None)
-    args = parser.parse_args()
-
-    import torch
-
-    if args.seed is not None:
-        random.seed(args.seed)
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-
-    available = sorted(
-        os.path.join("levels", d) for d in os.listdir("levels")
-        if os.path.isdir(os.path.join("levels", d))
-        and os.path.exists(os.path.join("levels", d, "level.png"))
-    )
-    level = args.level or random.choice(available)
-    if not os.path.isdir(level):
-        raise SystemExit(f"Level dir not found: {level}. Available: {available}")
-
+def collect_for_level(level, args, device) -> bool:
+    """Record up to ``args.frames_per_agent`` frames for EVERY agent type of one
+    level (env), then save + log. Prior on-disk demos for the current checkpoint
+    count toward each quota, so this tops up only what's missing. Returns True if
+    the user requested quit (closed the window)."""
     ego_view = not args.no_ego
     ego_size = args.ego_size if ego_view else None
 
-    device = "cpu"
-    pygame.init()
     env = SARBatchedGridEnv(
         num_envs=1,
         map_png=os.path.join(level, "level.png"),
@@ -480,7 +456,7 @@ def main():
         agent_type = agent_names[controlled_agent]
 
         progress = "  ".join(f"{name}:{collected[name]}/{target}" for name in agent_names)
-        progress_line = f"session frames -> {progress}"
+        progress_line = f"'{level_name_of(level)}' frames -> {progress}"
         print(f"Episode: controlling agent_{controlled_agent} ({agent_type}); {progress}")
 
         data, frames, n, ep_return, quit_requested = run_episode(
@@ -531,8 +507,8 @@ def main():
         print(f"  logged -> {log_path}")
 
     if total == 0:
-        print("No frames recorded; nothing to save.")
-        return
+        print(f"Level '{level_name_of(level)}': quota already met; nothing to record.")
+        return quit_requested
 
     meta = {"ego_size": ego_size, "ego_view": ego_view, "level": level_name_of(level),
             "checkpoint": checkpoint_id}
@@ -551,6 +527,66 @@ def main():
 
     print(f"Level '{level_name_of(level)}' now has "
           f"{count_human_frames(level, ego_size=ego_size)} matching frames.")
+    return quit_requested
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--level", default=None,
+                        help="Level dir path (e.g. levels/test_level). If omitted, "
+                             "sweep ALL levels until each has the per-agent quota.")
+    parser.add_argument("--frames-per-agent", type=int, default=2500,
+                        help="Frames to collect PER agent type this session; the "
+                             "session ends once every type reaches this quota.")
+    parser.add_argument("--max-steps", type=int, default=250)
+    parser.add_argument("--ego-size", type=int, default=32,
+                        help="Ego window side length (match the trainer's --ego-size).")
+    parser.add_argument("--no-ego", action="store_true",
+                        help="Record the full-map per-agent FOV instead of an ego crop.")
+    parser.add_argument("--record", action="store_true", help="Save a replay GIF per bucket.")
+    parser.add_argument("--teammate-alg", default="dqn", choices=["dqn", "ppo", "sac"])
+    parser.add_argument("--teammate-run", type=int, default=1)
+    parser.add_argument("--no-teammate-policy", action="store_true")
+    parser.add_argument("--step-delay-ms", type=int, default=132)
+    parser.add_argument("--seed", type=int, default=None)
+    args = parser.parse_args()
+
+    import torch
+
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+
+    available = sorted(
+        os.path.join("levels", d) for d in os.listdir("levels")
+        if os.path.isdir(os.path.join("levels", d))
+        and os.path.exists(os.path.join("levels", d, "level.png"))
+    )
+    if not available:
+        raise SystemExit("No levels found under levels/.")
+
+    # A given --level records just that env; otherwise ensure EVERY level (env)
+    # reaches the per-agent-type quota, so the whole dataset is covered before
+    # training. Order is fixed (sorted) so the coverage sweep is reproducible.
+    if args.level:
+        if not os.path.isdir(args.level):
+            raise SystemExit(f"Level dir not found: {args.level}. Available: {available}")
+        levels = [args.level]
+    else:
+        levels = available
+        print(f"No --level given: ensuring {args.frames_per_agent} frames per agent type "
+              f"for all {len(levels)} levels.")
+
+    device = "cpu"
+    pygame.init()
+    for level in levels:
+        print(f"\n===== Level '{level_name_of(level)}' "
+              f"({levels.index(level) + 1}/{len(levels)}) =====")
+        quit_requested = collect_for_level(level, args, device)
+        if quit_requested:
+            print("Quit requested (window closed); stopping the coverage sweep.")
+            break
 
 
 if __name__ == "__main__":
