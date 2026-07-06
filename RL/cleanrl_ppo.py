@@ -8,6 +8,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+# Our compiled net is called at a small fixed set of batch sizes (rollout
+# num_envs, update minibatch, plus radio/no-radio paths), so each needs its own
+# size-specialized graph. Raise the per-frame recompile cache above the default 8
+# so every variant caches instead of falling back to eager ("torch._dynamo hit
+# config.cache_size_limit (8)"). Static kernels are kept, so steady-state
+# throughput is unaffected; only compile warmup/memory grows.
+torch._dynamo.config.cache_size_limit = 32
 import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
