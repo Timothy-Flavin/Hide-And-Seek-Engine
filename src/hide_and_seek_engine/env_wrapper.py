@@ -34,6 +34,8 @@ class SARBatchedGridEnv:
         self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
         self.num_envs = num_envs
         self.device = device
+        # Pinned (page-locked) host memory only pays off for host->device copies,
+        self.pin_memory = torch.device(device).type == "cuda"
         self.requires_state = requires_state
         self.render_initialized = False
         self.init_mode_val = 0 if init_mode == "parallel_first_touch" else 1
@@ -103,7 +105,7 @@ class SARBatchedGridEnv:
                     obs_w,
                 ),
                 dtype=torch.uint8,
-                pin_memory=True,
+                pin_memory=self.pin_memory,
             ).contiguous()
         else:  # non-ego CENTRALIZED or NO_OBS
             self.obs_spatial = torch.empty(
@@ -114,13 +116,13 @@ class SARBatchedGridEnv:
                     obs_w,
                 ),
                 dtype=torch.uint8,
-                pin_memory=True,
+                pin_memory=self.pin_memory,
             ).contiguous()
 
         self.obs_internal = torch.empty(
             (self.num_envs, self.config.n_agents, self.agent_internal_dim),
             dtype=torch.float32,
-            pin_memory=True,
+            pin_memory=self.pin_memory,
         ).contiguous()
 
         # Per-sample spatial obs shape (excludes the leading num_envs dim).
@@ -143,12 +145,12 @@ class SARBatchedGridEnv:
                     self.config.width,
                 ),
                 dtype=torch.float32,
-                pin_memory=True,
+                pin_memory=self.pin_memory,
             ).contiguous()
             self.state_internal = torch.empty(
                 (self.num_envs, self.config.n_agents * 6 + self.config.n_pois * 4),
                 dtype=torch.float32,
-                pin_memory=True,
+                pin_memory=self.pin_memory,
             ).contiguous()
         else:
             self.state_spatial = torch.empty(0)
@@ -157,17 +159,17 @@ class SARBatchedGridEnv:
         self.rewards = torch.empty(
             (self.num_envs, self.config.n_agents),
             dtype=torch.float32,
-            pin_memory=True,
+            pin_memory=self.pin_memory,
         ).contiguous()
         self.terminated = torch.empty(
             (self.num_envs,),
             dtype=torch.bool,
-            pin_memory=True,
+            pin_memory=self.pin_memory,
         ).contiguous()
         self.truncated = torch.empty(
             (self.num_envs,),
             dtype=torch.bool,
-            pin_memory=True,
+            pin_memory=self.pin_memory,
         ).contiguous()
 
         # 3. Instantiate C++ Engine passing data_ptr()

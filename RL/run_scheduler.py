@@ -64,10 +64,6 @@ PPO_MINIBATCHES_OVERRIDES = {"neighborhood": 16}
 #          to split the GPUs on a multi-GPU box.
 #   omp  : OMP_NUM_THREADS (match the pinned logical-core count)
 #   wrap : CPU/NUMA pinning wrapper (taskset / numactl ...)
-#   cpu  : True -> CPU-only device (runner gets --no-cuda)
-# NOTE: even a CPU device must keep a GPU visible -- the env/replay buffers
-# allocate pinned host memory (pin_memory=True), which needs a live CUDA
-# context. --no-cuda keeps all *compute* on the CPU; do not hide the GPU.
 # Core lists mirror each box's original taskset/numactl layout.
 # --------------------------------------------------------------------------- #
 MACHINES = {
@@ -76,11 +72,12 @@ MACHINES = {
         "timpc_gpu": {},
     },
     # lab-comp: GPU device on the GPU-affine NUMA node (node 1) + CPU device on
-    # node 0 (its own memory controller). They run side by side. Both inherit the
-    # visible GPU (the CPU device needs it for pinned memory; --no-cuda keeps its
-    # compute on the CPU cores).
+    # node 0 (its own memory controller). They run side by side. The CPU device
+    # has the GPU hidden (cpu=True -> CUDA_VISIBLE_DEVICES= + --no-cuda) so it
+    # creates no CUDA context and can share the box with the GPU device even when
+    # the single GPU is in Exclusive_Process mode.
     "lab-comp": {
-        "lab-comp_gpu": {"omp": 8, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
+        "lab-comp_gpu": {"omp": 16, "wrap": "numactl --preferred=1 taskset -c 16-31,48-63"},
         "lab-comp_cpu": {"omp": 16, "wrap": "numactl --preferred=0 taskset -c 0-15,32-47", "cpu": True},
     },
     # Two GPUs: split the logical cores so each GPU is fed by its own half.
@@ -111,7 +108,13 @@ def device_prefix(device):
     parts = []
     if "omp" in cfg:
         parts.append(f"OMP_NUM_THREADS={cfg['omp']}")
-    if "cuda" in cfg:
+    if cfg.get("cpu"):
+        # CPU-only device: hide every GPU so the runner never creates a CUDA
+        # context. Combined with --no-cuda (device_flags) the env skips pinned
+        # host memory too, so a CPU device can run alongside a GPU device on a
+        # single GPU that is in Exclusive_Process mode. Empty value = no GPUs.
+        parts.append("CUDA_VISIBLE_DEVICES=")
+    elif "cuda" in cfg:
         parts.append(f"CUDA_VISIBLE_DEVICES={cfg['cuda']}")
     if cfg.get("wrap"):
         parts.append(cfg["wrap"])
