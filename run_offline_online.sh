@@ -52,7 +52,7 @@ LEVELS="${LEVELS:-levels/test_level levels/neighborhood_level levels/island_leve
 [ -n "${LEVEL:-}" ] && LEVELS="${LEVEL}"  # single-level override
 ALGS="${ALGS:-ppo dqn sac}"
 TOTAL="${TOTAL:-1000000}"                 # total env frames per run (1M)
-CHUNK="${CHUNK:-200000}"                  # frames per resumable chunk (== eval cadence)
+CHUNK="${CHUNK:-1000000}"                  # frames per resumable chunk (== eval cadence)
 EGO_SIZE="${EGO_SIZE:-32}"
 USE_RADIO="${USE_RADIO:-1}"               # 1 -> decentralized_ego_radio variant
 NUM_ENVS="${NUM_ENVS:-128}"
