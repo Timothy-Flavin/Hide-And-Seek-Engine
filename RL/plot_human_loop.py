@@ -63,7 +63,12 @@ def _mean_std_by_x(x_to_vals):
     return xs, means, stds
 
 
-def plot_level(level, alg, run, out_path=None):
+def plot_level(level, alg, run=1, out_path=None, runs=None):
+    """Plot for a single run (``run``) or, when ``runs`` (a list of seeds) is
+    given, aggregate the dotted no-human baseline across those seeds into one
+    mean line with a std band. The solid human-driven curves are seed-invariant
+    (the demos are not seeded), so they are drawn the same either way."""
+    run_list = [int(r) for r in (runs if runs else [run])]
     lname = level_name_of(level)
     human_path = os.path.join(RESULTS_ROOT, lname, "human_returns.jsonl")
     eval_path = os.path.join(RESULTS_ROOT, lname, alg, "eval_returns.jsonl")
@@ -81,18 +86,22 @@ def plot_level(level, alg, run, out_path=None):
             human_by_driver[name][step].extend(vals)
 
     # --- Dotted: all-policy team return baseline (no human) ---
-    baseline = defaultdict(list)  # step -> [team_return_mean]
+    # Across the requested seeds: each seed contributes one team_return_mean per
+    # cumulative step, so std over the list at a step is the across-seed spread.
+    run_suffixes = tuple(f"_run_{r}" for r in run_list)
+    baseline = defaultdict(list)  # step -> [team_return_mean per seed]
     for e in _read_jsonl(eval_path):
         prefix = str(e.get("prefix", ""))
-        if not (prefix.startswith(f"{alg}_") and f"_run_{run}" in prefix):
+        if not (prefix.startswith(f"{alg}_") and any(s in prefix for s in run_suffixes)):
             continue
         step = e.get("cumulative_step")
         if step is None:
             continue
         baseline[int(step)].append(float(e.get("team_return_mean", 0.0)))
 
+    runs_label = ",".join(str(r) for r in run_list)
     if not human_by_driver and not baseline:
-        print(f"[plot] no data for {lname}/{alg} run {run}; skipping.")
+        print(f"[plot] no data for {lname}/{alg} run(s) {runs_label}; skipping.")
         return None
 
     names = list(human_by_driver)
@@ -110,20 +119,29 @@ def plot_level(level, alg, run, out_path=None):
             ax.fill_between(xs, lo, hi, color=c, alpha=0.12)
 
     if baseline:
-        xs, means, _ = _mean_std_by_x(baseline)
-        ax.plot(xs, means, "--k", marker="s", markerfacecolor="none",
-                label="no human (all-policy team)")
+        xs, means, stds = _mean_std_by_x(baseline)
+        n_seeds = max((len(baseline[x]) for x in baseline), default=1)
+        blabel = ("no human (all-policy team)" if n_seeds <= 1
+                  else f"no human (all-policy team, mean of {n_seeds} seeds)")
+        ax.plot(xs, means, "--k", marker="s", markerfacecolor="none", label=blabel)
+        # Across-seed std band (only meaningful with >1 seed at a step).
+        if n_seeds > 1 and any(stds):
+            lo = [m - s for m, s in zip(means, stds)]
+            hi = [m + s for m, s in zip(means, stds)]
+            ax.fill_between(xs, lo, hi, color="k", alpha=0.10)
 
     ax.set_xlabel("cumulative training frames")
     ax.set_ylabel("team return (sum over agents, 250-frame episode)")
-    ax.set_title(f"{lname} / {alg} run {run}: team return by human-driven agent (solid) "
+    run_title = f"run {run_list[0]}" if len(run_list) == 1 else f"runs {runs_label}"
+    ax.set_title(f"{lname} / {alg} {run_title}: team return by human-driven agent (solid) "
                  f"vs all-policy (dotted)")
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)
     fig.tight_layout()
 
     if out_path is None:
-        out_path = os.path.join(RESULTS_ROOT, lname, f"human_vs_eval_{alg}_run{run}.png")
+        run_tag = f"run{run_list[0]}" if len(run_list) == 1 else f"runs{'-'.join(str(r) for r in run_list)}"
+        out_path = os.path.join(RESULTS_ROOT, lname, f"human_vs_eval_{alg}_{run_tag}.png")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
@@ -135,10 +153,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--level", required=True, help="level dir or name (e.g. levels/test_level)")
     ap.add_argument("--alg", default="ppo", choices=["ppo", "dqn", "sac"])
-    ap.add_argument("--run", type=int, default=1)
+    ap.add_argument("--run", type=int, default=1, help="single seed to plot")
+    ap.add_argument("--runs", type=int, nargs="+", default=None,
+                    help="aggregate the dotted no-human baseline across these seeds "
+                         "(mean +/- std band), e.g. --runs 1 2 3")
     ap.add_argument("--out", default=None, help="output PNG path (default: under the level dir)")
     args = ap.parse_args()
-    plot_level(args.level, args.alg, args.run, out_path=args.out)
+    plot_level(args.level, args.alg, run=args.run, runs=args.runs, out_path=args.out)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,19 @@ HUMAN_FIELDS = [
 # human's emitted radio action, cloned by the radio head when --use-radio is set.
 BC_FIELDS = ["obs_spatial", "obs_internal", "actions_move", "radio"]
 
+# Field set a decentralized learner needs for an offline *Q* pass (DQN CQL):
+# the full single-agent ego transition. ``team_rewards`` (summed-over-agents
+# cooperative reward) matches the online DQN target (which bootstraps against the
+# summed reward), so offline and online backups are directly comparable;
+# ``terminated`` (a real episode end, not a time-limit truncation) is the correct
+# bootstrap mask. Older segments may predate these fields, so the loader falls
+# back to ``rewards`` / ``dones`` respectively.
+OFFLINE_FIELDS = [
+    "obs_spatial", "obs_internal", "actions_move", "radio",
+    "team_rewards", "rewards", "terminated", "dones",
+    "next_obs_spatial", "next_obs_internal",
+]
+
 
 def level_name_of(level: str) -> str:
     """Basename of a level path (``levels/test_level`` -> ``test_level``)."""
@@ -254,6 +267,102 @@ def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | Non
         print(
             f"[human-bc] recorded internal dim {internal_dim} != model input "
             f"{int(expected_internal_dim)}; skipping BC. (Re-record: the internal "
+            f"vector changed, e.g. added the relative-entity block.)"
+        )
+        return None
+    return batcher
+
+
+# --------------------------------------------------------------------------- #
+# Offline-transition minibatch source (DQN offline-Q / CQL)
+# --------------------------------------------------------------------------- #
+class TransitionBatcher:
+    """Holds full ego human *transitions* on CPU and yields device minibatches.
+
+    Unlike :class:`BCBatcher` (obs -> action only), this keeps the reward, next
+    observation and terminal flag needed for an offline Bellman backup. Both
+    ``spatial`` and ``next_spatial`` stay uint8 (the network's ``cast_obs``
+    handles the float conversion, exactly as in RL rollouts). ``reward`` is the
+    summed-over-agents team reward (matching the online DQN target) and ``done``
+    is the true-termination mask (truncations still bootstrap).
+    """
+
+    def __init__(self, spatial, internal, next_spatial, next_internal,
+                 actions, reward, done, radio=None):
+        self.spatial = torch.as_tensor(np.asarray(spatial))                       # uint8 [N,C,S,S]
+        self.internal = torch.as_tensor(np.asarray(internal), dtype=torch.float32)
+        self.next_spatial = torch.as_tensor(np.asarray(next_spatial))             # uint8 [N,C,S,S]
+        self.next_internal = torch.as_tensor(np.asarray(next_internal), dtype=torch.float32)
+        self.actions = torch.as_tensor(np.asarray(actions), dtype=torch.long)
+        # reward/done kept as [N,1] float columns (matches the DQN buffer layout).
+        self.reward = torch.as_tensor(np.asarray(reward), dtype=torch.float32).reshape(-1, 1)
+        self.done = torch.as_tensor(np.asarray(done), dtype=torch.float32).reshape(-1, 1)
+        self.radio = None if radio is None else torch.as_tensor(np.asarray(radio), dtype=torch.long)
+        self.n = int(self.spatial.shape[0])
+        self.spatial_shape = tuple(self.spatial.shape[1:])
+
+    def sample(self, batch_size: int, device):
+        """Return (spatial, internal, next_spatial, next_internal, move, radio,
+        reward[B,1], done[B,1]); radio is None when unavailable."""
+        idx = torch.randint(0, self.n, (min(batch_size, self.n),))
+        radio = None if self.radio is None else self.radio[idx].to(device)
+        return (
+            self.spatial[idx].to(device),
+            self.internal[idx].to(device),
+            self.next_spatial[idx].to(device),
+            self.next_internal[idx].to(device),
+            self.actions[idx].to(device),
+            radio,
+            self.reward[idx].to(device),
+            self.done[idx].to(device),
+        )
+
+
+def load_transition_batcher(level: str, expected_spatial_shape=None, ego_size: int | None = None,
+                            expected_internal_dim: int | None = None):
+    """Build a :class:`TransitionBatcher` from a level's human data, or return None.
+
+    Same shape/internal-dim validation as :func:`load_bc_batcher`. Prefers the
+    ``team_rewards`` / ``terminated`` fields, falling back to ``rewards`` /
+    ``dones`` for segments recorded before those were stored.
+    """
+    data = load_human_dataset(level, fields=OFFLINE_FIELDS, ego_size=ego_size)
+    if (not data or "obs_spatial" not in data or len(data["obs_spatial"]) == 0
+            or "next_obs_spatial" not in data):
+        return None
+    n = len(data["obs_spatial"])
+
+    reward = data.get("team_rewards")
+    if reward is None or len(reward) != n:
+        reward = data.get("rewards")
+    done = data.get("terminated")
+    if done is None or len(done) != n:
+        done = data.get("dones")
+    if reward is None or done is None:
+        print(f"[human-cql] human data for '{level}' lacks reward/terminal fields; skipping offline-Q.")
+        return None
+
+    radio = data.get("radio")
+    if radio is not None and len(radio) != n:
+        radio = None
+
+    batcher = TransitionBatcher(
+        data["obs_spatial"], data["obs_internal"],
+        data["next_obs_spatial"], data["next_obs_internal"],
+        data["actions_move"], reward, done, radio=radio,
+    )
+    if expected_spatial_shape is not None and tuple(batcher.spatial_shape) != tuple(expected_spatial_shape):
+        print(
+            f"[human-cql] recorded obs shape {batcher.spatial_shape} != model input "
+            f"{tuple(expected_spatial_shape)}; skipping offline-Q. (Record with matching "
+            f"--ego-size / config.)"
+        )
+        return None
+    internal_dim = int(batcher.internal.shape[-1])
+    if expected_internal_dim is not None and internal_dim != int(expected_internal_dim):
+        print(
+            f"[human-cql] recorded internal dim {internal_dim} != model input "
+            f"{int(expected_internal_dim)}; skipping offline-Q. (Re-record: the internal "
             f"vector changed, e.g. added the relative-entity block.)"
         )
         return None

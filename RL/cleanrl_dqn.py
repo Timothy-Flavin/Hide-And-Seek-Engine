@@ -36,7 +36,7 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
 )
-from RL.human_data import load_bc_batcher
+from RL.human_data import load_bc_batcher, load_transition_batcher
 from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 
@@ -85,10 +85,21 @@ class Args:
     #     existing run_experiments.sh behavior exactly) ---
     human_bc: bool = False
     """add a behavior-cloning loss from recorded human data (decentralized only)"""
+    human_cql: bool = False
+    """add an OFFLINE-Q + conservative-Q (CQL) loss from recorded human
+    transitions (decentralized only). This is the joint online+offline objective
+    for the offline-vs-online experiment: online TD stays penalty-free, while the
+    offline (human) minibatch gets an offline Bellman backup plus a CQL penalty
+    that pushes down out-of-distribution action values. Mutually exclusive with
+    --human-bc (CQL wins with a warning if both are set)."""
+    cql_coef: float = 1.0
+    """weight on the whole offline-Q+CQL term (added to the online TD loss)"""
+    cql_alpha: float = 1.0
+    """weight on the conservative (logsumexp - taken) penalty within the offline term"""
     bc_coef: float = 1.0
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
-    """minibatch size for the BC term"""
+    """minibatch size for the BC (or offline-Q/CQL) term"""
     resume: bool = False
     """resume optimizer/epsilon/RNG from this run's resume checkpoint, and write
     one at the end (for the 100k-frame-chunk loop)"""
@@ -371,6 +382,31 @@ class QNetwork(nn.Module):
         radio = out[..., self.num_actions_per_agent:] if self.use_radio else None
         return move, radio
 
+    def q_single(self, spatial, internal):
+        """Per-single-agent dueling Q pieces (decentralized): (v, move_adv, radio_adv).
+
+        Runs the shared encoder + value head + advantage head on ONE agent's ego
+        observation (spatial: [B, C, S, S] uint8, internal: [B, D]) and returns
+        the value ``v`` [B, 1] plus each advantage factor MEAN-CENTERED over its
+        own action dim -- exactly as ``_forward_decentralized`` centers them, so a
+        single-agent offline Q ``v + adv_centered[a]`` is consistent with the VDN
+        per-agent contribution used online. ``radio_adv`` is None without radio.
+        """
+        spatial = cast_obs(spatial)
+        B = spatial.shape[0]
+        x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
+        feats = self.encoder(x)
+        v = self.v_head(feats)  # [B, 1]
+        out = self.adv_heads[0](feats)
+        move = out[..., :self.num_actions_per_agent]
+        move = move - move.mean(dim=1, keepdim=True)
+        if self.use_radio:
+            radio = out[..., self.num_actions_per_agent:]
+            radio = radio - radio.mean(dim=1, keepdim=True)
+        else:
+            radio = None
+        return v, move, radio
+
 
 ACTION_MAP = np.array(
     [
@@ -454,10 +490,35 @@ if __name__ == "__main__":
         else:
             print(f"[dqn] --resume set but no checkpoint at {resume_path}; starting fresh.")
 
-    # --- Behavior-cloning term (opt-in via --human-bc; decentralized only, since
-    #     human demos are per-agent ego observations). ---
+    # --- Offline human-data terms (opt-in; decentralized only, since human demos
+    #     are per-agent ego observations). Two mutually-exclusive objectives:
+    #       --human-cql : offline-Q + conservative-Q on full human transitions
+    #                     (the online+offline experiment's DQN objective);
+    #       --human-bc  : plain behavior-cloning cross-entropy (legacy human loop).
+    #     Online TD is never touched by either, so online experiences stay
+    #     penalty-free. ---
+    use_cql = bool(args.human_cql)
+    if args.human_cql and args.human_bc:
+        print("[dqn] both --human-cql and --human-bc set; using CQL (offline-Q) and "
+              "ignoring --human-bc.")
     bc_batcher = None
-    if args.human_bc:
+    cql_batcher = None
+    if use_cql:
+        if args.centralized:
+            print("[dqn] --human-cql needs a decentralized model (ego human data); "
+                  "skipping offline-Q. Re-run with --no-centralized.")
+        else:
+            cql_batcher = load_transition_batcher(
+                args.level, expected_spatial_shape=spatial_shape,
+                ego_size=args.ego_size if args.ego_view else None,
+                expected_internal_dim=env.agent_internal_dim,
+            )
+            if cql_batcher is None:
+                print(f"[dqn] --human-cql set but no matching human transitions for '{args.level}'; skipping offline-Q.")
+            else:
+                print(f"[dqn] offline-Q + CQL enabled with {cql_batcher.n} human transitions "
+                      f"(cql_coef={args.cql_coef}, cql_alpha={args.cql_alpha}).")
+    elif args.human_bc:
         if args.centralized:
             print("[dqn] --human-bc needs a decentralized model (ego human data); "
                   "skipping BC. Re-run with --no-centralized.")
@@ -488,6 +549,7 @@ if __name__ == "__main__":
     logical_steps_since_last_record = 0
     LOGICAL_STEPS_PER_RECORD = 10000
     q_losses = []
+    cql_losses = []  # (offline_td, cql_gap) per update when --human-cql is active
 
     # --- Post-chunk evaluation (per-agent + team return over args.eval_episodes
     #     episodes, each clipped to the human/training episode length). Also run
@@ -677,6 +739,38 @@ if __name__ == "__main__":
                         bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
                     loss = loss + args.bc_coef * bc_loss
 
+                if cql_batcher is not None:
+                    # Offline-Q + conservative-Q on human transitions. Single-agent
+                    # ego backup: Q(s,a) = v + adv_centered[a] (VDN per-agent piece).
+                    # The team reward matches the online summed-reward target, so
+                    # offline and online backups are comparable. The online TD loss
+                    # above is left untouched -> ONLINE experiences never see the
+                    # conservative penalty (only the offline minibatch does).
+                    (o_s, o_i, o_ns, o_ni, o_move, o_radio,
+                     o_r, o_d) = cql_batcher.sample(args.bc_batch_size, device)
+                    with torch.no_grad():
+                        tv, tmove, tradio = target_network.q_single(o_ns, o_ni)
+                        q_next = tv + tmove.max(dim=1, keepdim=True).values
+                        if tradio is not None:
+                            q_next = q_next + tradio.max(dim=1, keepdim=True).values
+                        cql_target = o_r + args.gamma * (1 - o_d) * q_next
+
+                    v_o, move_o, radio_o = q_network.q_single(o_s, o_i)
+                    move_taken = move_o.gather(1, o_move.unsqueeze(1))          # [B, 1]
+                    q_pred = v_o + move_taken
+                    # CQL(H) gap: push down logsumexp_a Q(s,a) toward Q(s,a_data).
+                    # The value head cancels, so it is a sum of per-factor gaps.
+                    cql_gap = torch.logsumexp(move_o, dim=1, keepdim=True) - move_taken
+                    if radio_o is not None and o_radio is not None:
+                        radio_taken = radio_o.gather(1, o_radio.unsqueeze(1))    # [B, 1]
+                        q_pred = q_pred + radio_taken
+                        cql_gap = cql_gap + (torch.logsumexp(radio_o, dim=1, keepdim=True) - radio_taken)
+
+                    offline_td = F.mse_loss(q_pred, cql_target)
+                    offline_loss = offline_td + args.cql_alpha * cql_gap.mean()
+                    loss = loss + args.cql_coef * offline_loss
+                    cql_losses.append((offline_td.item(), cql_gap.mean().item()))
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -691,8 +785,14 @@ if __name__ == "__main__":
             elapsed = now - last_log_time
             steps_per_sec = step_count / elapsed
             updates_per_sec = update_count / elapsed if elapsed > 0 else 0.0
+            cql_str = ""
+            if cql_losses:
+                recent = cql_losses[-100:]
+                td_m = sum(t for t, _ in recent) / len(recent)
+                gap_m = sum(g for _, g in recent) / len(recent)
+                cql_str = f" offline_td: {td_m:.3f} cql_gap: {gap_m:.3f}"
             print(
-                f"Steps/sec: {steps_per_sec:.2f}, up/sec: {updates_per_sec:.2f} qloss: {sum(q_losses[-100:])/100}, return: {sum(episodic_returns[-100:])/100} left: {(args.total_timesteps-global_step)/steps_per_sec}s"
+                f"Steps/sec: {steps_per_sec:.2f}, up/sec: {updates_per_sec:.2f} qloss: {sum(q_losses[-100:])/100}, return: {sum(episodic_returns[-100:])/100}{cql_str} left: {(args.total_timesteps-global_step)/steps_per_sec}s"
             )
             last_log_time = now
             step_count = 0
