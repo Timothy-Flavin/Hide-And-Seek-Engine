@@ -55,6 +55,10 @@ TOTAL="${TOTAL:-1000000}"                 # total env frames per run (1M)
 CHUNK="${CHUNK:-1000000}"                  # frames per resumable chunk (== eval cadence)
 EGO_SIZE="${EGO_SIZE:-32}"
 USE_RADIO="${USE_RADIO:-1}"               # 1 -> decentralized_ego_radio variant
+# --- Behavior-cloning term (ppo/sac only; dqn uses --human-cql, unaffected) ---
+BC_COEF="${BC_COEF:-1.0}"                 # weight on the BC cross-entropy term (bumped)
+BC_SEPARATE="${BC_SEPARATE:-0}"           # 1 -> BC trains a SEPARATE net; the online
+                                          # policy trains pure-RL (identifiability probe)
 NUM_ENVS="${NUM_ENVS:-128}"
 NUM_ENVS_NEIGHBORHOOD="${NUM_ENVS_NEIGHBORHOOD:-64}"  # larger map -> fewer envs (VRAM)
 # Extra flags appended verbatim to every runner invocation (e.g. EXTRA_FLAGS="--no-cuda"
@@ -78,10 +82,15 @@ envs_for () {  # per-level num_envs (neighborhood map is the big one)
     esac
 }
 
-# Offline objective flags for each algorithm.
+# Offline objective flags for each algorithm. The BC term (ppo/sac) carries the
+# bumped --bc-coef and, when BC_SEPARATE=1, --bc-separate (train the human demos on
+# an independent net so the online policy learns unencumbered -- isolates whether a
+# shared head was the blocker). DQN's CQL term takes neither.
 offline_flags_for () {
+    local sep=""
+    [ "${BC_SEPARATE}" = "1" ] && sep="--bc-separate"
     case "$1" in
-        ppo|sac) echo "--human-bc" ;;
+        ppo|sac) echo "--human-bc --bc-coef ${BC_COEF} ${sep}" ;;
         dqn)     echo "--human-cql --exploration-timesteps ${TOTAL}" ;;
         *)       echo "" ;;
     esac
@@ -144,6 +153,7 @@ PY
 echo "Offline+online RL experiment:"
 echo "  seeds=[${SEEDS}] levels=[${LEVELS}] algs=[${ALGS}]"
 echo "  total=${TOTAL} chunk=${CHUNK} (${N_CHUNKS} chunks/run) ego=${EGO_SIZE} radio=${USE_RADIO}"
+echo "  bc_coef=${BC_COEF} bc_separate=${BC_SEPARATE} (ppo/sac)"
 echo "--- checking offline dataset (human demos) ---"
 check_demos
 

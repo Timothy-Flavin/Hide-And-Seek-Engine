@@ -123,10 +123,17 @@ class Args:
     #     existing run_experiments.sh behavior exactly) ---
     human_bc: bool = False
     """add a behavior-cloning loss from recorded human data (decentralized only)"""
-    bc_coef: float = 0.2
+    bc_coef: float = 1.0
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
     """minibatch size for the BC term"""
+    bc_separate: bool = False
+    """train the BC term on a SEPARATE policy network (its own optimizer) instead
+    of adding it to the online policy's loss. Diagnostic: isolates whether a shared
+    head (non-identifiability of the online vs human action for the same obs) is
+    what blocks learning. The online net then trains on PURE RL (no BC gradient)
+    and is what gets evaluated for team score, while the human demos train an
+    independent net whose imitation accuracy is logged (charts/bc_move_acc)."""
     resume: bool = False
     """resume weights/optimizer/RNG from this run's resume checkpoint, and write
     one at the end (for the 100k-frame-chunk loop)"""
@@ -356,6 +363,17 @@ if __name__ == "__main__":
     agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
+    # --- Separate BC network (diagnostic; --bc-separate). Trains ONLY on the human
+    #     demos with its own optimizer, so the online `agent` above gets zero BC
+    #     gradient. Created here (before resume restore) so it participates in the
+    #     resume state. Only meaningful for the decentralized BC path. ---
+    bc_separate = bool(args.human_bc and args.bc_separate and not args.centralized)
+    bc_agent = None
+    bc_optimizer = None
+    if bc_separate:
+        bc_agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
+        bc_optimizer = optim.Adam(bc_agent.parameters(), lr=args.learning_rate, eps=1e-5)
+
     # Result layout: experiments/results/<level>/ppo/ ; weights checkpointed at
     # 20/40/60/80/100% of training under that folder's checkpoints/.
     variant = variant_name(args.centralized, args.ego_view, use_radio)
@@ -370,7 +388,12 @@ if __name__ == "__main__":
     if args.resume:
         state = load_resume(resume_path, map_location=device)
         if state is not None:
-            restore_resume(state, {"agent": agent}, optimizers={"optimizer": optimizer})
+            resume_models = {"agent": agent}
+            resume_opts = {"optimizer": optimizer}
+            if bc_separate:
+                resume_models["bc_agent"] = bc_agent
+                resume_opts["bc_optimizer"] = bc_optimizer
+            restore_resume(state, resume_models, optimizers=resume_opts)
             restore_rng(state)
             cumulative_offset = int(state.get("cumulative_step", 0))
             print(f"[ppo] Resumed from {resume_path} at {cumulative_offset} cumulative frames.")
@@ -395,7 +418,10 @@ if __name__ == "__main__":
                 # Refuse stale demos (goal/entity block unpopulated vs the live env).
                 assert_demos_match_env(env, bc_batcher.internal, args.num_envs, n_agents,
                                        device, label="ppo human-bc")
-                print(f"[ppo] BC enabled with {bc_batcher.n} human frames.")
+                mode = ("SEPARATE net (online policy trains pure-RL)" if bc_separate
+                        else "shared net")
+                print(f"[ppo] BC enabled with {bc_batcher.n} human frames "
+                      f"(coef={args.bc_coef}, {mode}).")
 
     # ALGO Logic: Storage setup. The spatial rollout is the dominant on-GPU
     # tensor (num_steps x num_envs x C x H x W); storing it as uint8 cuts its
@@ -633,13 +659,23 @@ if __name__ == "__main__":
 
                 if bc_batcher is not None:
                     bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
-                    bc_move_logits, bc_radio_logits = agent.bc_logits(bc_spatial, bc_internal)
+                    # In separate mode the BC term trains its own net; the online
+                    # `agent` is left untouched (pure RL). Otherwise it's added to
+                    # the shared online loss as before.
+                    bc_net = bc_agent if bc_separate else agent
+                    bc_move_logits, bc_radio_logits = bc_net.bc_logits(bc_spatial, bc_internal)
                     bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
                     # Clone the human's radio action too, so the radio head learns
                     # to broadcast from demos (not RL alone).
                     if bc_radio_logits is not None and bc_radio is not None:
                         bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
-                    loss = loss + args.bc_coef * bc_loss
+                    if bc_separate:
+                        bc_optimizer.zero_grad()
+                        (args.bc_coef * bc_loss).backward()
+                        nn.utils.clip_grad_norm_(bc_agent.parameters(), args.max_grad_norm)
+                        bc_optimizer.step()
+                    else:
+                        loss = loss + args.bc_coef * bc_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -662,6 +698,16 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
+
+        # BC imitation accuracy on a held-in demo sample -- the identifiability
+        # read: how well the BC-trained net (separate net under --bc-separate, else
+        # the shared online net) reproduces the human's move on demo observations.
+        if bc_batcher is not None:
+            with torch.no_grad():
+                s_bc, i_bc, a_bc, _ = bc_batcher.sample(2048, device)
+                bc_move_logits, _ = (bc_agent if bc_separate else agent).bc_logits(s_bc, i_bc)
+                bc_acc = (bc_move_logits.argmax(-1) == a_bc).float().mean().item()
+            writer.add_scalar("charts/bc_move_acc", bc_acc, global_step)
         
         sps = int(global_step / (time.time() - start_time))
         print(f"global_step={global_step}, SPS={sps}")
@@ -688,10 +734,15 @@ if __name__ == "__main__":
 
     # Resume checkpoint for the next 100k-frame chunk (opt-in via --resume).
     if args.resume:
+        save_models = {"agent": agent}
+        save_opts = {"optimizer": optimizer}
+        if bc_separate:
+            save_models["bc_agent"] = bc_agent
+            save_opts["bc_optimizer"] = bc_optimizer
         save_resume(
             resume_path,
-            models={"agent": agent},
-            optimizers={"optimizer": optimizer},
+            models=save_models,
+            optimizers=save_opts,
             cumulative_step=cumulative_offset + args.total_timesteps,
         )
         print(f"[ppo] Saved resume checkpoint -> {resume_path} "

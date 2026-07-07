@@ -111,10 +111,17 @@ class Args:
     #     existing run_experiments.sh behavior exactly) ---
     human_bc: bool = False
     """add a behavior-cloning loss from recorded human data (decentralized only)"""
-    bc_coef: float = 0.2
+    bc_coef: float = 1.0
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
     """minibatch size for the BC term"""
+    bc_separate: bool = False
+    """train the BC term on a SEPARATE actor network (its own optimizer) instead of
+    adding it to the online actor's loss. Diagnostic: isolates whether a shared head
+    (non-identifiability of the online vs human action for the same obs) is what
+    blocks learning. The online actor then trains on PURE RL (no BC gradient) and is
+    what gets evaluated, while the human demos train an independent actor whose
+    imitation accuracy is logged (charts/bc_move_acc)."""
     resume: bool = False
     """resume weights/optimizers/log_alpha/RNG from this run's resume checkpoint,
     and write one at the end (for the 100k-frame-chunk loop)"""
@@ -543,6 +550,17 @@ if __name__ == "__main__":
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr, eps=1e-4)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr, eps=1e-4)
 
+    # --- Separate BC actor (diagnostic; --bc-separate). Trains ONLY on the human
+    #     demos with its own optimizer, so the online `actor` above gets zero BC
+    #     gradient. Created before resume restore so it participates in resume
+    #     state. Only meaningful for the decentralized BC path. ---
+    bc_separate = bool(args.human_bc and args.bc_separate and not args.centralized)
+    bc_actor = None
+    bc_actor_optimizer = None
+    if bc_separate:
+        bc_actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
+        bc_actor_optimizer = optim.Adam(list(bc_actor.parameters()), lr=args.policy_lr, eps=1e-4)
+
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -args.target_entropy_scale * torch.log(1 / torch.tensor(num_actions_per_agent))
@@ -570,12 +588,13 @@ if __name__ == "__main__":
     if args.resume:
         state = load_resume(resume_path, map_location=device)
         if state is not None:
-            restore_resume(
-                state,
-                {"actor": actor, "qf1": qf1, "qf2": qf2,
-                 "qf1_target": qf1_target, "qf2_target": qf2_target},
-                optimizers={"q_optimizer": q_optimizer, "actor_optimizer": actor_optimizer},
-            )
+            resume_models = {"actor": actor, "qf1": qf1, "qf2": qf2,
+                             "qf1_target": qf1_target, "qf2_target": qf2_target}
+            resume_opts = {"q_optimizer": q_optimizer, "actor_optimizer": actor_optimizer}
+            if bc_separate:
+                resume_models["bc_actor"] = bc_actor
+                resume_opts["bc_actor_optimizer"] = bc_actor_optimizer
+            restore_resume(state, resume_models, optimizers=resume_opts)
             if args.autotune and "log_alpha" in state.get("extra", {}):
                 with torch.no_grad():
                     log_alpha.copy_(state["extra"]["log_alpha"].to(device))
@@ -606,7 +625,10 @@ if __name__ == "__main__":
                 # Refuse stale demos (goal/entity block unpopulated vs the live env).
                 assert_demos_match_env(env, bc_batcher.internal, args.num_envs, n_agents,
                                        device, label="sac human-bc")
-                print(f"[sac] BC enabled with {bc_batcher.n} human frames.")
+                mode = ("SEPARATE net (online actor trains pure-RL)" if bc_separate
+                        else "shared net")
+                print(f"[sac] BC enabled with {bc_batcher.n} human frames "
+                      f"(coef={args.bc_coef}, {mode}).")
 
     start_time = time.time()
     last_log_time = start_time
@@ -854,13 +876,22 @@ if __name__ == "__main__":
 
                 if bc_batcher is not None:
                     bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
-                    bc_move_logits, bc_radio_logits = actor.bc_logits(bc_spatial, bc_internal)
+                    # In separate mode the BC term trains its own actor; the online
+                    # `actor` is left untouched (pure RL). Otherwise it's added to
+                    # the shared online actor loss as before.
+                    bc_net = bc_actor if bc_separate else actor
+                    bc_move_logits, bc_radio_logits = bc_net.bc_logits(bc_spatial, bc_internal)
                     bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
                     # Clone the human's radio action too, so the radio head learns
                     # to broadcast from demos (not RL alone).
                     if bc_radio_logits is not None and bc_radio is not None:
                         bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
-                    actor_loss = actor_loss + args.bc_coef * bc_loss
+                    if bc_separate:
+                        bc_actor_optimizer.zero_grad()
+                        (args.bc_coef * bc_loss).backward()
+                        bc_actor_optimizer.step()
+                    else:
+                        actor_loss = actor_loss + args.bc_coef * bc_loss
 
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
@@ -910,6 +941,16 @@ if __name__ == "__main__":
             if args.autotune:
                 writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
+            # BC imitation accuracy -- the identifiability read: how well the
+            # BC-trained net (separate net under --bc-separate, else the shared
+            # online actor) reproduces the human's move on demo observations.
+            if bc_batcher is not None:
+                with torch.no_grad():
+                    s_bc, i_bc, a_bc, _ = bc_batcher.sample(2048, device)
+                    bc_move_logits, _ = (bc_actor if bc_separate else actor).bc_logits(s_bc, i_bc)
+                    bc_acc = (bc_move_logits.argmax(-1) == a_bc).float().mean().item()
+                writer.add_scalar("charts/bc_move_acc", bc_acc, global_step)
+
             last_log_time = now
             step_count = 0
             update_count = 0
@@ -938,10 +979,14 @@ if __name__ == "__main__":
         if args.autotune:
             extra["log_alpha"] = log_alpha.detach().cpu()
             optimizers["a_optimizer"] = a_optimizer
+        save_models = {"actor": actor, "qf1": qf1, "qf2": qf2,
+                       "qf1_target": qf1_target, "qf2_target": qf2_target}
+        if bc_separate:
+            save_models["bc_actor"] = bc_actor
+            optimizers["bc_actor_optimizer"] = bc_actor_optimizer
         save_resume(
             resume_path,
-            models={"actor": actor, "qf1": qf1, "qf2": qf2,
-                    "qf1_target": qf1_target, "qf2_target": qf2_target},
+            models=save_models,
             optimizers=optimizers,
             cumulative_step=cumulative_offset + args.total_timesteps,
             extra=extra,
