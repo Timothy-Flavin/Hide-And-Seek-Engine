@@ -37,7 +37,7 @@ RUN="${RUN:-1}"                          # run/seed number (recorder teammate-ru
 EGO_SIZE="${EGO_SIZE:-32}"               # ego window side (recorder and trainer must match)
 FRAMES_PER_AGENT="${FRAMES_PER_AGENT:-2500}"  # demos per agent type, per level, per checkpoint
 ITERS="${ITERS:-4}"                      # number of train->record iterations
-CHUNK="${CHUNK:-500000}"                 # online env frames per RL chunk (per level)
+CHUNK="${CHUNK:-200000}"                 # online env frames per RL chunk (per level)
 # Epsilon anneals along cumulative frames, so span the whole loop (DQN only).
 EXPLORE_TOTAL="${EXPLORE_TOTAL:-$((CHUNK * ITERS))}"
 USE_RADIO="${USE_RADIO:-1}"              # 1 -> train+use the radio head (teammates transmit)
