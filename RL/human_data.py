@@ -288,6 +288,48 @@ def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | Non
     return batcher
 
 
+def load_per_agent_bc_batchers(level: str, n_agents: int, expected_spatial_shape=None,
+                               ego_size: int | None = None, expected_internal_dim: int | None = None):
+    """Build one :class:`BCBatcher` per controlled-agent index for per-agent-nets
+    training, keyed by agent index. Splits the level's demos on the recorded
+    ``controlled_agent`` field so each agent's own net clones only its own demos.
+    Returns ``{agent_idx: BCBatcher}`` (agents with no demos are omitted); empty
+    dict when there is no data or a shape/internal-dim mismatch (same checks as
+    :func:`load_bc_batcher`)."""
+    data = load_human_dataset(level, fields=BC_FIELDS + ["controlled_agent"], ego_size=ego_size)
+    if not data or "obs_spatial" not in data or len(data["obs_spatial"]) == 0:
+        return {}
+    n = len(data["obs_spatial"])
+    ca = data.get("controlled_agent")
+    if ca is None or len(ca) != n:
+        print(f"[human-bc] per-agent-nets needs the 'controlled_agent' field but it "
+              f"is missing/misaligned for '{level}'; falling back to pooled BC.")
+        return {}
+    ca = np.asarray(ca).reshape(-1).astype(int)
+    radio_all = data.get("radio")
+    has_radio = radio_all is not None and len(radio_all) == n
+
+    out: dict[int, BCBatcher] = {}
+    for a in range(n_agents):
+        idx = np.where(ca == a)[0]
+        if idx.size == 0:
+            continue
+        radio_a = radio_all[idx] if has_radio else None
+        batcher = BCBatcher(data["obs_spatial"][idx], data["obs_internal"][idx],
+                            data["actions_move"][idx], radio=radio_a)
+        if expected_spatial_shape is not None and tuple(batcher.spatial_shape) != tuple(expected_spatial_shape):
+            print(f"[human-bc] recorded obs shape {batcher.spatial_shape} != model input "
+                  f"{tuple(expected_spatial_shape)}; skipping per-agent BC.")
+            return {}
+        internal_dim = int(batcher.internal.shape[-1])
+        if expected_internal_dim is not None and internal_dim != int(expected_internal_dim):
+            print(f"[human-bc] recorded internal dim {internal_dim} != model input "
+                  f"{int(expected_internal_dim)}; skipping per-agent BC.")
+            return {}
+        out[a] = batcher
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Stale-demo guard
 # --------------------------------------------------------------------------- #

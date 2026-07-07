@@ -38,7 +38,7 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
 )
-from RL.human_data import load_bc_batcher, assert_demos_match_env
+from RL.human_data import load_bc_batcher, load_per_agent_bc_batchers, assert_demos_match_env
 from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 
@@ -115,6 +115,12 @@ class Args:
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
     """minibatch size for the BC term"""
+    per_agent_nets: bool = False
+    """decentralized-only: give each agent index its own independent actor
+    (encoder+head) instead of sharing one, so each agent specializes to its role.
+    Online RL and the BC term are both routed per-agent (each agent's demos train
+    its own net). Checkpoints use a '_pa' variant suffix so they don't collide with
+    the shared-net baseline. (The Q-networks stay shared.)"""
     bc_separate: bool = False
     """train the BC term on a SEPARATE actor network (its own optimizer) instead of
     adding it to the online actor's loss. Diagnostic: isolates whether a shared head
@@ -353,7 +359,7 @@ class SoftQNetwork(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True, use_radio=False, n_radio_actions=0):
+    def __init__(self, spatial_shape, internal_dim, n_agents, num_actions_per_agent=5, centralized=True, use_radio=False, n_radio_actions=0, per_agent=False):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
@@ -361,42 +367,67 @@ class Actor(nn.Module):
         # Radio ablation: decentralized-only per-agent radio policy head (bins).
         self.use_radio = use_radio and not centralized
         self.n_radio_actions = n_radio_actions
+        # Per-agent nets: decentralized-only, one independent (encoder+head) per
+        # agent index so each agent's policy specializes to its role. (The Q-nets
+        # stay shared; specialization is about the acting policy.)
+        self.per_agent = bool(per_agent and not centralized)
 
-        self.encoder = MixedObservationEncoder(
-            spatial_shape=spatial_shape,
-            vector_dim=np.prod(internal_dim) if centralized else np.prod(internal_dim) // n_agents,
-            spatial_hidden_dim=128,
-            vector_hidden_dim=32,
-            output_dim=256,
-        )
+        vector_dim = np.prod(internal_dim) if centralized else np.prod(internal_dim) // n_agents
+
+        def _make_encoder():
+            return MixedObservationEncoder(
+                spatial_shape=spatial_shape, vector_dim=vector_dim,
+                spatial_hidden_dim=128, vector_hidden_dim=32, output_dim=256,
+            )
+
         # Fused policy head of width (move + radio) for the radio ablation; the
         # logits are zero-copy split into the two factors (single kernel).
         self.head_out_dim = num_actions_per_agent + (n_radio_actions if self.use_radio else 0)
-        self.num_actor_heads = n_agents if centralized else 1
-        self.actor_heads = nn.ModuleList([
-            nn.Sequential(
+
+        def _make_head():
+            return nn.Sequential(
                 layer_init(nn.Linear(256, 128)),
                 nn.ReLU(),
-                layer_init(nn.Linear(128, self.head_out_dim), std=0.01)
-            ) for _ in range(self.num_actor_heads)
-        ])
+                layer_init(nn.Linear(128, self.head_out_dim), std=0.01),
+            )
+
+        if self.per_agent:
+            self.encoders = nn.ModuleList([_make_encoder() for _ in range(n_agents)])
+            self.actor_heads = nn.ModuleList([_make_head() for _ in range(n_agents)])
+        else:
+            self.encoder = _make_encoder()
+            self.num_actor_heads = n_agents if centralized else 1
+            self.actor_heads = nn.ModuleList([_make_head() for _ in range(self.num_actor_heads)])
 
         if centralized:
             self.forward = self._forward_centralized
         else:
             self.forward = self._forward_decentralized
 
-    def get_action_radio(self, spatial, internal):
+    def _decentralized_fused_logits(self, spatial, internal):
+        """Fused (move+radio) logits [B, n_agents, head_out_dim] for the
+        decentralized policy -- shared head, or one net per agent under per_agent."""
         spatial = cast_obs(spatial)
-        # Decentralized radio ablation: ONE encoder pass, ONE fused head; split the
-        # logits into move/radio and return (action, log_prob, probs) for each.
         B = spatial.shape[0]
         A = spatial.shape[1] if spatial.dim() == 5 else self.n_agents
+        if self.per_agent:
+            outs = []
+            for a in range(A):
+                s_a = spatial[:, a] if spatial.dim() == 5 else spatial
+                i_a = internal[:, a] if internal.dim() == 3 else internal
+                x = torch.cat([s_a.reshape(B, -1), i_a.reshape(B, -1)], dim=-1)
+                outs.append(self.actor_heads[a](self.encoders[a](x)))
+            return torch.stack(outs, dim=1)                       # [B, A, head_out_dim]
         s = spatial.view(B * A, *spatial.shape[-3:])
         it = internal.view(B * A, -1)
         x = torch.cat([s.view(B * A, -1), it.view(B * A, -1)], dim=-1)
         feats = self.encoder(x)
-        logits_all = self.actor_heads[0](feats).view(B, A, self.head_out_dim)
+        return self.actor_heads[0](feats).view(B, A, self.head_out_dim)
+
+    def get_action_radio(self, spatial, internal):
+        # Decentralized radio ablation: fused head split into move/radio; returns
+        # (action, log_prob, probs) for each factor.
+        logits_all = self._decentralized_fused_logits(spatial, internal)
         move_logits = logits_all[..., :self.num_actions_per_agent]
         radio_logits = logits_all[..., self.num_actions_per_agent:]
 
@@ -423,20 +454,8 @@ class Actor(nn.Module):
         return logits  # [B, n_agents, num_actions]
 
     def _forward_decentralized(self, spatial, internal):
-        spatial = cast_obs(spatial)
-        B = spatial.shape[0]
-        A = spatial.shape[1] if spatial.dim() == 5 else self.n_agents
-        spatial = spatial.view(B * A, *spatial.shape[-3:])
-        internal = internal.view(B * A, -1)
-        B_eff = B * A
-            
-        x = torch.cat([spatial.view(B_eff, -1), internal.view(B_eff, -1)], dim=-1)
-        feats = self.encoder(x)
-        logits = torch.stack([head(feats) for head in self.actor_heads], dim=1)
-        
-        logits = logits.view(B, A, self.num_actions_per_agent)
-            
-        return logits  # [B, n_agents, num_actions]
+        # Move logits only (drop the radio slice if present).
+        return self._decentralized_fused_logits(spatial, internal)[..., :self.num_actions_per_agent]
 
     def get_action(self, spatial, internal):
         logits = self(spatial, internal)
@@ -449,18 +468,20 @@ class Actor(nn.Module):
 
         return action, log_prob, action_probs
 
-    def bc_logits(self, spatial, internal):
+    def bc_logits(self, spatial, internal, agent_idx=0):
         """Per-single-agent BC logits (decentralized): (move, radio).
 
-        Shared encoder + shared actor head on one agent's ego obs
-        (spatial: [B, C, S, S] uint8, internal: [B, D]); returns the move slice
-        and, when ``use_radio``, the radio slice (else None).
+        Runs one agent's ego obs (spatial: [B, C, S, S] uint8, internal: [B, D])
+        through its policy. In per-agent-nets mode ``agent_idx`` selects that
+        agent's own network; otherwise the shared encoder/head is used.
         """
         spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
-        feats = self.encoder(x)
-        out = self.actor_heads[0](feats)
+        if self.per_agent:
+            out = self.actor_heads[agent_idx](self.encoders[agent_idx](x))
+        else:
+            out = self.actor_heads[0](self.encoder(x))
         move = out[..., :self.num_actions_per_agent]
         radio = out[..., self.num_actions_per_agent:] if self.use_radio else None
         return move, radio
@@ -538,7 +559,8 @@ if __name__ == "__main__":
     n_radio_actions = n_agents
     use_radio = bool(args.use_radio and not args.centralized)
 
-    actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
+    per_agent = bool(args.per_agent_nets and not args.centralized)
+    actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device))
     qf1 = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
     qf2 = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
     qf1_target = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
@@ -558,7 +580,7 @@ if __name__ == "__main__":
     bc_actor = None
     bc_actor_optimizer = None
     if bc_separate:
-        bc_actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
+        bc_actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device))
         bc_actor_optimizer = optim.Adam(list(bc_actor.parameters()), lr=args.policy_lr, eps=1e-4)
 
     # Automatic entropy tuning
@@ -575,8 +597,9 @@ if __name__ == "__main__":
     )
 
     # Result layout: experiments/results/<level>/sac/ ; weights checkpointed at
-    # 20/40/60/80/100% of training under that folder's checkpoints/.
-    variant = variant_name(args.centralized, args.ego_view, use_radio)
+    # 20/40/60/80/100% of training under that folder's checkpoints/. Per-agent-nets
+    # runs get a '_pa' variant suffix so they never collide with the shared baseline.
+    variant = variant_name(args.centralized, args.ego_view, use_radio) + ("_pa" if per_agent else "")
     results_dir = results_dir_for(args.level, "sac")
     run_prefix = f"sac_{variant}_run_{args.run_number}"
     ckpt = CheckpointSaver(results_dir, run_prefix, args.total_timesteps)
@@ -627,8 +650,20 @@ if __name__ == "__main__":
                                        device, label="sac human-bc")
                 mode = ("SEPARATE net (online actor trains pure-RL)" if bc_separate
                         else "shared net")
+                nets = "per-agent nets" if per_agent else "one shared net"
                 print(f"[sac] BC enabled with {bc_batcher.n} human frames "
-                      f"(coef={args.bc_coef}, {mode}).")
+                      f"(coef={args.bc_coef}, {mode}, {nets}).")
+
+    # Per-agent BC routing: each agent's demos train its own network.
+    bc_batchers_pa = {}
+    if per_agent and bc_batcher is not None:
+        bc_batchers_pa = load_per_agent_bc_batchers(
+            args.level, n_agents, expected_spatial_shape=single_spatial_shape,
+            ego_size=args.ego_size if args.ego_view else None,
+            expected_internal_dim=env.agent_internal_dim,
+        )
+        print(f"[sac] per-agent BC frame counts by agent index: "
+              f"{ {a: b.n for a, b in bc_batchers_pa.items()} }")
 
     start_time = time.time()
     last_log_time = start_time
@@ -875,17 +910,28 @@ if __name__ == "__main__":
                 actor_loss = -min_qf_values_sum.mean()
 
                 if bc_batcher is not None:
-                    bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
                     # In separate mode the BC term trains its own actor; the online
                     # `actor` is left untouched (pure RL). Otherwise it's added to
                     # the shared online actor loss as before.
                     bc_net = bc_actor if bc_separate else actor
-                    bc_move_logits, bc_radio_logits = bc_net.bc_logits(bc_spatial, bc_internal)
-                    bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
-                    # Clone the human's radio action too, so the radio head learns
-                    # to broadcast from demos (not RL alone).
-                    if bc_radio_logits is not None and bc_radio is not None:
-                        bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
+                    if per_agent and bc_batchers_pa:
+                        # Route each agent's demos through its own network.
+                        bc_loss = 0.0
+                        for a, batcher in bc_batchers_pa.items():
+                            s_a, i_a, act_a, rad_a = batcher.sample(args.bc_batch_size, device)
+                            ml_a, rl_a = bc_net.bc_logits(s_a, i_a, agent_idx=a)
+                            la = F.cross_entropy(ml_a, act_a)
+                            if rl_a is not None and rad_a is not None:
+                                la = la + F.cross_entropy(rl_a, rad_a)
+                            bc_loss = bc_loss + la
+                    else:
+                        bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
+                        bc_move_logits, bc_radio_logits = bc_net.bc_logits(bc_spatial, bc_internal)
+                        bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
+                        # Clone the human's radio action too, so the radio head learns
+                        # to broadcast from demos (not RL alone).
+                        if bc_radio_logits is not None and bc_radio is not None:
+                            bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
                     if bc_separate:
                         bc_actor_optimizer.zero_grad()
                         (args.bc_coef * bc_loss).backward()
@@ -941,14 +987,25 @@ if __name__ == "__main__":
             if args.autotune:
                 writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
-            # BC imitation accuracy -- the identifiability read: how well the
-            # BC-trained net (separate net under --bc-separate, else the shared
-            # online actor) reproduces the human's move on demo observations.
+            # BC imitation accuracy -- how well the BC-trained net reproduces the
+            # human's move on demo observations. Per-agent-nets logs both overall
+            # and each agent's own net (charts/bc_move_acc_a).
             if bc_batcher is not None:
+                bc_net = bc_actor if bc_separate else actor
                 with torch.no_grad():
-                    s_bc, i_bc, a_bc, _ = bc_batcher.sample(2048, device)
-                    bc_move_logits, _ = (bc_actor if bc_separate else actor).bc_logits(s_bc, i_bc)
-                    bc_acc = (bc_move_logits.argmax(-1) == a_bc).float().mean().item()
+                    if per_agent and bc_batchers_pa:
+                        correct = total = 0
+                        for a, batcher in bc_batchers_pa.items():
+                            s_a, i_a, act_a, _ = batcher.sample(2048, device)
+                            ml_a, _ = bc_net.bc_logits(s_a, i_a, agent_idx=a)
+                            c = (ml_a.argmax(-1) == act_a).float().sum().item()
+                            correct += c; total += act_a.shape[0]
+                            writer.add_scalar(f"charts/bc_move_acc_{a}", c / act_a.shape[0], global_step)
+                        bc_acc = correct / max(total, 1)
+                    else:
+                        s_bc, i_bc, a_bc, _ = bc_batcher.sample(2048, device)
+                        bc_move_logits, _ = bc_net.bc_logits(s_bc, i_bc)
+                        bc_acc = (bc_move_logits.argmax(-1) == a_bc).float().mean().item()
                 writer.add_scalar("charts/bc_move_acc", bc_acc, global_step)
 
             last_log_time = now

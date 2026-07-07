@@ -59,6 +59,8 @@ USE_RADIO="${USE_RADIO:-1}"               # 1 -> decentralized_ego_radio variant
 BC_COEF="${BC_COEF:-1.0}"                 # weight on the BC cross-entropy term (bumped)
 BC_SEPARATE="${BC_SEPARATE:-0}"           # 1 -> BC trains a SEPARATE net; the online
                                           # policy trains pure-RL (identifiability probe)
+PER_AGENT="${PER_AGENT:-0}"               # 1 -> one net per agent index (each agent
+                                          # specializes; online+BC routed per-agent)
 NUM_ENVS="${NUM_ENVS:-128}"
 NUM_ENVS_NEIGHBORHOOD="${NUM_ENVS_NEIGHBORHOOD:-64}"  # larger map -> fewer envs (VRAM)
 # Extra flags appended verbatim to every runner invocation (e.g. EXTRA_FLAGS="--no-cuda"
@@ -87,10 +89,11 @@ envs_for () {  # per-level num_envs (neighborhood map is the big one)
 # an independent net so the online policy learns unencumbered -- isolates whether a
 # shared head was the blocker). DQN's CQL term takes neither.
 offline_flags_for () {
-    local sep=""
+    local sep="" pa=""
     [ "${BC_SEPARATE}" = "1" ] && sep="--bc-separate"
+    [ "${PER_AGENT}" = "1" ] && pa="--per-agent-nets"
     case "$1" in
-        ppo|sac) echo "--human-bc --bc-coef ${BC_COEF} ${sep}" ;;
+        ppo|sac) echo "--human-bc --bc-coef ${BC_COEF} ${sep} ${pa}" ;;
         dqn)     echo "--human-cql --exploration-timesteps ${TOTAL}" ;;
         *)       echo "" ;;
     esac
@@ -153,7 +156,7 @@ PY
 echo "Offline+online RL experiment:"
 echo "  seeds=[${SEEDS}] levels=[${LEVELS}] algs=[${ALGS}]"
 echo "  total=${TOTAL} chunk=${CHUNK} (${N_CHUNKS} chunks/run) ego=${EGO_SIZE} radio=${USE_RADIO}"
-echo "  bc_coef=${BC_COEF} bc_separate=${BC_SEPARATE} (ppo/sac)"
+echo "  bc_coef=${BC_COEF} bc_separate=${BC_SEPARATE} per_agent=${PER_AGENT} (ppo/sac)"
 echo "--- checking offline dataset (human demos) ---"
 check_demos
 
