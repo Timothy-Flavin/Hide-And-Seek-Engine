@@ -36,7 +36,7 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
 )
-from RL.human_data import load_bc_batcher, load_transition_batcher
+from RL.human_data import load_bc_batcher, load_transition_batcher, assert_demos_match_env
 from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 
@@ -96,7 +96,7 @@ class Args:
     """weight on the whole offline-Q+CQL term (added to the online TD loss)"""
     cql_alpha: float = 1.0
     """weight on the conservative (logsumexp - taken) penalty within the offline term"""
-    bc_coef: float = 1.0
+    bc_coef: float = 0.2
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
     """minibatch size for the BC (or offline-Q/CQL) term"""
@@ -516,6 +516,9 @@ if __name__ == "__main__":
             if cql_batcher is None:
                 print(f"[dqn] --human-cql set but no matching human transitions for '{args.level}'; skipping offline-Q.")
             else:
+                # Refuse stale demos (goal/entity block unpopulated vs the live env).
+                assert_demos_match_env(env, cql_batcher.internal, args.num_envs, n_agents,
+                                       device, label="dqn human-cql")
                 print(f"[dqn] offline-Q + CQL enabled with {cql_batcher.n} human transitions "
                       f"(cql_coef={args.cql_coef}, cql_alpha={args.cql_alpha}).")
     elif args.human_bc:
@@ -531,6 +534,9 @@ if __name__ == "__main__":
             if bc_batcher is None:
                 print(f"[dqn] --human-bc set but no matching human data for '{args.level}'; skipping BC.")
             else:
+                # Refuse stale demos (goal/entity block unpopulated vs the live env).
+                assert_demos_match_env(env, bc_batcher.internal, args.num_envs, n_agents,
+                                       device, label="dqn human-bc")
                 print(f"[dqn] BC enabled with {bc_batcher.n} human frames.")
 
     # Epsilon-schedule horizon; default reproduces the original math exactly.

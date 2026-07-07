@@ -274,6 +274,79 @@ def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | Non
 
 
 # --------------------------------------------------------------------------- #
+# Stale-demo guard
+# --------------------------------------------------------------------------- #
+# The recorded internal dim can MATCH the model (66 == 66) yet the demos still be
+# unusable: if they were recorded against an older engine build, whole slots of the
+# internal vector -- notably the relative-entity block that encodes the discovered/
+# shared survivor & teammate positions the policy navigates by -- are ALL ZERO in
+# every demo frame even though the current env populates them. Training on that is
+# worse than useless: the offline action is not a function of the (goal-less)
+# observation, so BC injects a near-random gradient into the shared encoder (and
+# the offline-Q obs is off-distribution). This guard catches it by comparing which
+# internal columns the LIVE env populates against which the demos ever populate.
+
+def _env_populated_internal_cols(env, num_envs, n_agents, internal_dim, device,
+                                 probe_steps=200, threshold=0.05):
+    """Set of per-agent internal columns the live env populates (nonzero in more
+    than ``threshold`` of agent-steps) over a short random rollout. Saves/restores
+    the torch/numpy/python RNG and resets the env afterward, so it does not perturb
+    training determinism any more than the existing post-chunk eval does."""
+    import random
+
+    rng_torch = torch.get_rng_state()
+    rng_np = np.random.get_state()
+    rng_py = random.getstate()
+    counts = np.zeros(int(internal_dim), dtype=np.float64)
+    total = 0
+    try:
+        env.reset()
+        for _ in range(probe_steps):
+            move = np.random.uniform(-1.0, 1.0, size=(num_envs, n_agents, 2)).astype(np.float32)
+            radio = np.random.randint(0, n_agents, size=(num_envs, n_agents)).astype(np.int32)
+            obs, _, terminations, truncations, _ = env.step(move, radio)
+            it = obs["internal"].reshape(-1, int(internal_dim)).detach().cpu().numpy()
+            counts += (it != 0).sum(axis=0)
+            total += it.shape[0]
+            if bool(terminations.any()) or bool(truncations.any()):
+                env.reset()
+    finally:
+        torch.set_rng_state(rng_torch)
+        np.random.set_state(rng_np)
+        random.setstate(rng_py)
+        env.reset()
+    if total == 0:
+        return set()
+    frac = counts / total
+    return {int(c) for c in np.where(frac > threshold)[0]}
+
+
+def assert_demos_match_env(env, demo_internal, num_envs, n_agents, device, *,
+                           label="human-bc", probe_steps=200, live_threshold=0.05):
+    """Raise SystemExit if the demos are stale relative to the current env's
+    observation (some internal columns the env populates are all-zero across every
+    demo frame). ``demo_internal`` is the [N, D] recorded internal array/tensor.
+    Returns quietly when the demos match."""
+    demo = np.asarray(demo_internal)
+    demo_nz = set(int(c) for c in np.where((demo != 0).any(axis=0))[0])
+    internal_dim = demo.shape[-1]
+    live_cols = _env_populated_internal_cols(
+        env, num_envs, n_agents, internal_dim, device,
+        probe_steps=probe_steps, threshold=live_threshold,
+    )
+    missing = sorted(c for c in live_cols if c not in demo_nz)
+    if missing:
+        raise SystemExit(
+            f"[{label}] STALE DEMOS: the env populates internal columns {missing} that "
+            f"are ALL-ZERO in every recorded demo frame. These demos were recorded "
+            f"against an older observation build (e.g. before the relative-entity block "
+            f"was populated); the offline term cannot see the goal/entity information the "
+            f"policy uses, so it would corrupt training rather than help. Re-record demos "
+            f"with the current engine (human_dataset.py), then re-run."
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Offline-transition minibatch source (DQN offline-Q / CQL)
 # --------------------------------------------------------------------------- #
 class TransitionBatcher:

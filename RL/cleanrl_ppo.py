@@ -36,7 +36,7 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
 )
-from RL.human_data import load_bc_batcher
+from RL.human_data import load_bc_batcher, assert_demos_match_env
 from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 import torch.nn.functional as F
@@ -123,7 +123,7 @@ class Args:
     #     existing run_experiments.sh behavior exactly) ---
     human_bc: bool = False
     """add a behavior-cloning loss from recorded human data (decentralized only)"""
-    bc_coef: float = 1.0
+    bc_coef: float = 0.2
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
     """minibatch size for the BC term"""
@@ -392,6 +392,9 @@ if __name__ == "__main__":
             if bc_batcher is None:
                 print(f"[ppo] --human-bc set but no matching human data for '{args.level}'; skipping BC.")
             else:
+                # Refuse stale demos (goal/entity block unpopulated vs the live env).
+                assert_demos_match_env(env, bc_batcher.internal, args.num_envs, n_agents,
+                                       device, label="ppo human-bc")
                 print(f"[ppo] BC enabled with {bc_batcher.n} human frames.")
 
     # ALGO Logic: Storage setup. The spatial rollout is the dominant on-GPU

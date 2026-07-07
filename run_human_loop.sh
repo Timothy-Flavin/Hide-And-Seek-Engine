@@ -35,7 +35,7 @@ LEVELS="${LEVELS:-levels/test_level levels/neighborhood_level levels/island_leve
 ALG="${ALG:-ppo}"                        # ppo | dqn | sac
 RUN="${RUN:-1}"                          # run/seed number (recorder teammate-run must match)
 EGO_SIZE="${EGO_SIZE:-32}"               # ego window side (recorder and trainer must match)
-FRAMES_PER_AGENT="${FRAMES_PER_AGENT:-2500}"  # demos per agent type, per level, per checkpoint
+FRAMES_PER_AGENT="${FRAMES_PER_AGENT:-1000}"  # demos per agent type, per level, per checkpoint
 ITERS="${ITERS:-4}"                      # number of train->record iterations
 CHUNK="${CHUNK:-200000}"                 # online env frames per RL chunk (per level)
 # Epsilon anneals along cumulative frames, so span the whole loop (DQN only).

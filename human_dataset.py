@@ -16,7 +16,7 @@ agents, then supports the iterative record -> train -> record loop. One run:
   loaded, else the same heuristic -- so their shared location/tiles/POIs reach
   the controlled agent's ego view;
 * records ``--frames-per-agent`` frames *per agent type, per level* (default
-  2500) and *appends* them under ``experiments/results/<level>/<agent_type>/`` as
+  1000) and *appends* them under ``experiments/results/<level>/<agent_type>/`` as
   immutable segments; a level is done once every agent type hits its quota;
 * logs the mean/std team episodic return for the session to
   ``experiments/results/<level>/human_returns.jsonl`` so team performance can be
@@ -636,7 +636,7 @@ def main():
     parser.add_argument("--level", default=None,
                         help="Level dir path (e.g. levels/test_level). If omitted, "
                              "sweep ALL levels until each has the per-agent quota.")
-    parser.add_argument("--frames-per-agent", type=int, default=2500,
+    parser.add_argument("--frames-per-agent", type=int, default=1000,
                         help="Frames to collect PER agent type this session; the "
                              "session ends once every type reaches this quota.")
     parser.add_argument("--max-steps", type=int, default=0,
