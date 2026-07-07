@@ -598,8 +598,12 @@ if __name__ == "__main__":
 
     # Result layout: experiments/results/<level>/sac/ ; weights checkpointed at
     # 20/40/60/80/100% of training under that folder's checkpoints/. Per-agent-nets
-    # runs get a '_pa' variant suffix so they never collide with the shared baseline.
-    variant = variant_name(args.centralized, args.ego_view, use_radio) + ("_pa" if per_agent else "")
+    # get a '_pa' suffix; BC that actually shapes the online policy gets a '_bc'
+    # suffix so RL and RL+BC runs save separately (apples-to-apples). --bc-separate
+    # is NOT tagged: its saved/evaluated policy is pure RL (the BC term only trains
+    # the throwaway net), so it belongs with the plain RL models.
+    _obj = "_bc" if (args.human_bc and not args.centralized and not bc_separate) else ""
+    variant = variant_name(args.centralized, args.ego_view, use_radio) + ("_pa" if per_agent else "") + _obj
     results_dir = results_dir_for(args.level, "sac")
     run_prefix = f"sac_{variant}_run_{args.run_number}"
     ckpt = CheckpointSaver(results_dir, run_prefix, args.total_timesteps)

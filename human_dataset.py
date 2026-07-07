@@ -167,13 +167,15 @@ class TeammatePolicy:
         return self.act_fn(spatial, internal)
 
 
-def _load_policy_state(level, alg, run_number, use_radio):
+def _load_policy_state(level, alg, run_number, use_radio, variant_suffix=""):
     """Return the decentralized_ego[_radio] policy state_dict for
     (level, alg, run, use_radio), or None. Prefers the rolling resume
-    checkpoint, then the 100% weight snapshot."""
+    checkpoint, then the 100% weight snapshot. ``variant_suffix`` (e.g. ``_pa``
+    for per-agent nets, ``_bc``/``_cql`` for the offline objective) selects the
+    matching saved variant."""
     import torch
 
-    variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
+    variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio) + variant_suffix
     results_dir = results_dir_for(level, alg)
     prefix = f"{alg}_{variant}_run_{run_number}"
     key = POLICY_KEY[alg]
@@ -190,7 +192,7 @@ def _load_policy_state(level, alg, run_number, use_radio):
     return None
 
 
-def _current_checkpoint_id(level, alg, run_number):
+def _current_checkpoint_id(level, alg, run_number, variant_suffix=""):
     """Stable id for the teammate checkpoint currently driving the level, so
     recorded demos can be tagged with (and counted against) the checkpoint they
     were gathered for. Mirrors ``_build_teammate_policy``'s load order (radio
@@ -199,7 +201,7 @@ def _current_checkpoint_id(level, alg, run_number):
 
     key = POLICY_KEY[alg]
     for use_radio in (True, False):
-        variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
+        variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio) + variant_suffix
         results_dir = results_dir_for(level, alg)
         prefix = f"{alg}_{variant}_run_{run_number}"
 
@@ -213,27 +215,32 @@ def _current_checkpoint_id(level, alg, run_number):
     return "none"
 
 
-def _build_teammate_policy(env, level, alg, run_number, device):
+def _build_teammate_policy(env, level, alg, run_number, device, per_agent=False, variant_suffix=""):
     """Build the teammate policy, preferring a radio-enabled checkpoint.
 
     Tries the ``decentralized_ego_radio`` variant first (teammates then choose
     both movement *and* radio); falls back to the move-only ``decentralized_ego``
     variant (teammates move by policy, radio by heuristic); returns None when no
-    checkpoint exists (random movement, heuristic radio)."""
+    checkpoint exists (random movement, heuristic radio).
+
+    ``per_agent`` builds independent per-agent nets (to load a ``--per-agent-nets``
+    checkpoint) and ``variant_suffix`` (e.g. ``_pa``, ``_pa_bc``) selects the saved
+    variant to load -- so the recorder can drive teammates with the competent
+    per-agent policies trained by the sweep."""
     n_agents = env.config.n_agents
     spatial_shape = env.map_spatial_shape           # (C, ego, ego)
     internal_dim = (n_agents, env.agent_internal_dim)
     n_radio_actions = n_agents
 
     for use_radio in (True, False):
-        state = _load_policy_state(level, alg, run_number, use_radio)
+        state = _load_policy_state(level, alg, run_number, use_radio, variant_suffix=variant_suffix)
         if state is None:
             continue
 
         if alg == "dqn":
             from RL.cleanrl_dqn import QNetwork
             net = QNetwork(spatial_shape, internal_dim, n_agents, centralized=False,
-                           use_radio=use_radio, n_radio_actions=n_radio_actions)
+                           use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent)
             if use_radio:
                 def act_fn(spatial, internal):
                     move, radio = net.get_action_radio(spatial, internal)
@@ -244,7 +251,7 @@ def _build_teammate_policy(env, level, alg, run_number, device):
         elif alg == "ppo":
             from RL.cleanrl_ppo import Agent
             net = Agent(spatial_shape, internal_dim, n_agents, centralized=False,
-                        use_radio=use_radio, n_radio_actions=n_radio_actions)
+                        use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent)
             if use_radio:
                 def act_fn(spatial, internal):
                     out = net.get_action_and_value(spatial, internal)
@@ -257,7 +264,7 @@ def _build_teammate_policy(env, level, alg, run_number, device):
         elif alg == "sac":
             from RL.cleanrl_sac import Actor
             net = Actor(spatial_shape, internal_dim, n_agents, centralized=False,
-                        use_radio=use_radio, n_radio_actions=n_radio_actions)
+                        use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent)
             if use_radio:
                 def act_fn(spatial, internal):
                     out = net.get_action_radio(spatial, internal)
@@ -274,18 +281,19 @@ def _build_teammate_policy(env, level, alg, run_number, device):
             net.load_state_dict(strip_compile_prefix(state))
         except (RuntimeError, KeyError) as exc:
             # Checkpoint architecture no longer matches (e.g. recorded before the
-            # internal vector gained the relative-entity block). Skip it rather
-            # than crash; teammates fall back to random movement + heuristic radio.
-            print(f"[teammates] Incompatible {alg} checkpoint (retrain needed): {exc}. "
+            # internal vector gained the relative-entity block, or per-agent flag
+            # mismatch). Skip it rather than crash; teammates fall back to random
+            # movement + heuristic radio.
+            print(f"[teammates] Incompatible {alg} checkpoint (retrain/flag mismatch): {exc}. "
                   f"Falling back to random movement + heuristic radio.")
             return None
         net.to(device).eval()
-        variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio)
+        variant = variant_name(centralized=False, ego_view=True, use_radio=use_radio) + variant_suffix
         print(f"[teammates] Loaded {alg} {variant} policy for '{level_name_of(level)}' "
               f"(radio={'policy' if use_radio else 'heuristic'}).")
         return TeammatePolicy(net, act_fn, has_radio=use_radio)
 
-    print(f"[teammates] No decentralized_ego{{,_radio}} {alg} checkpoint for "
+    print(f"[teammates] No {alg} decentralized_ego{{,_radio}}{variant_suffix} checkpoint for "
           f"'{level_name_of(level)}' run {run_number}; random movement + heuristic radio.")
     return None
 
@@ -502,15 +510,24 @@ def collect_for_level(level, args, device) -> bool:
     agent_names = _load_agent_names(os.path.join(level, "agents.json"))
     poi_channel = env.config.n_tiles + 1
 
+    # Teammate variant to load: per-agent nets (_pa) and/or offline objective
+    # (_bc/_cql), so the recorder can drive teammates with the competent per-agent
+    # sweep policies (e.g. --teammate-per-agent --teammate-objective rl).
+    obj_suffix = {"rl": "", "bc": "_bc", "cql": "_cql"}[args.teammate_objective]
+    variant_suffix = ("_pa" if args.teammate_per_agent else "") + obj_suffix
+
     teammate_policy = None
     if not args.no_teammate_policy:
-        teammate_policy = _build_teammate_policy(env, level, args.teammate_alg, args.teammate_run, device)
+        teammate_policy = _build_teammate_policy(
+            env, level, args.teammate_alg, args.teammate_run, device,
+            per_agent=args.teammate_per_agent, variant_suffix=variant_suffix)
 
     # Demos are tagged with (and counted against) the current teammate checkpoint,
     # so re-running the recorder tops up only the agents that still lack data for
     # THIS checkpoint -- once an agent hits its quota it drops out of the pool.
     checkpoint_id = ("none" if args.no_teammate_policy
-                     else _current_checkpoint_id(level, args.teammate_alg, args.teammate_run))
+                     else _current_checkpoint_id(level, args.teammate_alg, args.teammate_run,
+                                                 variant_suffix=variant_suffix))
 
     target = args.frames_per_agent
     # One bucket per agent type (== agent name). Seed each bucket's count with the
@@ -655,6 +672,12 @@ def main():
     parser.add_argument("--record", action="store_true", help="Save a replay GIF per bucket.")
     parser.add_argument("--teammate-alg", default="ppo", choices=["ppo", "dqn", "sac"])
     parser.add_argument("--teammate-run", type=int, default=1)
+    parser.add_argument("--teammate-per-agent", action="store_true",
+                        help="Drive teammates with a per-agent-nets ('_pa') checkpoint "
+                             "(the independent per-agent policies from the sweep).")
+    parser.add_argument("--teammate-objective", default="rl", choices=["rl", "bc", "cql"],
+                        help="Which trained variant to load as teammates: rl (pure RL, "
+                             "no suffix), bc (--human-bc '_bc'), or cql (dqn '_cql').")
     parser.add_argument("--no-teammate-policy", action="store_true")
     parser.add_argument("--step-delay-ms", type=int, default=40,
                         help="ms per step WHILE a direction key is held (lower = "

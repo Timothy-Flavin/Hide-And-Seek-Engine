@@ -61,6 +61,9 @@ BC_SEPARATE="${BC_SEPARATE:-0}"           # 1 -> BC trains a SEPARATE net; the o
                                           # policy trains pure-RL (identifiability probe)
 PER_AGENT="${PER_AGENT:-0}"               # 1 -> one net per agent index (each agent
                                           # specializes; online+BC routed per-agent)
+OFFLINE="${OFFLINE:-1}"                   # 1 -> RL + offline term (BC/CQL); 0 -> pure
+                                          # RL baseline (same arch, no human data). The
+                                          # two arms save to separate paths (RL vs _bc/_cql).
 NUM_ENVS="${NUM_ENVS:-128}"
 NUM_ENVS_NEIGHBORHOOD="${NUM_ENVS_NEIGHBORHOOD:-64}"  # larger map -> fewer envs (VRAM)
 # Extra flags appended verbatim to every runner invocation (e.g. EXTRA_FLAGS="--no-cuda"
@@ -84,19 +87,28 @@ envs_for () {  # per-level num_envs (neighborhood map is the big one)
     esac
 }
 
-# Offline objective flags for each algorithm. The BC term (ppo/sac) carries the
-# bumped --bc-coef and, when BC_SEPARATE=1, --bc-separate (train the human demos on
-# an independent net so the online policy learns unencumbered -- isolates whether a
-# shared head was the blocker). DQN's CQL term takes neither.
+# Per-alg objective flags. Architecture flags (--per-agent-nets) and the DQN
+# epsilon horizon apply in BOTH arms; the offline human-data term (--human-bc for
+# ppo/sac, --human-cql for dqn, with --bc-coef and optional --bc-separate) is added
+# only when OFFLINE=1. With OFFLINE=0 you get the pure-RL baseline at the identical
+# architecture -- the two arms save to separate paths (plain vs _bc/_cql), so a
+# single sweep produces the apples-to-apples RL vs RL+offline comparison.
 offline_flags_for () {
-    local sep="" pa=""
+    local sep="" pa="" arch="" offline=""
     [ "${BC_SEPARATE}" = "1" ] && sep="--bc-separate"
     [ "${PER_AGENT}" = "1" ] && pa="--per-agent-nets"
     case "$1" in
-        ppo|sac) echo "--human-bc --bc-coef ${BC_COEF} ${sep} ${pa}" ;;
-        dqn)     echo "--human-cql --exploration-timesteps ${TOTAL}" ;;
-        *)       echo "" ;;
+        ppo|sac)
+            arch="${pa}"
+            [ "${OFFLINE}" = "1" ] && offline="--human-bc --bc-coef ${BC_COEF} ${sep}"
+            ;;
+        dqn)
+            # --exploration-timesteps is the epsilon schedule (RL knob), always on.
+            arch="${pa} --exploration-timesteps ${TOTAL}"
+            [ "${OFFLINE}" = "1" ] && offline="--human-cql"
+            ;;
     esac
+    echo "${arch} ${offline}"
 }
 
 FAILURES=()
@@ -156,7 +168,7 @@ PY
 echo "Offline+online RL experiment:"
 echo "  seeds=[${SEEDS}] levels=[${LEVELS}] algs=[${ALGS}]"
 echo "  total=${TOTAL} chunk=${CHUNK} (${N_CHUNKS} chunks/run) ego=${EGO_SIZE} radio=${USE_RADIO}"
-echo "  bc_coef=${BC_COEF} bc_separate=${BC_SEPARATE} per_agent=${PER_AGENT} (ppo/sac)"
+echo "  offline=${OFFLINE} (0=pure-RL baseline) bc_coef=${BC_COEF} bc_separate=${BC_SEPARATE} per_agent=${PER_AGENT}"
 echo "--- checking offline dataset (human demos) ---"
 check_demos
 

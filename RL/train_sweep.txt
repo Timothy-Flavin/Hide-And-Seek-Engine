@@ -1,0 +1,8 @@
+The sweep (both arms, 4 levels, 5 seeds, 1M):
+PER_AGENT=1 OFFLINE=1 SEEDS="1 2 3 4 5" ALGS="ppo sac dqn" ./run_offline_online.sh   # RL+offline
+PER_AGENT=1 OFFLINE=0 SEEDS="1 2 3 4 5" ALGS="ppo sac dqn" ./run_offline_online.sh   # pure-RL baseline
+
+Recording 2.5k frames with your competent seed-1 teammates:
+python human_dataset.py --teammate-alg ppo --teammate-run 1 \
+    --teammate-per-agent --teammate-objective rl \
+    --frames-per-agent 2500 --ego-size 32

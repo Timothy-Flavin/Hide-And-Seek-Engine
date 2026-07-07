@@ -36,7 +36,10 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
 )
-from RL.human_data import load_bc_batcher, load_transition_batcher, assert_demos_match_env
+from RL.human_data import (
+    load_bc_batcher, load_transition_batcher, assert_demos_match_env,
+    load_per_agent_bc_batchers, load_per_agent_transition_batchers,
+)
 from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 
@@ -100,6 +103,12 @@ class Args:
     """weight on the BC cross-entropy term"""
     bc_batch_size: int = 256
     """minibatch size for the BC (or offline-Q/CQL) term"""
+    per_agent_nets: bool = False
+    """decentralized-only: give each agent index its own independent Q-network
+    (encoder+adv+value head) instead of sharing one, so each agent specializes to
+    its role. Online VDN and the offline term (CQL or BC) are both routed per-agent
+    (each agent's demos back up its own net). Checkpoints use a '_pa' variant suffix
+    so they don't collide with the shared-net baseline."""
     resume: bool = False
     """resume optimizer/epsilon/RNG from this run's resume checkpoint, and write
     one at the end (for the 100k-frame-chunk loop)"""
@@ -230,7 +239,7 @@ class CustomReplayBuffer:
 
 
 class QNetwork(nn.Module):
-    def __init__(self, spatial_shape, internal_dim, n_agents, centralized=True, num_actions_per_agent=5, use_radio=False, n_radio_actions=0):
+    def __init__(self, spatial_shape, internal_dim, n_agents, centralized=True, num_actions_per_agent=5, use_radio=False, n_radio_actions=0, per_agent=False):
         super().__init__()
         self.n_agents = n_agents
         self.num_actions_per_agent = num_actions_per_agent
@@ -240,39 +249,42 @@ class QNetwork(nn.Module):
         # Radio ablation: decentralized-only trainable per-agent radio Q-head.
         self.use_radio = use_radio and not centralized
         self.n_radio_actions = n_radio_actions
+        # Per-agent nets: decentralized-only, one independent (encoder+adv+v) per
+        # agent index so each agent's Q specializes to its role.
+        self.per_agent = bool(per_agent and not centralized)
 
-        self.encoder = MixedObservationEncoder(
-            spatial_shape=spatial_shape,
-            vector_dim=np.prod(internal_dim) if centralized else internal_dim[1],
-            spatial_hidden_dim=128,
-            vector_hidden_dim=32,
-            output_dim=256,
-        )
         # Advantage head width = move dims (+ radio dims for the radio ablation).
-        # One fused head emits sum(discrete_dims); the joint VDN Q is
-        # V + sum_a adv_move_a[move] + sum_a adv_radio_a[radio]. The move/radio
-        # advantages are a zero-copy split of the single head output.
         self.head_out_dim = num_actions_per_agent + (n_radio_actions if self.use_radio else 0)
-        self.adv_heads = nn.ModuleList(
-            [
-                nn.Sequential(
-                    nn.Linear(256, 128),
-                    nn.ReLU(),
-                    nn.Linear(128, self.head_out_dim),
-                )
-                for _ in range(n_agents if centralized else 1)
-            ]
-        )
+        vector_dim = np.prod(internal_dim) if centralized else internal_dim[1]
 
-        self.v_head = nn.Sequential(
-                    nn.Linear(256, 128),
-                    nn.ReLU(),
-                    nn.Linear(128, 1),
-                )
+        def _make_encoder():
+            return MixedObservationEncoder(
+                spatial_shape=spatial_shape, vector_dim=vector_dim,
+                spatial_hidden_dim=128, vector_hidden_dim=32, output_dim=256,
+            )
+
+        def _make_adv():
+            return nn.Sequential(nn.Linear(256, 128), nn.ReLU(), nn.Linear(128, self.head_out_dim))
+
+        def _make_v():
+            return nn.Sequential(nn.Linear(256, 128), nn.ReLU(), nn.Linear(128, 1))
+
+        if self.per_agent:
+            self.encoders = nn.ModuleList([_make_encoder() for _ in range(n_agents)])
+            self.adv_heads = nn.ModuleList([_make_adv() for _ in range(n_agents)])
+            self.v_heads = nn.ModuleList([_make_v() for _ in range(n_agents)])
+        else:
+            self.encoder = _make_encoder()
+            self.adv_heads = nn.ModuleList([_make_adv() for _ in range(n_agents if centralized else 1)])
+            self.v_head = _make_v()
 
         if centralized:
             self.get_action = self._get_action_centralized
             self.forward = self._forward_centralized
+        elif self.per_agent:
+            self.get_action = (self.get_action_radio if self.use_radio
+                               else self._get_action_decentralized)
+            self.forward = self._forward_decentralized
         elif self.use_radio:
             self.get_action = self.get_action_radio
             self.forward = self._forward_decentralized
@@ -280,14 +292,32 @@ class QNetwork(nn.Module):
             self.get_action = self._get_action_decentralized
             self.forward = self._forward_decentralized
 
-    def get_action_radio(self, spatial, internal):
+    # --- Per-agent (non-shared) helpers: each agent index runs through its own
+    #     encoder + value/advantage heads. ---
+    def _per_agent_v_adv(self, spatial, internal):
+        """Return (v_summed[B,1], adv_uncentered[B, n_agents, head_out_dim])."""
         spatial = cast_obs(spatial)
-        # Decentralized radio ablation: ONE encoder pass, ONE fused advantage head;
-        # split the output into move/radio and take each greedy action.
         B = spatial.shape[0]
-        x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
-        feats = self.encoder(x)
-        adv_all = self.adv_heads[0](feats).view(B, self.n_agents, self.head_out_dim)
+        vs, advs = [], []
+        for a in range(self.n_agents):
+            x = torch.cat([spatial[:, a].reshape(B, -1), internal[:, a].reshape(B, -1)], dim=-1)
+            feats = self.encoders[a](x)
+            vs.append(self.v_heads[a](feats))
+            advs.append(self.adv_heads[a](feats))
+        v = torch.stack(vs, dim=1).sum(dim=1)                     # [B, 1] (VDN sum)
+        adv = torch.stack(advs, dim=1)                            # [B, n_agents, head_out_dim]
+        return v, adv
+
+    def get_action_radio(self, spatial, internal):
+        # Decentralized radio ablation: fused advantage head split into move/radio;
+        # take each greedy action. (Argmax is invariant to dueling mean-centering.)
+        if self.per_agent:
+            _, adv_all = self._per_agent_v_adv(spatial, internal)
+        else:
+            spatial = cast_obs(spatial)
+            B = spatial.shape[0]
+            x = torch.cat([spatial.view(B * self.n_agents, -1), internal.view(B * self.n_agents, -1)], dim=-1)
+            adv_all = self.adv_heads[0](self.encoder(x)).view(B, self.n_agents, self.head_out_dim)
         move_action = torch.argmax(adv_all[..., :self.num_actions_per_agent], dim=2)
         radio_action = torch.argmax(adv_all[..., self.num_actions_per_agent:], dim=2)
         return move_action, radio_action
@@ -304,6 +334,9 @@ class QNetwork(nn.Module):
         return torch.argmax(adv_values, dim=2)
 
     def _get_action_decentralized(self, spatial, internal):
+        if self.per_agent:
+            _, adv_values = self._per_agent_v_adv(spatial, internal)
+            return torch.argmax(adv_values[..., :self.num_actions_per_agent], dim=2)
         spatial = cast_obs(spatial)
         B = spatial.shape[0]
         spatial_flat = spatial.view(B * self.n_agents, -1)
@@ -334,21 +367,24 @@ class QNetwork(nn.Module):
         return v_value, adv_values
 
     def _forward_decentralized(self, spatial, internal):
-        spatial = cast_obs(spatial)
-        B = spatial.shape[0]
-        spatial_flat = spatial.view(B * self.n_agents, -1)
-        internal_flat = internal.view(B * self.n_agents, -1)
-        x = torch.cat([spatial_flat, internal_flat], dim=-1)
+        if self.per_agent:
+            v_value, adv_values = self._per_agent_v_adv(spatial, internal)
+        else:
+            spatial = cast_obs(spatial)
+            B = spatial.shape[0]
+            spatial_flat = spatial.view(B * self.n_agents, -1)
+            internal_flat = internal.view(B * self.n_agents, -1)
+            x = torch.cat([spatial_flat, internal_flat], dim=-1)
 
-        feats = self.encoder(x)
+            feats = self.encoder(x)
 
-        v_value = self.v_head(feats) # [B*n_agents, 1]
-        v_value = v_value.view(B, self.n_agents, 1).sum(dim=1) # Sum over agents for VDN
+            v_value = self.v_head(feats) # [B*n_agents, 1]
+            v_value = v_value.view(B, self.n_agents, 1).sum(dim=1) # Sum over agents for VDN
 
-        adv_values = self.adv_heads[0](feats)
-        # Width is head_out_dim (== num_actions when no radio). Callers split off
-        # the radio slice when use_radio is set.
-        adv_values = adv_values.view(B, self.n_agents, self.head_out_dim)
+            adv_values = self.adv_heads[0](feats)
+            # Width is head_out_dim (== num_actions when no radio). Callers split off
+            # the radio slice when use_radio is set.
+            adv_values = adv_values.view(B, self.n_agents, self.head_out_dim)
 
         # Dueling identifiability: mean-center each advantage factor over its own
         # action dim. Move and radio are independent heads, so they must be
@@ -364,7 +400,7 @@ class QNetwork(nn.Module):
 
         return v_value, adv_values
 
-    def bc_logits(self, spatial, internal):
+    def bc_logits(self, spatial, internal, agent_idx=0):
         """Per-single-agent BC logits (decentralized): (move, radio).
 
         Runs the shared encoder + shared advantage head on one agent's ego
@@ -376,28 +412,36 @@ class QNetwork(nn.Module):
         spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
-        feats = self.encoder(x)
-        out = self.adv_heads[0](feats)
+        if self.per_agent:
+            out = self.adv_heads[agent_idx](self.encoders[agent_idx](x))
+        else:
+            out = self.adv_heads[0](self.encoder(x))
         move = out[..., :self.num_actions_per_agent]
         radio = out[..., self.num_actions_per_agent:] if self.use_radio else None
         return move, radio
 
-    def q_single(self, spatial, internal):
+    def q_single(self, spatial, internal, agent_idx=0):
         """Per-single-agent dueling Q pieces (decentralized): (v, move_adv, radio_adv).
 
-        Runs the shared encoder + value head + advantage head on ONE agent's ego
+        Runs the encoder + value head + advantage head on ONE agent's ego
         observation (spatial: [B, C, S, S] uint8, internal: [B, D]) and returns
         the value ``v`` [B, 1] plus each advantage factor MEAN-CENTERED over its
         own action dim -- exactly as ``_forward_decentralized`` centers them, so a
         single-agent offline Q ``v + adv_centered[a]`` is consistent with the VDN
-        per-agent contribution used online. ``radio_adv`` is None without radio.
+        per-agent contribution used online. In per-agent-nets mode ``agent_idx``
+        selects that agent's own net. ``radio_adv`` is None without radio.
         """
         spatial = cast_obs(spatial)
         B = spatial.shape[0]
         x = torch.cat([spatial.view(B, -1), internal.view(B, -1)], dim=-1)
-        feats = self.encoder(x)
-        v = self.v_head(feats)  # [B, 1]
-        out = self.adv_heads[0](feats)
+        if self.per_agent:
+            feats = self.encoders[agent_idx](x)
+            v = self.v_heads[agent_idx](feats)  # [B, 1]
+            out = self.adv_heads[agent_idx](feats)
+        else:
+            feats = self.encoder(x)
+            v = self.v_head(feats)  # [B, 1]
+            out = self.adv_heads[0](feats)
         move = out[..., :self.num_actions_per_agent]
         move = move - move.mean(dim=1, keepdim=True)
         if self.use_radio:
@@ -454,12 +498,13 @@ if __name__ == "__main__":
     n_radio_actions = n_agents
     use_radio = bool(args.use_radio and not args.centralized)
 
+    per_agent = bool(args.per_agent_nets and not args.centralized)
     q_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions).to(device)
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent).to(device)
     )
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions).to(device)
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent).to(device)
     )
     target_network.load_state_dict(q_network.state_dict())
 
@@ -468,8 +513,13 @@ if __name__ == "__main__":
     )
 
     # Result layout: experiments/results/<level>/dqn/ ; weights checkpointed at
-    # 20/40/60/80/100% of training under that folder's checkpoints/.
-    variant = variant_name(args.centralized, args.ego_view, use_radio)
+    # 20/40/60/80/100% of training under that folder's checkpoints/. Per-agent-nets
+    # get a '_pa' suffix; the offline objective gets a '_cql'/'_bc' suffix so RL and
+    # RL+offline runs are saved separately and never overwrite each other.
+    _obj = ""
+    if not args.centralized:
+        _obj = "_cql" if args.human_cql else ("_bc" if args.human_bc else "")
+    variant = variant_name(args.centralized, args.ego_view, use_radio) + ("_pa" if per_agent else "") + _obj
     results_dir = results_dir_for(args.level, "dqn")
     run_prefix = f"dqn_{variant}_run_{args.run_number}"
     ckpt = CheckpointSaver(results_dir, run_prefix, args.total_timesteps)
@@ -519,8 +569,9 @@ if __name__ == "__main__":
                 # Refuse stale demos (goal/entity block unpopulated vs the live env).
                 assert_demos_match_env(env, cql_batcher.internal, args.num_envs, n_agents,
                                        device, label="dqn human-cql")
+                nets = "per-agent nets" if per_agent else "one shared net"
                 print(f"[dqn] offline-Q + CQL enabled with {cql_batcher.n} human transitions "
-                      f"(cql_coef={args.cql_coef}, cql_alpha={args.cql_alpha}).")
+                      f"(cql_coef={args.cql_coef}, cql_alpha={args.cql_alpha}, {nets}).")
     elif args.human_bc:
         if args.centralized:
             print("[dqn] --human-bc needs a decentralized model (ego human data); "
@@ -537,7 +588,28 @@ if __name__ == "__main__":
                 # Refuse stale demos (goal/entity block unpopulated vs the live env).
                 assert_demos_match_env(env, bc_batcher.internal, args.num_envs, n_agents,
                                        device, label="dqn human-bc")
-                print(f"[dqn] BC enabled with {bc_batcher.n} human frames.")
+                nets = "per-agent nets" if per_agent else "one shared net"
+                print(f"[dqn] BC enabled with {bc_batcher.n} human frames ({nets}).")
+
+    # Per-agent offline routing: each agent's demos back up its own network.
+    cql_batchers_pa = {}
+    bc_batchers_pa = {}
+    if per_agent and cql_batcher is not None:
+        cql_batchers_pa = load_per_agent_transition_batchers(
+            args.level, n_agents, expected_spatial_shape=spatial_shape,
+            ego_size=args.ego_size if args.ego_view else None,
+            expected_internal_dim=env.agent_internal_dim,
+        )
+        print(f"[dqn] per-agent CQL transition counts by agent index: "
+              f"{ {a: b.n for a, b in cql_batchers_pa.items()} }")
+    if per_agent and bc_batcher is not None:
+        bc_batchers_pa = load_per_agent_bc_batchers(
+            args.level, n_agents, expected_spatial_shape=spatial_shape,
+            ego_size=args.ego_size if args.ego_view else None,
+            expected_internal_dim=env.agent_internal_dim,
+        )
+        print(f"[dqn] per-agent BC frame counts by agent index: "
+              f"{ {a: b.n for a, b in bc_batchers_pa.items()} }")
 
     # Epsilon-schedule horizon; default reproduces the original math exactly.
     epsilon_horizon = args.exploration_timesteps or args.total_timesteps
@@ -736,13 +808,23 @@ if __name__ == "__main__":
                 loss = F.mse_loss(td_target, old_val_sum)
 
                 if bc_batcher is not None:
-                    bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
-                    bc_move_logits, bc_radio_logits = q_network.bc_logits(bc_spatial, bc_internal)
-                    bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
-                    # Clone the human's radio action too, so the radio head learns
-                    # to broadcast from demos (not RL alone).
-                    if bc_radio_logits is not None and bc_radio is not None:
-                        bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
+                    if per_agent and bc_batchers_pa:
+                        bc_loss = 0.0
+                        for a, batcher in bc_batchers_pa.items():
+                            s_a, i_a, act_a, rad_a = batcher.sample(args.bc_batch_size, device)
+                            ml_a, rl_a = q_network.bc_logits(s_a, i_a, agent_idx=a)
+                            la = F.cross_entropy(ml_a, act_a)
+                            if rl_a is not None and rad_a is not None:
+                                la = la + F.cross_entropy(rl_a, rad_a)
+                            bc_loss = bc_loss + la
+                    else:
+                        bc_spatial, bc_internal, bc_actions, bc_radio = bc_batcher.sample(args.bc_batch_size, device)
+                        bc_move_logits, bc_radio_logits = q_network.bc_logits(bc_spatial, bc_internal)
+                        bc_loss = F.cross_entropy(bc_move_logits, bc_actions)
+                        # Clone the human's radio action too, so the radio head learns
+                        # to broadcast from demos (not RL alone).
+                        if bc_radio_logits is not None and bc_radio is not None:
+                            bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
                     loss = loss + args.bc_coef * bc_loss
 
                 if cql_batcher is not None:
@@ -751,31 +833,39 @@ if __name__ == "__main__":
                     # The team reward matches the online summed-reward target, so
                     # offline and online backups are comparable. The online TD loss
                     # above is left untouched -> ONLINE experiences never see the
-                    # conservative penalty (only the offline minibatch does).
-                    (o_s, o_i, o_ns, o_ni, o_move, o_radio,
-                     o_r, o_d) = cql_batcher.sample(args.bc_batch_size, device)
-                    with torch.no_grad():
-                        tv, tmove, tradio = target_network.q_single(o_ns, o_ni)
-                        q_next = tv + tmove.max(dim=1, keepdim=True).values
-                        if tradio is not None:
-                            q_next = q_next + tradio.max(dim=1, keepdim=True).values
-                        cql_target = o_r + args.gamma * (1 - o_d) * q_next
+                    # conservative penalty (only the offline minibatch does). Under
+                    # per-agent nets each agent's transitions back up its own net.
+                    pairs = (list(cql_batchers_pa.items()) if (per_agent and cql_batchers_pa)
+                             else [(0, cql_batcher)])
+                    offline_td_sum = 0.0
+                    cql_gap_sum = 0.0
+                    for aidx, batcher in pairs:
+                        (o_s, o_i, o_ns, o_ni, o_move, o_radio,
+                         o_r, o_d) = batcher.sample(args.bc_batch_size, device)
+                        with torch.no_grad():
+                            tv, tmove, tradio = target_network.q_single(o_ns, o_ni, agent_idx=aidx)
+                            q_next = tv + tmove.max(dim=1, keepdim=True).values
+                            if tradio is not None:
+                                q_next = q_next + tradio.max(dim=1, keepdim=True).values
+                            cql_target = o_r + args.gamma * (1 - o_d) * q_next
 
-                    v_o, move_o, radio_o = q_network.q_single(o_s, o_i)
-                    move_taken = move_o.gather(1, o_move.unsqueeze(1))          # [B, 1]
-                    q_pred = v_o + move_taken
-                    # CQL(H) gap: push down logsumexp_a Q(s,a) toward Q(s,a_data).
-                    # The value head cancels, so it is a sum of per-factor gaps.
-                    cql_gap = torch.logsumexp(move_o, dim=1, keepdim=True) - move_taken
-                    if radio_o is not None and o_radio is not None:
-                        radio_taken = radio_o.gather(1, o_radio.unsqueeze(1))    # [B, 1]
-                        q_pred = q_pred + radio_taken
-                        cql_gap = cql_gap + (torch.logsumexp(radio_o, dim=1, keepdim=True) - radio_taken)
+                        v_o, move_o, radio_o = q_network.q_single(o_s, o_i, agent_idx=aidx)
+                        move_taken = move_o.gather(1, o_move.unsqueeze(1))          # [B, 1]
+                        q_pred = v_o + move_taken
+                        # CQL(H) gap: push down logsumexp_a Q(s,a) toward Q(s,a_data).
+                        # The value head cancels, so it is a sum of per-factor gaps.
+                        cql_gap = torch.logsumexp(move_o, dim=1, keepdim=True) - move_taken
+                        if radio_o is not None and o_radio is not None:
+                            radio_taken = radio_o.gather(1, o_radio.unsqueeze(1))    # [B, 1]
+                            q_pred = q_pred + radio_taken
+                            cql_gap = cql_gap + (torch.logsumexp(radio_o, dim=1, keepdim=True) - radio_taken)
 
-                    offline_td = F.mse_loss(q_pred, cql_target)
-                    offline_loss = offline_td + args.cql_alpha * cql_gap.mean()
+                        offline_td_sum = offline_td_sum + F.mse_loss(q_pred, cql_target)
+                        cql_gap_sum = cql_gap_sum + cql_gap.mean()
+
+                    offline_loss = offline_td_sum + args.cql_alpha * cql_gap_sum
                     loss = loss + args.cql_coef * offline_loss
-                    cql_losses.append((offline_td.item(), cql_gap.mean().item()))
+                    cql_losses.append((float(offline_td_sum), float(cql_gap_sum)))
 
                 optimizer.zero_grad()
                 loss.backward()

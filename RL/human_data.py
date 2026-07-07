@@ -509,3 +509,58 @@ def load_transition_batcher(level: str, expected_spatial_shape=None, ego_size: i
         )
         return None
     return batcher
+
+
+def load_per_agent_transition_batchers(level: str, n_agents: int, expected_spatial_shape=None,
+                                       ego_size: int | None = None, expected_internal_dim: int | None = None):
+    """Build one :class:`TransitionBatcher` per controlled-agent index for
+    per-agent-nets offline-Q (DQN CQL), keyed by agent index. Splits the level's
+    transitions on the recorded ``controlled_agent`` field so each agent's own net
+    backs up only its own demos. Same validation/fallbacks as
+    :func:`load_transition_batcher`; returns ``{}`` on missing data or mismatch."""
+    data = load_human_dataset(level, fields=OFFLINE_FIELDS + ["controlled_agent"], ego_size=ego_size)
+    if (not data or "obs_spatial" not in data or len(data["obs_spatial"]) == 0
+            or "next_obs_spatial" not in data):
+        return {}
+    n = len(data["obs_spatial"])
+    ca = data.get("controlled_agent")
+    if ca is None or len(ca) != n:
+        print(f"[human-cql] per-agent-nets needs the 'controlled_agent' field but it is "
+              f"missing/misaligned for '{level}'; falling back to pooled offline-Q.")
+        return {}
+    ca = np.asarray(ca).reshape(-1).astype(int)
+
+    reward = data.get("team_rewards")
+    if reward is None or len(reward) != n:
+        reward = data.get("rewards")
+    done = data.get("terminated")
+    if done is None or len(done) != n:
+        done = data.get("dones")
+    if reward is None or done is None:
+        print(f"[human-cql] human data for '{level}' lacks reward/terminal fields; skipping offline-Q.")
+        return {}
+    radio_all = data.get("radio")
+    has_radio = radio_all is not None and len(radio_all) == n
+
+    out: dict[int, TransitionBatcher] = {}
+    for a in range(n_agents):
+        idx = np.where(ca == a)[0]
+        if idx.size == 0:
+            continue
+        radio_a = radio_all[idx] if has_radio else None
+        batcher = TransitionBatcher(
+            data["obs_spatial"][idx], data["obs_internal"][idx],
+            data["next_obs_spatial"][idx], data["next_obs_internal"][idx],
+            data["actions_move"][idx], reward[idx], done[idx], radio=radio_a,
+        )
+        if expected_spatial_shape is not None and tuple(batcher.spatial_shape) != tuple(expected_spatial_shape):
+            print(f"[human-cql] recorded obs shape {batcher.spatial_shape} != model input "
+                  f"{tuple(expected_spatial_shape)}; skipping per-agent offline-Q.")
+            return {}
+        internal_dim = int(batcher.internal.shape[-1])
+        if expected_internal_dim is not None and internal_dim != int(expected_internal_dim):
+            print(f"[human-cql] recorded internal dim {internal_dim} != model input "
+                  f"{int(expected_internal_dim)}; skipping per-agent offline-Q.")
+            return {}
+        out[a] = batcher
+    return out
