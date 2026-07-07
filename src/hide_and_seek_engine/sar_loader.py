@@ -12,6 +12,11 @@ class SARConfig:
     width: int
     height: int
 
+    # Human-readable type names (JSON keys), parallel to agent/survivor indices.
+    # Used by the renderer to label the markers a human sees.
+    agent_names: list[str]
+    survivor_names: list[str]
+
     supports_walking: list[int]
     supports_aquatic: list[int]
     supports_flying: list[int]
@@ -145,6 +150,8 @@ def load_sar_config(
         n_pois=n_pois,
         width=width,
         height=height,
+        agent_names=agent_names,
+        survivor_names=survivor_names,
         supports_walking=supports_walking,
         supports_aquatic=supports_aquatic,
         supports_flying=supports_flying,

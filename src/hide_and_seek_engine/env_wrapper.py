@@ -219,16 +219,23 @@ class SARBatchedGridEnv:
             )
 
     def _get_obs_dict(self):
+        # CLONE, don't alias: obs_spatial/obs_internal are the engine's REUSED
+        # zero-copy buffers, overwritten in place by every env.step(). Callers
+        # (DQN/SAC) hold the returned obs across a step and only stash it into a
+        # replay buffer AFTER stepping, so a raw reference would make the stored
+        # obs and next_obs BOTH read the post-step frame -- s == s' for every
+        # transition, and nothing learns. The GPU branch's .to(device) already
+        # makes a fresh copy; the CPU branch must clone explicitly.
         return {
             "spatial": (
                 self.obs_spatial.to(self.device)
                 if self.device != "cpu"
-                else self.obs_spatial
+                else self.obs_spatial.clone()
             ),
             "internal": (
                 self.obs_internal.to(self.device)
                 if self.device != "cpu"
-                else self.obs_internal
+                else self.obs_internal.clone()
             ),
         }
 
@@ -286,16 +293,19 @@ class SARBatchedGridEnv:
     def get_state(self):
         if not self.requires_state:
             return None
+        # CLONE on CPU for the same reason as _get_obs_dict: state_spatial/
+        # state_internal are reused buffers overwritten by env.step(), and callers
+        # hold a pre-step state across the step to pair it with next_state.
         return {
             "spatial": (
                 self.state_spatial.to(self.device)
                 if self.device != "cpu"
-                else self.state_spatial
+                else self.state_spatial.clone()
             ),
             "internal": (
                 self.state_internal.to(self.device)
                 if self.device != "cpu"
-                else self.state_internal
+                else self.state_internal.clone()
             ),
         }
 
@@ -331,6 +341,10 @@ class SARBatchedGridEnv:
         self._render_grid_h = grid_h
         self._render_extra_h = extra_h
         self._render_font = pygame.font.SysFont("consolas,dejavusansmono,monospace", 13)
+        # Smaller bold face for the entity-type tags drawn on top of markers.
+        self._render_marker_font = pygame.font.SysFont(
+            "consolas,dejavusansmono,monospace", 11, bold=True
+        )
         window_width = grid_w * self._pygame_tile_px
         window_height = grid_h * self._pygame_tile_px + extra_h
         self._pygame_screen = pygame.display.set_mode((window_width, window_height))
@@ -451,18 +465,24 @@ class SARBatchedGridEnv:
         # and the panel readout.
         entities = self._decode_entities(internal, pov, others)
         text_lines = self._ego_panel_lines(pov, internal, entities, info_lines)
-        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range, entities, text_lines)
+        self._draw_ego_to_screen(rgb_grid, poi_mask, agent_layers, view_range, entities,
+                                 text_lines, pov=pov)
 
     def _decode_entities(self, internal, pov, others):
         """Decode the internal vector's relative-entity block into a list of
-        ``(kind, ident, dx, dy, gy, gx, color)`` for each *seen* entity, where
-        dx/dy are tile-space offsets from the agent and (gy, gx) the implied
-        global cell. Empty when the env carries no entity block."""
+        ``(kind, ident, dx, dy, gy, gx, color, label, saveable)`` for each
+        *seen* entity, where dx/dy are tile-space offsets from the agent and
+        (gy, gx) the implied global cell. ``label`` is the entity's human-readable
+        type name (for the on-screen marker text) and ``saveable`` is True/False
+        for survivors this ``pov`` agent may rescue (None for allies). Empty when
+        the env carries no entity block."""
         ents = []
         if (self.max_allies == 0 and self.max_entities == 0) or internal.shape[0] <= 6:
             return ents
         gy = float(internal[0])
         gx = float(internal[1])
+        agent_names = getattr(self.config, "agent_names", None)
+        survivor_names = getattr(self.config, "survivor_names", None)
 
         for k in range(self.max_allies):
             b = self.rel_ally_start + 3 * k
@@ -473,7 +493,12 @@ class SARBatchedGridEnv:
             a = others[k] if k < len(others) else None
             color = (tuple(int(c) for c in self._agent_colors[a]) if a is not None
                      else (0, 255, 255))
-            ents.append(("ally", a, dx, dy, int(round(gy + dy)), int(round(gx + dx)), color))
+            if a is not None and agent_names and a < len(agent_names):
+                label = str(agent_names[a])
+            else:
+                label = f"ally {a}" if a is not None else "ally"
+            ents.append(("ally", a, dx, dy, int(round(gy + dy)), int(round(gx + dx)),
+                         color, label, None))
 
         for p in range(self.max_entities):
             b = self.rel_poi_start + 3 * p
@@ -481,9 +506,24 @@ class SARBatchedGridEnv:
                 continue
             dx = float(internal[b + 0])
             dy = float(internal[b + 1])
+            if survivor_names and p < len(survivor_names):
+                label = str(survivor_names[p])
+            else:
+                label = f"survivor {p}"
             ents.append(("poi", p, dx, dy, int(round(gy + dy)), int(round(gx + dx)),
-                         (255, 255, 255)))
+                         (255, 255, 255), label, self._pov_can_save(pov, p)))
         return ents
+
+    def _pov_can_save(self, pov, survivor_idx):
+        """Whether agent ``pov`` is allowed to rescue survivor ``survivor_idx``,
+        read from the (n_pois x n_agents) row-major ``saveable_map``. Returns
+        None when the map is unavailable so callers can skip the annotation."""
+        smap = getattr(self.config, "saveable_map", None)
+        n_agents = self.config.n_agents
+        idx = survivor_idx * n_agents + pov
+        if not smap or idx >= len(smap):
+            return None
+        return bool(smap[idx])
 
     def _ego_panel_lines(self, pov, internal, entities, info_lines):
         """Human-readable lines for the vectorized-obs text panel.
@@ -521,8 +561,9 @@ class SARBatchedGridEnv:
         return lines
 
     def _draw_ego_to_screen(self, rgb_grid, poi_mask, agent_layers, view_range, entities=None,
-                            text_lines=None):
+                            text_lines=None, pov=0):
         import pygame
+        self_pov = pov
         pygame.event.pump()
 
         S = self.ego_size
@@ -557,10 +598,33 @@ class SARBatchedGridEnv:
         # decoded from the internal vector's relative-entity block -- so they work
         # for radio-shared locations well outside the ego crop, not just what is
         # visible in the window. Survivors are white; each ally uses its own color.
+        # Each marker is tagged with its entity-type name so the human can tell a
+        # survivor from a teammate and see which survivors this agent may rescue.
         arrow_max = max(2.5 * tile, tile + 4)
-        for kind, ident, dx, dy, gy, gx, color in (entities or []):
+        for kind, ident, dx, dy, gy, gx, color, label, saveable in (entities or []):
             tgt = (center[0] + dx * tile, center[1] + dy * tile)
             self._draw_arrow(center, tgt, color, arrow_max)
+            # Survivors this agent cannot rescue are tagged in a muted red so the
+            # human can focus on the ones they can actually interact with.
+            if saveable is False:
+                tag_color = (200, 90, 90)
+                tag_text = f"{label} (x)"
+            elif saveable is True:
+                tag_color = (120, 255, 120)
+                tag_text = label
+            else:
+                tag_color = color
+                tag_text = label
+            self._draw_marker_label(tgt, tag_text, tag_color)
+
+        # Tag the controlled agent (fixed at the crop center) with its own type
+        # name so the human knows which agent they are driving.
+        self_label = None
+        agent_names = getattr(self.config, "agent_names", None)
+        if agent_names is not None and 0 <= self_pov < len(agent_names):
+            self_label = str(agent_names[self_pov])
+        if self_label is not None:
+            self._draw_marker_label(center, self_label, (255, 255, 0))
 
         # Vectorized-obs text panel below the crop.
         if text_lines and getattr(self, "_render_font", None) is not None:
@@ -570,6 +634,28 @@ class SARBatchedGridEnv:
                 self._pygame_screen.blit(surf, (self._EGO_PANEL_PAD, y0 + i * self._EGO_PANEL_LINE_H))
 
         pygame.display.flip()
+
+    def _draw_marker_label(self, pos, text, color):
+        """Draw a short entity-type tag next to the marker at screen ``pos``,
+        clamped to stay inside the crop window. A dark backing rect keeps the
+        text legible over terrain, survivor dots, and agent rects."""
+        font = getattr(self, "_render_marker_font", None) or getattr(self, "_render_font", None)
+        if font is None or not text:
+            return
+        surf = font.render(str(text), True, color)
+        w, h = surf.get_size()
+        tile = self._pygame_tile_px
+        win_w = self._render_grid_w * tile
+        win_h = self._render_grid_h * tile           # crop area only (above the panel)
+        # Sit just above-right of the marker, then clamp fully into the window.
+        x = int(pos[0]) + max(3, tile // 4)
+        y = int(pos[1]) - h - 2
+        x = max(0, min(x, win_w - w))
+        y = max(0, min(y, win_h - h))
+        backing = pygame.Surface((w + 2, h + 1), pygame.SRCALPHA)
+        backing.fill((0, 0, 0, 150))
+        self._pygame_screen.blit(backing, (x - 1, y))
+        self._pygame_screen.blit(surf, (x, y))
 
     def _draw_arrow(self, start, end, color, max_len):
         """Draw a short bearing arrow from ``start`` toward ``end`` (capped at
