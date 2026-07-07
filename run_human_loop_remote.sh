@@ -58,7 +58,7 @@ export CHUNK="${CHUNK:-200000}"
 export EXPLORE_TOTAL="${EXPLORE_TOTAL:-$((CHUNK * ITERS))}"  # DQN epsilon spans the whole loop
 export USE_RADIO="${USE_RADIO:-1}"
 export NUM_ENVS="${NUM_ENVS:-128}"
-export STEP_DELAY_MS="${STEP_DELAY_MS:-132}"
+export STEP_DELAY_MS="${STEP_DELAY_MS:-40}"   # ms/step while a direction key is held
 
 LOCAL_RESULTS="${SCRIPT_DIR}/experiments/results"
 REMOTE_RESULTS="${REMOTE_DIR}/experiments/results"
@@ -79,19 +79,21 @@ sync_demos_up () {
         || die "demo up-sync failed"
 }
 
-# Pull ONLY the trained checkpoints back down (weights + resume state), one level
-# at a time so we copy exactly <level>/<alg>/checkpoints/ and nothing else -- no
-# fragile rsync path filters, no touching the local demos.
+# Pull the lab's trained outputs back down, one level at a time: the whole
+# <level>/<alg>/ dir -- checkpoints (weights + resume state) plus the
+# post-training eval_returns.jsonl and episodic-return artifacts, all
+# lab-produced. Scoped per level/alg so we never touch the local demos, and no
+# --delete, so nothing is removed.
 sync_checkpoints_down () {
-    echo "--- [sync] checkpoints  ${REMOTE_HOST}:${REMOTE_RESULTS}/*/${ALG}/checkpoints/  ->  ${LOCAL_RESULTS}/"
+    echo "--- [sync] trained outputs  ${REMOTE_HOST}:${REMOTE_RESULTS}/*/${ALG}/  ->  ${LOCAL_RESULTS}/"
     for lvl in ${LEVELS}; do
         ln="$(basename "${lvl}")"
-        local_ckpt="${LOCAL_RESULTS}/${ln}/${ALG}/checkpoints/"
-        mkdir -p "${local_ckpt}"
+        local_alg="${LOCAL_RESULTS}/${ln}/${ALG}/"
+        mkdir -p "${local_alg}"
         "${RSYNC[@]}" \
-            "${REMOTE_HOST}:${REMOTE_RESULTS}/${ln}/${ALG}/checkpoints/" \
-            "${local_ckpt}" \
-            || die "checkpoint down-sync failed for ${ln}"
+            "${REMOTE_HOST}:${REMOTE_RESULTS}/${ln}/${ALG}/" \
+            "${local_alg}" \
+            || die "trained-output down-sync failed for ${ln}"
     done
 }
 
@@ -99,6 +101,15 @@ sync_checkpoints_down () {
 record_local () {
     echo "=== [record @ local] all levels, ${FRAMES_PER_AGENT} frames/agent-type ==="
     PHASE=record bash "${SCRIPT_DIR}/run_human_loop.sh" || die "local recording failed"
+}
+
+# Regenerate the 6-curve human-vs-eval graph per level (local human_returns +
+# the eval_returns just synced back from the lab).
+plot_local () {
+    for lvl in ${LEVELS}; do
+        python -m RL.plot_human_loop --level "${lvl}" --alg "${ALG}" --run "${RUN}" \
+            || echo "!!! plot failed for ${lvl} (continuing)"
+    done
 }
 
 # One training pass over all levels ON THE LAB (reuses run_human_loop.sh's train_all).
@@ -143,7 +154,8 @@ for (( i=1; i<=ITERS; i++ )); do
     echo "############################################################"
     sync_demos_up          # ship the freshly recorded demos to the lab
     train_remote           # lab trains one chunk/level from them (+ resume state)
-    sync_checkpoints_down  # bring the new checkpoints home for the next record
+    sync_checkpoints_down  # bring the new checkpoints + eval logs home
+    plot_local             # refresh the human-vs-eval graph after this step
     # Final iteration ends on trained models (no trailing record), matching
     # run_human_loop.sh.
     if [ "${i}" -lt "${ITERS}" ]; then

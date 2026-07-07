@@ -37,6 +37,11 @@ RESULTS_ROOT = "experiments/results"
 # Per-transition fields. obs_* are the ego crop the controlled agent saw (uint8);
 # actions_move is the discrete index (ACTION_MAP) used as the BC target;
 # actions_raw keeps the human's raw [dy, dx, radio]; radio is the emitted channel.
+# rewards is the CONTROLLED agent's own reward; team_rewards is the summed-over-
+# agents cooperative reward (both kept: individual for credit, team for the shared
+# objective). terminated and truncated are recorded SEPARATELY (truncation is a
+# time-limit that should bootstrap the value; termination is a real end); dones
+# (= terminated | truncated) is retained for backward compatibility.
 HUMAN_FIELDS = [
     "obs_spatial",
     "obs_internal",
@@ -44,7 +49,10 @@ HUMAN_FIELDS = [
     "actions_raw",
     "radio",
     "rewards",
+    "team_rewards",
     "dones",
+    "terminated",
+    "truncated",
     "next_obs_spatial",
     "next_obs_internal",
     "controlled_agent",

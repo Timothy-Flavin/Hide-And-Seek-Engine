@@ -30,6 +30,7 @@ class SARBatchedGridEnv:
         ego_size=32,
         max_allies=10,
         max_entities=10,
+        max_frames=250,
     ):
         self.config = load_sar_config(tiles_json, agents_json, survivors_json, map_png)
         self.num_envs = num_envs
@@ -39,6 +40,9 @@ class SARBatchedGridEnv:
         self.requires_state = requires_state
         self.render_initialized = False
         self.init_mode_val = 0 if init_mode == "parallel_first_touch" else 1
+        # Episode truncation length (env "max frames"). Single source of truth so
+        # trainers/recorder/eval can clip episodes to the same length.
+        self.max_frames = max_frames
 
         # Ego-centric obs: the spatial obs tensor becomes a fixed
         # ego_size x ego_size window centered on each agent instead of the full
@@ -205,7 +209,7 @@ class SARBatchedGridEnv:
                 0.05,  # Reward: new tile
                 2.0,  # Reward: found
                 20.0,  # Reward: saved
-                250,  # Max frames
+                self.max_frames,  # Max frames
                 self.mode_val,
                 self.init_mode_val,
                 self.ego_view,

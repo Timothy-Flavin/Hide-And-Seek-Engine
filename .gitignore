@@ -16,3 +16,5 @@ level_images
 results
 originalLevelResults
 linuxvenv
+experiments/results_old_loop
+experiments/results_backup_round1

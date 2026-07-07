@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import sys
 import time
@@ -36,6 +37,7 @@ from RL.checkpoint_utils import (
     restore_rng,
 )
 from RL.human_data import load_bc_batcher
+from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 
 
@@ -92,6 +94,10 @@ class Args:
     one at the end (for the 100k-frame-chunk loop)"""
     exploration_timesteps: int = 0
     """epsilon-schedule horizon; 0 -> use total_timesteps (original behavior)"""
+    eval_episodes: int = 10
+    """episodes to evaluate at step 0 (random) and after training, each clipped to
+    the human/training episode length; logs per-agent + team return to
+    <level>/<alg>/eval_returns.jsonl (0 disables)"""
 
 
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
@@ -483,6 +489,34 @@ if __name__ == "__main__":
     LOGICAL_STEPS_PER_RECORD = 10000
     q_losses = []
 
+    # --- Post-chunk evaluation (per-agent + team return over args.eval_episodes
+    #     episodes, each clipped to the human/training episode length). Also run
+    #     once at step 0 (first chunk) for the untrained/random baseline. ---
+    eval_max_steps = int(getattr(env, "max_frames", 250))
+    with open(os.path.join(args.level, "agents.json")) as _f:
+        eval_agent_names = list(json.load(_f).keys())
+
+    def _eval_act(spatial, internal):
+        with torch.no_grad():
+            if use_radio:
+                move_action, radio_action = q_network.get_action(spatial, internal)
+                radio = radio_action.cpu().numpy().astype(np.int32)
+            else:
+                move_action = q_network.get_action(spatial, internal)
+                radio = np.zeros((args.num_envs, n_agents), dtype=np.int32)
+        return ACTION_MAP[move_action.cpu().numpy()], radio
+
+    def run_eval(cumulative_step):
+        if args.eval_episodes <= 0:
+            return
+        run_and_log_eval(env, _eval_act, args.num_envs, n_agents,
+                         level=args.level, alg="dqn", prefix=f"dqn_{variant}_run_{args.run_number}",
+                         agent_names=eval_agent_names, cumulative_step=cumulative_step,
+                         n_episodes=args.eval_episodes, max_ep_steps=eval_max_steps)
+
+    if not args.benchmark and cumulative_offset == 0:
+        run_eval(0)  # random-policy baseline for the no-human step-0 point
+
     obs = env._get_obs_dict()
     spatial = obs["spatial"]
     internal = obs["internal"]
@@ -699,6 +733,9 @@ if __name__ == "__main__":
         )
         print(f"[dqn] Saved resume checkpoint -> {resume_path} "
               f"({cumulative_offset + args.total_timesteps} cumulative frames).")
+
+    # Post-training evaluation: log per-agent/team return for this chunk.
+    run_eval(cumulative_offset + args.total_timesteps)
 
     # Plot episodic returns at the end (results in experiments/results/<level>/dqn/)
     base_name = f"dqn_{variant}_episodic_returns_run_{args.run_number}"

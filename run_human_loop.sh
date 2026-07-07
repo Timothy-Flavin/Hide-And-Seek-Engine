@@ -37,12 +37,12 @@ RUN="${RUN:-1}"                          # run/seed number (recorder teammate-ru
 EGO_SIZE="${EGO_SIZE:-32}"               # ego window side (recorder and trainer must match)
 FRAMES_PER_AGENT="${FRAMES_PER_AGENT:-2500}"  # demos per agent type, per level, per checkpoint
 ITERS="${ITERS:-4}"                      # number of train->record iterations
-CHUNK="${CHUNK:-200000}"                 # online env frames per RL chunk (per level)
+CHUNK="${CHUNK:-500000}"                 # online env frames per RL chunk (per level)
 # Epsilon anneals along cumulative frames, so span the whole loop (DQN only).
 EXPLORE_TOTAL="${EXPLORE_TOTAL:-$((CHUNK * ITERS))}"
 USE_RADIO="${USE_RADIO:-1}"              # 1 -> train+use the radio head (teammates transmit)
 NUM_ENVS="${NUM_ENVS:-128}"
-STEP_DELAY_MS="${STEP_DELAY_MS:-132}"    # recorder pacing (ms/step)
+STEP_DELAY_MS="${STEP_DELAY_MS:-40}"     # recorder pacing (ms/step while a key is held)
 
 RADIO_FLAG=""
 [ "${USE_RADIO}" = "1" ] && RADIO_FLAG="--use-radio"
@@ -76,6 +76,14 @@ train_all () {
     done
 }
 
+# Regenerate the 6-curve human-vs-eval performance graph for every level.
+plot_all () {
+    for lvl in ${LEVELS}; do
+        python -m RL.plot_human_loop --level "${lvl}" --alg "${ALG}" --run "${RUN}" \
+            || echo "!!! plot failed for ${lvl} (continuing)"
+    done
+}
+
 # ----- phase dispatch -----
 # Split the loop into single passes so an orchestrator (e.g. run_human_loop_remote.sh)
 # can run recording on one machine and training on another:
@@ -103,6 +111,7 @@ for (( i=1; i<=ITERS; i++ )); do
     echo "##  iteration ${i}/${ITERS}"
     echo "############################################################"
     train_all
+    plot_all   # refresh the human-vs-eval graph after this training step
     # Record fresh demos against the new checkpoints for the next iteration; the
     # final iteration ends on trained models (no trailing record).
     if [ "${i}" -lt "${ITERS}" ]; then

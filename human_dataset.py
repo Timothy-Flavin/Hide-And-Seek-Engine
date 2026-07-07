@@ -29,8 +29,11 @@ and teammate/POI info shared over the radio -- plus a text panel of the vectoriz
 observation (position, battery, view range, known POI/teammate coords), i.e. all
 the same data an artificial agent sees.
 
-Controls: WASD move, close the window to stop (partial data is still appended).
-Radio is automatic.
+Controls: hold WASD to move -- the sim steps only while a direction key is held
+and pauses when you let go (nothing is recorded while paused). When the human
+agent's battery dies the episode auto-finishes headless to capture the full team
+return. Close the window to stop (partial data is still appended). Radio is
+automatic.
 """
 
 import argparse
@@ -105,6 +108,13 @@ def _keyboard_move() -> np.ndarray:
 
 def _discretize_move(move_xy: np.ndarray) -> int:
     return int(np.argmin(np.sum((ACTION_MAP - move_xy[None, :2]) ** 2, axis=1)))
+
+
+def _any_move_key_down() -> bool:
+    """True while any WASD key is HELD (not a discrete press). The sim advances
+    only while a direction key is down, so releasing all keys pauses recording."""
+    keys = pygame.key.get_pressed()
+    return bool(keys[pygame.K_w] or keys[pygame.K_s] or keys[pygame.K_a] or keys[pygame.K_d])
 
 
 def _heuristic_radio(ego_spatial, step: int, n_agents: int, poi_channel: int) -> int:
@@ -281,16 +291,22 @@ def _build_teammate_policy(env, level, alg, run_number, device):
 
 
 def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
-                max_steps=0, record=False, step_delay_ms=100, progress_line=""):
+                max_steps=0, record=False, step_delay_ms=40, progress_line=""):
     """Play one full episode, collecting the controlled agent's ego transitions.
 
-    ``max_steps <= 0`` caps the episode at the controlled agent's battery life
-    (its max battery), i.e. the number of steps it can actually act for; pass a
-    positive value to force a fixed cap instead.
+    The human drives while the sim steps -- and it only steps while a direction
+    key (WASD) is HELD; releasing all keys pauses it. Once the human agent's
+    battery dies (non-functional) the episode is finished headless (no
+    render/input/delay) to ``max_steps`` so the full-episode team return is
+    captured for the graph; those headless frames are NOT recorded as demos.
 
-    Returns (data, frames, n_frames, episodic_return, quit_requested) where
-    ``episodic_return`` is the per-agent summed reward over the episode (shape
-    (n_agents,)), used to report team performance.
+    ``max_steps <= 0`` uses the env's truncation length (max_frames, 250), so
+    demos are the same length as training/eval episodes.
+
+    Returns (data, frames, n_frames, episodic_return, quit_requested, completed)
+    where ``episodic_return`` is the per-agent summed reward over the FULL episode
+    (shape (n_agents,)) and ``completed`` is True if the episode ran to its end
+    (done / max_steps) rather than being cut off by the human closing the window.
     """
     import torch
 
@@ -298,70 +314,27 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
     obs = env._get_obs_dict()
     n_agents = env.config.n_agents
 
-    # Cap the episode at the controlled agent's battery life unless the caller
-    # forced a fixed max_steps: an agent can't act past a dead battery, so this
-    # matches recorded episode length to how long it can actually operate.
+    # Cap the episode at the env's truncation length (max_frames) unless the
+    # caller forced a fixed max_steps -- so human demos are the SAME length as
+    # training/eval episodes (apples-to-apples for the human-vs-eval graph).
     if max_steps <= 0:
-        max_steps = int(env.config.agent_max_batteries[controlled_agent])
+        max_steps = int(getattr(env, "max_frames", 250))
 
     data = {f: [] for f in HUMAN_FIELDS}
     frames = []
     quit_requested = False
     episodic_return = np.zeros(n_agents, dtype=np.float64)
 
-    # AFK gate: don't start recording until the human signals they're present.
-    # Recording steps on a timer once running, so without this an unattended
-    # recorder (e.g. an auto-started record phase, or a synced-back checkpoint
-    # kicking off the next iteration) would log a whole episode of no-op frames.
-    # Blocks at ~0% CPU until a keypress; closing the window still stops cleanly.
-    ready_lines = [
-        f"Ready to record: {agent_type} (agent {controlled_agent})",
-        "Press any key to START this episode  |  close window to stop",
-    ]
-    if progress_line:
-        ready_lines.append(progress_line)
-    env.render_ego(controlled_agent, env_idx=0, info_lines=ready_lines)
-    while True:
-        event = pygame.event.wait(200)          # blocks; wakes to keep window live
-        if event.type == pygame.QUIT:
-            quit_requested = True
-            break
-        if event.type == pygame.KEYDOWN:
-            break
-        if event.type == pygame.NOEVENT:
-            env.render_ego(controlled_agent, env_idx=0, info_lines=ready_lines)
-    if quit_requested:
-        return data, frames, 0, episodic_return, quit_requested
+    def _controlled_battery():
+        # Internal layout: [y, x, battery, view_range, deployment_remaining, stuck].
+        # Index 2 ("battery") is the STATIC max capacity; the value that actually
+        # counts down each step is index 4 (deployment_remaining). The human agent
+        # is non-functional once its deployment_remaining hits 0.
+        return float(obs["internal"][0, controlled_agent, 4])
 
-    step = 0
-    done = False
-    while not done and step < max_steps:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                quit_requested = True
-                break
-        if quit_requested:
-            break
-
-        raw_move = _keyboard_move()
-        move_idx = _discretize_move(raw_move)
-
-        ego_spatial = obs["spatial"][0, controlled_agent]      # (C, S, S) uint8
-        ego_internal = obs["internal"][0, controlled_agent]    # (D,)
-
-        # Human radio: broadcast the instant a survivor is in the ego view, else
-        # a random peer message with probability RANDOM_MESSAGE_PROB per step.
-        radio = _heuristic_radio(ego_spatial, step, n_agents, poi_channel)
-
-        move_actions = np.zeros((1, n_agents, 2), dtype=np.float32)
-        radio_actions = np.zeros((1, n_agents), dtype=np.int32)
-        move_actions[0, controlled_agent] = ACTION_MAP[move_idx]
-        radio_actions[0, controlled_agent] = radio
-
-        # Teammates choose both movement and radio. Movement comes from the
-        # policy (or random); radio comes from the policy when it has a radio
-        # head, else the same heuristic on that teammate's own ego crop -- so
-        # teammates actually transmit and their info reaches the human's view.
+    def _fill_teammates(move_actions, radio_actions):
+        """Movement + radio for every agent except the human's, from the policy
+        (or random move + heuristic radio fallback)."""
         team_move = team_radio = None
         if teammate_policy is not None:
             with torch.no_grad():
@@ -380,9 +353,53 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
                     obs["spatial"][0, a], step, n_agents, poi_channel
                 )
 
+    step = 0
+    done = False
+    # --- Interactive phase: the human drives while functional. The sim advances
+    #     ONLY while a direction key is HELD (WASD); hands off the keyboard pauses
+    #     it (no step, nothing recorded). The non-functional (dead deployment)
+    #     check is done AFTER each step, not here: the obs is stale for
+    #     deployment_remaining right after env.reset() (it reports the previous
+    #     episode's final value until the first step), so gating loop entry on it
+    #     would wrongly skip the whole episode. ---
+    while not done and step < max_steps:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                quit_requested = True
+        if quit_requested:
+            break
+
+        if not _any_move_key_down():
+            # Paused: keep the window responsive, record nothing, don't advance.
+            env.render_ego(controlled_agent, env_idx=0, info_lines=[
+                f"controlling: {agent_type} (agent {controlled_agent})  [PAUSED -- hold WASD]",
+                f"episode step {step}  team return={episodic_return.sum():.2f}",
+            ] + ([progress_line] if progress_line else []))
+            pygame.time.wait(15)
+            continue
+
+        raw_move = _keyboard_move()
+        move_idx = _discretize_move(raw_move)
+
+        ego_spatial = obs["spatial"][0, controlled_agent]      # (C, S, S) uint8
+        ego_internal = obs["internal"][0, controlled_agent]    # (D,)
+
+        # Human radio: broadcast the instant a survivor is in the ego view, else
+        # a random peer message with probability RANDOM_MESSAGE_PROB per step.
+        radio = _heuristic_radio(ego_spatial, step, n_agents, poi_channel)
+
+        move_actions = np.zeros((1, n_agents, 2), dtype=np.float32)
+        radio_actions = np.zeros((1, n_agents), dtype=np.int32)
+        move_actions[0, controlled_agent] = ACTION_MAP[move_idx]
+        radio_actions[0, controlled_agent] = radio
+        _fill_teammates(move_actions, radio_actions)
+
         next_obs, reward, terminated, truncated, _ = env.step(move_actions, radio_actions)
-        done = bool(terminated[0].item() or truncated[0].item())
-        episodic_return += reward[0].cpu().numpy()
+        term = bool(terminated[0].item())
+        trunc = bool(truncated[0].item())
+        done = term or trunc
+        step_reward = reward[0].cpu().numpy()          # per-agent reward this step
+        episodic_return += step_reward
 
         data["obs_spatial"].append(ego_spatial.cpu().numpy())
         data["obs_internal"].append(ego_internal.cpu().numpy())
@@ -391,8 +408,13 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
             np.asarray([raw_move[0], raw_move[1], float(radio)], dtype=np.float32)
         )
         data["radio"].append(np.int64(radio))
-        data["rewards"].append(np.float32(reward[0, controlled_agent].item()))
+        # Individual (controlled agent) and team (cooperative, summed) rewards;
+        # terminated vs truncated kept separate for correct value bootstrapping.
+        data["rewards"].append(np.float32(step_reward[controlled_agent]))
+        data["team_rewards"].append(np.float32(step_reward.sum()))
         data["dones"].append(np.float32(1.0 if done else 0.0))
+        data["terminated"].append(np.float32(1.0 if term else 0.0))
+        data["truncated"].append(np.float32(1.0 if trunc else 0.0))
         data["next_obs_spatial"].append(next_obs["spatial"][0, controlled_agent].cpu().numpy())
         data["next_obs_internal"].append(next_obs["internal"][0, controlled_agent].cpu().numpy())
         data["controlled_agent"].append(np.int64(controlled_agent))
@@ -416,7 +438,30 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
         pygame.time.wait(step_delay_ms)
         step += 1
 
-    return data, frames, len(data["obs_spatial"]), episodic_return, quit_requested
+        # Now that the obs is fresh (post-step), stop the interactive phase once
+        # the human agent is non-functional (deployment_remaining hit 0) -> the
+        # headless loop below finishes the episode for the full team return.
+        if _controlled_battery() <= 0:
+            break
+
+    # --- Headless completion: once the human agent is non-functional (dead
+    #     battery), finish the episode to max_steps (250) with the human agent
+    #     idle and teammates on policy -- no render/input/delay, so it's fast.
+    #     These frames are NOT recorded as demos (the agent isn't being driven),
+    #     but their rewards are accumulated so the logged episode team return is
+    #     the true full-episode value for the graph. Skipped if the human quit. ---
+    while not quit_requested and not done and step < max_steps:
+        move_actions = np.zeros((1, n_agents, 2), dtype=np.float32)
+        radio_actions = np.zeros((1, n_agents), dtype=np.int32)  # dead agent silent
+        _fill_teammates(move_actions, radio_actions)
+        next_obs, reward, terminated, truncated, _ = env.step(move_actions, radio_actions)
+        done = bool(terminated[0].item() or truncated[0].item())
+        episodic_return += reward[0].cpu().numpy()
+        obs = next_obs
+        step += 1
+
+    completed = not quit_requested and (done or step >= max_steps)
+    return data, frames, len(data["obs_spatial"]), episodic_return, quit_requested, completed
 
 
 def _stack_bucket(field_lists: dict) -> dict:
@@ -474,11 +519,13 @@ def collect_for_level(level, args, device) -> bool:
           f"agents={agent_names}, ego={'off' if args.no_ego else args.ego_size}. "
           f"Recorded (matching): {existing} frames; for current checkpoint "
           f"'{checkpoint_id}': {collected}.")
-    print("Controls: WASD move, close window to stop. Radio is automatic.")
+    print("Controls: HOLD WASD to move (steps only while a key is held; release to "
+          "pause). Dead battery -> auto-finish. Close window to stop. Radio is automatic.")
 
     buckets = defaultdict(lambda: {f: [] for f in HUMAN_FIELDS})
     gif_buckets = defaultdict(list)
     episode_returns = []            # per-episode per-agent summed reward, (n_agents,)
+    episode_drivers = []            # per-episode index of the agent the human drove
     total = 0
     quit_requested = False
 
@@ -498,7 +545,7 @@ def collect_for_level(level, args, device) -> bool:
         progress_line = f"'{level_name_of(level)}' frames -> {progress}"
         print(f"Episode: controlling agent_{controlled_agent} ({agent_type}); {progress}")
 
-        data, frames, n, ep_return, quit_requested = run_episode(
+        data, frames, n, ep_return, quit_requested, completed = run_episode(
             env,
             controlled_agent=controlled_agent,
             agent_type=agent_type,
@@ -515,8 +562,11 @@ def collect_for_level(level, args, device) -> bool:
             gif_buckets[agent_type].extend(frames)
         collected[agent_type] += n
         total += n
-        if n > 0:
+        # Only full-length episodes (ran to done / 250 frames, incl. the headless
+        # finish after the human agent died) count toward the returns graph.
+        if completed:
             episode_returns.append(ep_return)
+            episode_drivers.append(controlled_agent)
 
     # --- Team episodic-return summary (tracks performance as the RL improves) ---
     if episode_returns:
@@ -524,11 +574,22 @@ def collect_for_level(level, args, device) -> bool:
         per_agent_mean = returns_arr.mean(axis=0)
         per_agent_std = returns_arr.std(axis=0)
         team = returns_arr.sum(axis=1)                            # (n_episodes,)
+        drivers = np.asarray(episode_drivers)
+        # Full-episode TEAM return grouped by which agent the human drove -- the
+        # solid curves of the human-vs-eval graph. One list of per-episode team
+        # returns per driver (so the plot can take mean/std per checkpoint).
+        team_return_by_driver = {}
+        for a, name in enumerate(agent_names):
+            vals = team[drivers == a]
+            if vals.size:
+                team_return_by_driver[name] = [float(x) for x in vals]
         print(f"\nEpisodic return over {len(episode_returns)} episodes "
               f"(teammates: {args.teammate_alg} run {args.teammate_run}):")
         for a, name in enumerate(agent_names):
             print(f"  agent {a} ({name}): mean={per_agent_mean[a]:.3f} std={per_agent_std[a]:.3f}")
         print(f"  TEAM (sum over agents): mean={team.mean():.3f} std={team.std():.3f}")
+        for name, vals in team_return_by_driver.items():
+            print(f"  TEAM when human drove {name}: mean={np.mean(vals):.3f} (n={len(vals)})")
         stats = {
             "level": level_name_of(level),
             "n_episodes": len(episode_returns),
@@ -540,6 +601,7 @@ def collect_for_level(level, args, device) -> bool:
             "per_agent_return_std": [float(x) for x in per_agent_std],
             "team_return_mean": float(team.mean()),
             "team_return_std": float(team.std()),
+            "team_return_by_driver": team_return_by_driver,
             "frames_this_session": total,
         }
         log_path = append_return_stats(level, stats)
@@ -578,9 +640,9 @@ def main():
                         help="Frames to collect PER agent type this session; the "
                              "session ends once every type reaches this quota.")
     parser.add_argument("--max-steps", type=int, default=0,
-                        help="Max steps per episode. 0 (default) caps each episode "
-                             "at the controlled agent's battery life; a positive "
-                             "value forces a fixed cap.")
+                        help="Max steps per episode. 0 (default) uses the env's "
+                             "truncation length (max_frames), matching training/eval "
+                             "episodes; a positive value forces a fixed cap.")
     parser.add_argument("--ego-size", type=int, default=32,
                         help="Ego window side length (match the trainer's --ego-size).")
     parser.add_argument("--no-ego", action="store_true",
@@ -589,7 +651,9 @@ def main():
     parser.add_argument("--teammate-alg", default="ppo", choices=["ppo", "dqn", "sac"])
     parser.add_argument("--teammate-run", type=int, default=1)
     parser.add_argument("--no-teammate-policy", action="store_true")
-    parser.add_argument("--step-delay-ms", type=int, default=132)
+    parser.add_argument("--step-delay-ms", type=int, default=40,
+                        help="ms per step WHILE a direction key is held (lower = "
+                             "faster recording). Only applies during motion.")
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 

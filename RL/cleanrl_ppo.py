@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import sys
 import time
@@ -36,6 +37,7 @@ from RL.checkpoint_utils import (
     restore_rng,
 )
 from RL.human_data import load_bc_batcher
+from RL.eval_utils import run_and_log_eval
 from RL.benchmark_utils import BenchmarkClock, write_benchmark
 import torch.nn.functional as F
 
@@ -128,6 +130,10 @@ class Args:
     resume: bool = False
     """resume weights/optimizer/RNG from this run's resume checkpoint, and write
     one at the end (for the 100k-frame-chunk loop)"""
+    eval_episodes: int = 10
+    """episodes to evaluate at step 0 (random) and after training, each clipped to
+    the human/training episode length; logs per-agent + team return to
+    <level>/<alg>/eval_returns.jsonl (0 disables)"""
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -409,10 +415,39 @@ if __name__ == "__main__":
     if use_radio:
         radio_actions_buf = torch.empty((args.num_steps, args.num_envs, n_agents), dtype=torch.long).to(device)
 
+    # --- Post-chunk evaluation (per-agent + team return over args.eval_episodes
+    #     episodes, each clipped to the human/training episode length so
+    #     human-in-the-loop and policy-only numbers are apples-to-apples). Also
+    #     run once at step 0 (first chunk) for the untrained/random baseline. ---
+    eval_max_steps = int(getattr(env, "max_frames", 250))
+    with open(os.path.join(args.level, "agents.json")) as _f:
+        eval_agent_names = list(json.load(_f).keys())
+
+    def _eval_act(spatial, internal):
+        with torch.no_grad():
+            if use_radio:
+                action, _, _, _, radio_action, _, _ = agent.get_action_and_value(spatial, internal)
+                radio = radio_action.cpu().numpy().astype(np.int32)
+            else:
+                action, _, _, _ = agent.get_action_and_value(spatial, internal)
+                radio = np.zeros((args.num_envs, n_agents), dtype=np.int32)
+        return ACTION_MAP[action.cpu().numpy()], radio
+
+    def run_eval(cumulative_step):
+        if args.eval_episodes <= 0:
+            return
+        run_and_log_eval(env, _eval_act, args.num_envs, n_agents,
+                         level=args.level, alg="ppo", prefix=f"ppo_{variant}_run_{args.run_number}",
+                         agent_names=eval_agent_names, cumulative_step=cumulative_step,
+                         n_episodes=args.eval_episodes, max_ep_steps=eval_max_steps)
+
+    if not args.benchmark and cumulative_offset == 0:
+        run_eval(0)  # random-policy baseline for the no-human step-0 point
+
     # Start the game
     global_step = 0
     start_time = time.time()
-    
+
     obs = env._get_obs_dict()
     next_spatial = obs["spatial"]
     next_internal = obs["internal"]
@@ -663,3 +698,6 @@ if __name__ == "__main__":
         os.path.join(results_dir, f"ppo_{variant}_episodic_returns_run_{args.run_number}.npy"),
         np.array(episodic_returns),
     )
+
+    # Post-training evaluation: log per-agent/team return for this chunk.
+    run_eval(cumulative_offset + args.total_timesteps)
