@@ -381,8 +381,12 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
         raw_move = _keyboard_move()
         move_idx = _discretize_move(raw_move)
 
-        ego_spatial = obs["spatial"][0, controlled_agent]      # (C, S, S) uint8
-        ego_internal = obs["internal"][0, controlled_agent]    # (D,)
+        # CLONE, don't view: env._get_obs_dict() hands back the engine's REUSED
+        # obs buffer (zero-copy on CPU), which env.step() below overwrites in place
+        # every step. Without a copy, every appended frame would alias the same
+        # memory and collapse to the episode's FINAL observation at save time.
+        ego_spatial = obs["spatial"][0, controlled_agent].clone()      # (C, S, S) uint8
+        ego_internal = obs["internal"][0, controlled_agent].clone()    # (D,)
 
         # Human radio: broadcast the instant a survivor is in the ego view, else
         # a random peer message with probability RANDOM_MESSAGE_PROB per step.
@@ -415,8 +419,9 @@ def run_episode(env, controlled_agent, agent_type, teammate_policy, poi_channel,
         data["dones"].append(np.float32(1.0 if done else 0.0))
         data["terminated"].append(np.float32(1.0 if term else 0.0))
         data["truncated"].append(np.float32(1.0 if trunc else 0.0))
-        data["next_obs_spatial"].append(next_obs["spatial"][0, controlled_agent].cpu().numpy())
-        data["next_obs_internal"].append(next_obs["internal"][0, controlled_agent].cpu().numpy())
+        # Clone too: next_obs is the same reused engine buffer (see above).
+        data["next_obs_spatial"].append(next_obs["spatial"][0, controlled_agent].clone().cpu().numpy())
+        data["next_obs_internal"].append(next_obs["internal"][0, controlled_agent].clone().cpu().numpy())
         data["controlled_agent"].append(np.int64(controlled_agent))
 
         obs = next_obs

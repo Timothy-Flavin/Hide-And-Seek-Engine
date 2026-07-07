@@ -97,6 +97,21 @@ def append_human_segment(level: str, agent_type: str, data: dict, meta: dict | N
     if any(v != n for v in lengths.values()):
         raise ValueError(f"All human fields must share length; got {lengths}")
 
+    # Anti-aliasing sanity check: catch the class of recorder bug where the ego
+    # observation was appended as a VIEW into the engine's reused buffer, so every
+    # frame collapses to the episode's final observation. A healthy multi-frame
+    # segment has many distinct observations; ~1 distinct row means aliasing.
+    obs = data.get("obs_internal")
+    if obs is not None and n > 4:
+        arr = np.asarray(obs).reshape(n, -1)
+        if len(np.unique(arr, axis=0)) <= 1:
+            raise ValueError(
+                f"Refusing to write an aliased human segment: all {n} frames of "
+                f"obs_internal are identical (the recorder appended a view into the "
+                f"engine's reused obs buffer instead of a copy). Snapshot the obs "
+                f"with .clone() before appending."
+            )
+
     bucket = human_bucket_dir(level, agent_type)
     os.makedirs(bucket, exist_ok=True)
     seg_idx = len(sorted(glob.glob(os.path.join(bucket, "segment_*"))))
@@ -277,20 +292,27 @@ def load_bc_batcher(level: str, expected_spatial_shape=None, ego_size: int | Non
 # Stale-demo guard
 # --------------------------------------------------------------------------- #
 # The recorded internal dim can MATCH the model (66 == 66) yet the demos still be
-# unusable: if they were recorded against an older engine build, whole slots of the
-# internal vector -- notably the relative-entity block that encodes the discovered/
-# shared survivor & teammate positions the policy navigates by -- are ALL ZERO in
-# every demo frame even though the current env populates them. Training on that is
+# unusable: if they were recorded against an older engine build, the entire
+# relative-entity block (the internal-vector tail that encodes the discovered/
+# shared survivor & teammate positions the policy navigates by) is ALL ZERO in
+# every demo frame even though the current env populates it. Training on that is
 # worse than useless: the offline action is not a function of the (goal-less)
 # observation, so BC injects a near-random gradient into the shared encoder (and
-# the offline-Q obs is off-distribution). This guard catches it by comparing which
-# internal columns the LIVE env populates against which the demos ever populate.
+# the offline-Q obs is off-distribution).
+#
+# The guard identifies the relative-entity region as the internal columns PAST the
+# always-on base features (position/battery/view-range/... which the env populates
+# every step), then flags the demos as stale only if they populate NONE of that
+# region while the env does. This deliberately tolerates sparse coverage: a fresh
+# recording may leave some entity slots empty (the human never encountered that
+# entity), so a per-column "any missing" test would false-positive -- what marks a
+# stale recording is the WHOLE entity region being dead.
 
-def _env_populated_internal_cols(env, num_envs, n_agents, internal_dim, device,
-                                 probe_steps=200, threshold=0.05):
-    """Set of per-agent internal columns the live env populates (nonzero in more
-    than ``threshold`` of agent-steps) over a short random rollout. Saves/restores
-    the torch/numpy/python RNG and resets the env afterward, so it does not perturb
+def _env_internal_population_frac(env, num_envs, n_agents, internal_dim, device,
+                                  probe_steps=200):
+    """Per-column fraction of agent-steps in which the live env populates each
+    internal-vector column, over a short random rollout. Saves/restores the
+    torch/numpy/python RNG and resets the env afterward, so it does not perturb
     training determinism any more than the existing post-chunk eval does."""
     import random
 
@@ -315,34 +337,39 @@ def _env_populated_internal_cols(env, num_envs, n_agents, internal_dim, device,
         np.random.set_state(rng_np)
         random.setstate(rng_py)
         env.reset()
-    if total == 0:
-        return set()
-    frac = counts / total
-    return {int(c) for c in np.where(frac > threshold)[0]}
+    return counts / total if total else counts
 
 
 def assert_demos_match_env(env, demo_internal, num_envs, n_agents, device, *,
-                           label="human-bc", probe_steps=200, live_threshold=0.05):
+                           label="human-bc", probe_steps=200, live_threshold=0.05,
+                           always_on=0.9):
     """Raise SystemExit if the demos are stale relative to the current env's
-    observation (some internal columns the env populates are all-zero across every
-    demo frame). ``demo_internal`` is the [N, D] recorded internal array/tensor.
-    Returns quietly when the demos match."""
+    observation: the whole relative-entity region of the internal vector is zero
+    across every demo frame while the live env populates it. ``demo_internal`` is
+    the [N, D] recorded internal array/tensor. Returns quietly otherwise (including
+    when the entity region is only sparsely covered -- that is expected)."""
     demo = np.asarray(demo_internal)
     demo_nz = set(int(c) for c in np.where((demo != 0).any(axis=0))[0])
     internal_dim = demo.shape[-1]
-    live_cols = _env_populated_internal_cols(
-        env, num_envs, n_agents, internal_dim, device,
-        probe_steps=probe_steps, threshold=live_threshold,
+    live_frac = _env_internal_population_frac(
+        env, num_envs, n_agents, internal_dim, device, probe_steps=probe_steps,
     )
-    missing = sorted(c for c in live_cols if c not in demo_nz)
-    if missing:
+    # The relative-entity region is everything past the last always-on base feature
+    # (position/battery/... which the env fills every step). Conditionally-zero base
+    # fields like deployment_remaining sit at low indices, so they never fall in it.
+    base = np.where(live_frac > always_on)[0]
+    entity_start = int(base.max()) + 1 if base.size else 0
+    entity_cols = {int(c) for c in np.where(live_frac > live_threshold)[0] if c >= entity_start}
+    if entity_cols and demo_nz.isdisjoint(entity_cols):
         raise SystemExit(
-            f"[{label}] STALE DEMOS: the env populates internal columns {missing} that "
-            f"are ALL-ZERO in every recorded demo frame. These demos were recorded "
-            f"against an older observation build (e.g. before the relative-entity block "
-            f"was populated); the offline term cannot see the goal/entity information the "
-            f"policy uses, so it would corrupt training rather than help. Re-record demos "
-            f"with the current engine (human_dataset.py), then re-run."
+            f"[{label}] STALE DEMOS: the env populates the relative-entity block "
+            f"(internal columns {sorted(entity_cols)}) but EVERY one is zero across all "
+            f"recorded demo frames. These demos were recorded against an older observation "
+            f"build (before that block was populated); the offline term cannot see the "
+            f"goal/entity information the policy uses, so it would corrupt training rather "
+            f"than help. Re-record demos with the current engine (human_dataset.py) -- and "
+            f"delete the old segment_* dirs first so stale frames are not mixed in -- then "
+            f"re-run."
         )
 
 
