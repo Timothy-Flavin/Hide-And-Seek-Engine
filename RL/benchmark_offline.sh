@@ -49,6 +49,11 @@ while IFS='|' read -r name prefix flags; do
     DEV_NAMES+=("${name}"); DEV_PREFIX+=("${prefix}"); DEV_FLAGS+=("${flags}")
 done <<< "${PLAN}"
 
+# Per-machine memory-safety overrides (num_envs cap, replay buffer size) -- MUST
+# match what run_scheduler_offline bakes into the real jobs, so the benchmarked
+# throughput reflects the actual configuration. Sets NUM_ENVS_CAP / BUFFER_SIZE.
+eval "$(python -m RL.run_scheduler_offline --mem-plan "${MACHINE}")"
+
 ALGS=(${ALGS:-ppo dqn sac})
 LEVELS=(${LEVELS:-levels/test_level levels/neighborhood_level levels/island_level levels/warehouse_level})
 ARMS=(${ARMS:-rl offline})
@@ -58,8 +63,17 @@ NUM_ENVS_NEIGHBORHOOD="${NUM_ENVS_NEIGHBORHOOD:-64}"
 PPO_MINIBATCHES="${PPO_MINIBATCHES:-8}"
 PPO_MINIBATCHES_NEIGHBORHOOD="${PPO_MINIBATCHES_NEIGHBORHOOD:-16}"
 
-envs_for () { case "$1" in *neighborhood*) echo "${NUM_ENVS_NEIGHBORHOOD}" ;; *) echo "${NUM_ENVS}" ;; esac; }
+# Apply the machine's num_envs cap (if any), exactly like the scheduler.
+cap_envs () {  # $1 = uncapped num_envs
+    if [ -n "${NUM_ENVS_CAP:-}" ] && [ "$1" -gt "${NUM_ENVS_CAP}" ]; then echo "${NUM_ENVS_CAP}"; else echo "$1"; fi
+}
+envs_for () {
+    local e; case "$1" in *neighborhood*) e="${NUM_ENVS_NEIGHBORHOOD}" ;; *) e="${NUM_ENVS}" ;; esac
+    cap_envs "${e}"
+}
 ppo_mb_for () { case "$1" in *neighborhood*) echo "${PPO_MINIBATCHES_NEIGHBORHOOD}" ;; *) echo "${PPO_MINIBATCHES}" ;; esac; }
+# Replay-buffer override for sac/dqn on RAM-tight machines (matches the scheduler).
+buffer_for () { case "$1" in dqn|sac) [ -n "${BUFFER_SIZE:-}" ] && echo "--buffer-size ${BUFFER_SIZE}" ;; esac; }
 
 # Objective flags per (alg, arm). --exploration-timesteps (dqn epsilon horizon) is
 # an RL knob present in both arms; the human-data term is added only in 'offline'.
@@ -97,6 +111,7 @@ for level in "${LEVELS[@]}"; do
                         ${tune} \
                         --no-centralized --ego-view --ego-size "${EGO_SIZE}" --use-radio \
                         --per-agent-nets \
+                        $(buffer_for "${alg}") \
                         $(objective_flags "${alg}" "${arm}") \
                         $(burn_in_flags "${alg}") \
                         ${dflags} &

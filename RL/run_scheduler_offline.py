@@ -38,9 +38,10 @@ import sys
 # Reuse the topology, pinning, benchmark loading and assignment from the online
 # scheduler -- single source of truth for machines/devices.
 from RL.run_scheduler import (
-    REPO_ROOT, TIME_DIR, MACHINES, DEVICE_NAMES, DEFAULT_SPS,
+    REPO_ROOT, TIME_DIR, MACHINES, DEVICE_NAMES, DEVICE_MACHINE, DEFAULT_SPS,
     device_prefix, device_flags, level_name, num_envs_for, ppo_minibatches_for,
     load_benchmarks, assign_ilp, assign_greedy,
+    RUN_IF_MISSING_FN, checkpoint_relpath,
 )
 
 # --------------------------------------------------------------------------- #
@@ -63,6 +64,20 @@ ARMS = ["rl", "offline"]
 
 BC_COEF = 1.0                            # matches run_offline_online.sh default
 
+# --- Per-machine memory safety (prevent the OOM crashes) ---------------------- #
+# Cap num_envs (GPU rollout VRAM scales with it) and shrink the off-policy replay
+# buffer (pinned HOST RAM: ~num_frames * 2 * obs_bytes) on RAM/VRAM-tight boxes.
+#   white-machine: RTX 2070 = 8 GB VRAM/GPU (tight) but 62 GB RAM -> cap envs only.
+#   alienware    : 1080 Ti = 11 GB VRAM (fine) but 15 GB system RAM -> cap envs AND
+#                  halve the SAC/DQN buffer so two concurrent GPUs' pinned buffers
+#                  fit (2x ~2.3 GB at 100k crashed before).
+# A machine absent here uses the defaults (num_envs_for, buffer_size=100000).
+MEM_PROFILE = {
+    "white-machine": {"num_envs_cap": 64},
+    "alienware":     {"num_envs_cap": 64, "buffer_size": 50000},
+}
+REPLAY_ALGS = {"dqn", "sac"}             # have a --buffer-size replay buffer
+
 # --- Wall-clock correction (see module docstring) ---
 WALLCLOCK_FACTOR = float(os.environ.get("WALLCLOCK_FACTOR", "1.6"))
 PER_JOB_OVERHEAD_MIN = float(os.environ.get("PER_JOB_OVERHEAD_MIN", "2.0"))
@@ -83,13 +98,18 @@ def variant_for(per_agent: bool, alg: str, arm: str) -> str:
     return v
 
 
-EXPERIMENTS = [
-    {"level": lv, "alg": al, "seed": sd, "arm": arm, "per_agent": PER_AGENT}
-    for sd in SEEDS
-    for lv in LEVELS
-    for al in ALGS
-    for arm in ARMS
-]
+def build_experiments(seeds=None):
+    seeds = seeds if seeds is not None else SEEDS
+    return [
+        {"level": lv, "alg": al, "seed": sd, "arm": arm, "per_agent": PER_AGENT}
+        for sd in seeds
+        for lv in LEVELS
+        for al in ALGS
+        for arm in ARMS
+    ]
+
+
+EXPERIMENTS = build_experiments()
 
 
 # --------------------------------------------------------------------------- #
@@ -119,10 +139,10 @@ def runtime_minutes(bench, device, exp):
     return compute_min * WALLCLOCK_FACTOR + PER_JOB_OVERHEAD_MIN
 
 
-def any_fallback(bench):
+def any_fallback(bench, experiments, devices):
     """True if any (device, exp) had to fall back to a non-exact benchmark key."""
-    for device in DEVICE_NAMES:
-        for exp in EXPERIMENTS:
+    for device in devices:
+        for exp in experiments:
             if steps_per_sec(bench, device, exp)[1]:
                 return True
     return False
@@ -131,15 +151,22 @@ def any_fallback(bench):
 # --------------------------------------------------------------------------- #
 # Job command -- mirrors run_offline_online.sh's per-alg flags
 # --------------------------------------------------------------------------- #
+def envs_for_device(exp, device):
+    """num_envs for this job, capped by the device's machine memory profile."""
+    envs = num_envs_for(exp["level"])
+    cap = MEM_PROFILE.get(DEVICE_MACHINE[device], {}).get("num_envs_cap")
+    return min(envs, cap) if cap else envs
+
+
 def job_command(exp, device):
     prefix = device_prefix(device)
-    envs = num_envs_for(exp["level"])
+    profile = MEM_PROFILE.get(DEVICE_MACHINE[device], {})
     parts = [
         "python", "-m", f"RL.cleanrl_{exp['alg']}",
         "--run-number", str(exp["seed"]),
         "--total-timesteps", str(FRAMES),
         "--level", exp["level"],
-        "--num-envs", str(envs),
+        "--num-envs", str(envs_for_device(exp, device)),
         "--no-centralized", "--ego-view", "--ego-size", str(EGO_SIZE), "--use-radio",
     ]
     if exp["per_agent"]:
@@ -149,6 +176,9 @@ def job_command(exp, device):
     # DQN's epsilon schedule spans the whole run in BOTH arms (it is an RL knob).
     if exp["alg"] == "dqn":
         parts += ["--exploration-timesteps", str(FRAMES)]
+    # Shrink the off-policy replay buffer on RAM-tight machines (pinned host RAM).
+    if exp["alg"] in REPLAY_ALGS and profile.get("buffer_size"):
+        parts += ["--buffer-size", str(profile["buffer_size"])]
     if exp["arm"] == "offline":
         if exp["alg"] == "dqn":
             parts += ["--human-cql"]
@@ -185,7 +215,12 @@ def write_machine_schedule(machine, assignment, bench):
         '  echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;',
         'fi',
         "",
-    ]
+    ] + RUN_IF_MISSING_FN
+
+    prof = MEM_PROFILE.get(machine)
+    if prof:
+        lines.append(f"# Memory-safe overrides for {machine}: {prof}")
+        lines.append("")
 
     machine_est = 0.0
     active = 0
@@ -202,9 +237,11 @@ def write_machine_schedule(machine, assignment, bench):
                      f"{len(order)} jobs, ~{load:.1f} min ---")
         lines.append("(")
         for n, exp in enumerate(order, 1):
-            lines.append(f'  echo "[{machine}:{device}] {n}/{len(order)}: {job_desc(exp)}"')
-            lines.append(f'  {job_command(exp, device)} \\')
-            lines.append(f'    || echo "[{machine}:{device}] FAILED: {job_desc(exp)}"')
+            desc = f"[{machine}:{device}] {n}/{len(order)}: {job_desc(exp)}"
+            variant = variant_for(exp["per_agent"], exp["alg"], exp["arm"])
+            ckpt = checkpoint_relpath(exp["alg"], variant, exp["seed"], exp["level"])
+            lines.append(f'  run_if_missing "{ckpt}" "{desc}" -- \\')
+            lines.append(f'    {job_command(exp, device)}')
         lines.append(") &")
         lines.append("")
 
@@ -221,30 +258,40 @@ def write_machine_schedule(machine, assignment, bench):
     return path, machine_est
 
 
-def generate_schedules():
+def generate_schedules(machines=None, seeds=None):
+    """Generate schedules. ``machines`` restricts BOTH which devices jobs may be
+    assigned to AND which schedules are written (default: all machines). ``seeds``
+    restricts which seeds are swept (default: all five)."""
+    machines = machines or list(MACHINES)
+    unknown = [m for m in machines if m not in MACHINES]
+    if unknown:
+        raise SystemExit(f"unknown machine(s) {unknown}; known: {', '.join(MACHINES)}")
+    devices = [d for m in machines for d in MACHINES[m]]
+    experiments = build_experiments(seeds)
+
     bench = load_benchmarks()
-    if any_fallback(bench):
+    if any_fallback(bench, experiments, devices):
         print("[!] Some per-agent/offline benchmark keys are missing; those jobs are "
               f"estimated from the online key / {FALLBACK_SLOWDOWN}x. Run "
               "RL/benchmark_offline.sh on each machine for accurate timing.")
     runtime = [
-        [runtime_minutes(bench, device, exp) for device in DEVICE_NAMES]
-        for exp in EXPERIMENTS
+        [runtime_minutes(bench, device, exp) for device in devices]
+        for exp in experiments
     ]
 
-    print(f"Assigning {len(EXPERIMENTS)} jobs across {len(DEVICE_NAMES)} devices "
-          f"on {len(MACHINES)} machines "
+    print(f"Assigning {len(experiments)} jobs (seeds={seeds or SEEDS}) across "
+          f"{len(devices)} devices on {len(machines)} machine(s) [{', '.join(machines)}] "
           f"(wallclock_factor={WALLCLOCK_FACTOR}, +{PER_JOB_OVERHEAD_MIN:.0f} min/job).")
-    assignment = assign_ilp(EXPERIMENTS, DEVICE_NAMES, runtime)
+    assignment = assign_ilp(experiments, devices, runtime)
     if assignment is None:
         print("OR-Tools unavailable or no solution; using greedy assignment.")
-        assignment = assign_greedy(EXPERIMENTS, DEVICE_NAMES, runtime)
+        assignment = assign_greedy(experiments, devices, runtime)
     else:
         print("Optimal/feasible assignment found via OR-Tools (SCIP).")
 
     print("-" * 68)
     overall = 0.0
-    for machine in MACHINES:
+    for machine in machines:
         if not any(assignment[dev] for dev in MACHINES[machine]):
             continue
         path, est = write_machine_schedule(machine, assignment, bench)
@@ -266,16 +313,38 @@ def cmd_benchmark_plan(machine):
         print(f"{device}|{device_prefix(device)}|{device_flags(device)}")
 
 
+def cmd_mem_plan(machine):
+    """Emit the machine's memory-safety overrides as shell-evalable assignments, so
+    benchmark_offline.sh measures the SAME num_envs / buffer the real jobs use."""
+    if machine not in MACHINES:
+        print(f"unknown machine '{machine}'; known: {', '.join(MACHINES)}", file=sys.stderr)
+        sys.exit(2)
+    prof = MEM_PROFILE.get(machine, {})
+    print(f"NUM_ENVS_CAP={prof.get('num_envs_cap', '')}")
+    print(f"BUFFER_SIZE={prof.get('buffer_size', '')}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Generate per-machine offline+online schedules.")
     ap.add_argument("--benchmark-plan", metavar="MACHINE",
                     help="print 'device|prefix|flags' lines for MACHINE and exit "
                          "(used by RL/benchmark_offline.sh)")
+    ap.add_argument("--mem-plan", metavar="MACHINE",
+                    help="print MACHINE's NUM_ENVS_CAP / BUFFER_SIZE overrides and exit "
+                         "(used by RL/benchmark_offline.sh to match the real config)")
+    ap.add_argument("--machines", nargs="+", metavar="MACHINE",
+                    help="restrict assignment + schedule generation to these machines "
+                         f"(default: all). Known: {', '.join(MACHINES)}")
+    ap.add_argument("--seeds", nargs="+", type=int, metavar="N",
+                    help="restrict the sweep to these seeds (default: 1 2 3 4 5)")
     args = ap.parse_args()
     if args.benchmark_plan is not None:
         cmd_benchmark_plan(args.benchmark_plan)
         return
-    generate_schedules()
+    if args.mem_plan is not None:
+        cmd_mem_plan(args.mem_plan)
+        return
+    generate_schedules(machines=args.machines, seeds=args.seeds)
 
 
 if __name__ == "__main__":

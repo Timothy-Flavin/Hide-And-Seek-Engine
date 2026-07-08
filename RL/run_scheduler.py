@@ -252,6 +252,29 @@ def assign_greedy(experiments, devices, runtime):
 # --------------------------------------------------------------------------- #
 # Schedule generation
 # --------------------------------------------------------------------------- #
+# A shell helper emitted into every generated script: skip a job whose final
+# (pct100) weight checkpoint already exists, so a re-invoked schedule resumes
+# where it left off instead of redoing finished work (the cause of the duplicate
+# runs / wasted hours in the first sweep). Shared by both schedulers.
+RUN_IF_MISSING_FN = [
+    '# run_if_missing <ckpt-relpath> <desc> -- <command...>',
+    'run_if_missing () {',
+    '  local ckpt="$1" desc="$2"; shift 2',
+    '  [ "${1:-}" = "--" ] && shift',
+    '  if [ -f "${ckpt}" ]; then echo "[skip] ${desc} (pct100 exists)"; return 0; fi',
+    '  echo "=== [run] ${desc} ==="',
+    '  "$@" || echo "!!! FAILED: ${desc}"',
+    '}',
+    "",
+]
+
+
+def checkpoint_relpath(alg, variant, seed, level):
+    """Relative path of a run's final (pct100) checkpoint, matching CheckpointSaver."""
+    return (f"experiments/results/{level_name(level)}/{alg}/checkpoints/"
+            f"{alg}_{variant}_run_{seed}_pct100.pt")
+
+
 def job_command(exp, device):
     prefix = device_prefix(device)
     parts = [
@@ -292,7 +315,7 @@ def write_machine_schedule(machine, assignment, bench):
         '  echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;',
         'fi',
         "",
-    ]
+    ] + RUN_IF_MISSING_FN
 
     machine_est = 0.0
     active = 0
@@ -309,10 +332,10 @@ def write_machine_schedule(machine, assignment, bench):
                      f"{len(order)} jobs, ~{load:.1f} min ---")
         lines.append("(")
         for n, exp in enumerate(order, 1):
-            desc = f"{level_name(exp['level'])}/{exp['alg']}/{exp['config']} seed {exp['seed']}"
-            lines.append(f'  echo "[{machine}:{device}] {n}/{len(order)}: {desc}"')
-            lines.append(f'  {job_command(exp, device)} \\')
-            lines.append(f'    || echo "[{machine}:{device}] FAILED: {desc}"')
+            desc = f"[{machine}:{device}] {n}/{len(order)}: {level_name(exp['level'])}/{exp['alg']}/{exp['config']} seed {exp['seed']}"
+            ckpt = checkpoint_relpath(exp["alg"], exp["config"], exp["seed"], exp["level"])
+            lines.append(f'  run_if_missing "{ckpt}" "{desc}" -- \\')
+            lines.append(f'    {job_command(exp, device)}')
         lines.append(") &")
         lines.append("")
 
