@@ -17,6 +17,18 @@
     "steps": 8832,
     "steps_per_sec": 438.5672356432042
   },
+  "island_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 20.242093563079834,
+    "steps": 8192,
+    "steps_per_sec": 404.70122195965126
+  },
+  "island_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 128,
+    "seconds": 20.158719778060913,
+    "steps": 6656,
+    "steps_per_sec": 330.1796975839627
+  },
   "island_level_ppo_centralized": {
     "num_envs": 128,
     "seconds": 27.926765203475952,
@@ -35,11 +47,35 @@
     "steps": 32768,
     "steps_per_sec": 820.673627537555
   },
+  "island_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 22.18409490585327,
+    "steps": 16384,
+    "steps_per_sec": 738.5471469326019
+  },
+  "island_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 128,
+    "seconds": 23.531068563461304,
+    "steps": 16384,
+    "steps_per_sec": 696.2709728125493
+  },
   "island_level_sac_decentralized_ego_radio": {
     "num_envs": 128,
     "seconds": 20.768699169158936,
     "steps": 2304,
     "steps_per_sec": 110.93617280669122
+  },
+  "island_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 20.562947988510132,
+    "steps": 2432,
+    "steps_per_sec": 118.27097949957944
+  },
+  "island_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 128,
+    "seconds": 20.981209754943848,
+    "steps": 2304,
+    "steps_per_sec": 109.81254307593505
   },
   "neighborhood_level_dqn_centralized": {
     "num_envs": 64,
@@ -59,6 +95,18 @@
     "steps": 8960,
     "steps_per_sec": 447.160190827559
   },
+  "neighborhood_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.25537395477295,
+    "steps": 9344,
+    "steps_per_sec": 461.30967618093234
+  },
+  "neighborhood_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 64,
+    "seconds": 20.326352834701538,
+    "steps": 7040,
+    "steps_per_sec": 346.3484107183841
+  },
   "neighborhood_level_ppo_centralized": {
     "num_envs": 64,
     "seconds": 59.515421867370605,
@@ -76,6 +124,18 @@
     "seconds": 27.930771827697754,
     "steps": 24576,
     "steps_per_sec": 879.8897557005221
+  },
+  "neighborhood_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.682649850845337,
+    "steps": 16384,
+    "steps_per_sec": 792.1615517428661
+  },
+  "neighborhood_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 30.138148546218872,
+    "steps": 16384,
+    "steps_per_sec": 543.6299437861632
   },
   "neighborhood_level_sac_centralized": {
     "num_envs": 64,
@@ -95,6 +155,18 @@
     "steps": 2432,
     "steps_per_sec": 116.44035864719727
   },
+  "neighborhood_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.7960102558136,
+    "steps": 2560,
+    "steps_per_sec": 123.10053555990832
+  },
+  "neighborhood_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 20.14789056777954,
+    "steps": 2304,
+    "steps_per_sec": 114.35440311972665
+  },
   "test_level_dqn_centralized": {
     "num_envs": 128,
     "seconds": 20.11192297935486,
@@ -112,6 +184,18 @@
     "seconds": 20.2425320148468,
     "steps": 8960,
     "steps_per_sec": 442.63237392576804
+  },
+  "test_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 20.180155515670776,
+    "steps": 8832,
+    "steps_per_sec": 437.65767776871513
+  },
+  "test_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 128,
+    "seconds": 20.14218044281006,
+    "steps": 6784,
+    "steps_per_sec": 336.80564123938296
   },
   "test_level_ppo_centralized": {
     "num_envs": 128,
@@ -131,6 +215,18 @@
     "steps": 32768,
     "steps_per_sec": 834.1775427620303
   },
+  "test_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 22.333620309829712,
+    "steps": 16384,
+    "steps_per_sec": 733.6025137307854
+  },
+  "test_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 128,
+    "seconds": 23.136615991592407,
+    "steps": 16384,
+    "steps_per_sec": 708.1415884653903
+  },
   "test_level_sac_centralized": {
     "num_envs": 128,
     "seconds": 20.267212867736816,
@@ -148,6 +244,18 @@
     "seconds": 20.1823308467865,
     "steps": 2304,
     "steps_per_sec": 114.15926225225125
+  },
+  "test_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 20.40610909461975,
+    "steps": 2432,
+    "steps_per_sec": 119.17999598665372
+  },
+  "test_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 128,
+    "seconds": 20.722347021102905,
+    "steps": 2304,
+    "steps_per_sec": 111.18431699139522
   },
   "warehouse_level_dqn_centralized": {
     "num_envs": 128,
@@ -167,6 +275,18 @@
     "steps": 8704,
     "steps_per_sec": 434.1067079096646
   },
+  "warehouse_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 20.254507780075073,
+    "steps": 8832,
+    "steps_per_sec": 436.0510803766994
+  },
+  "warehouse_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 128,
+    "seconds": 20.040607452392578,
+    "steps": 6656,
+    "steps_per_sec": 332.1256611513222
+  },
   "warehouse_level_ppo_centralized": {
     "num_envs": 128,
     "seconds": 27.552825212478638,
@@ -185,6 +305,18 @@
     "steps": 16384,
     "steps_per_sec": 803.9425579604356
   },
+  "warehouse_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 22.411071300506592,
+    "steps": 16384,
+    "steps_per_sec": 731.0672381658813
+  },
+  "warehouse_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 128,
+    "seconds": 23.695279598236084,
+    "steps": 16384,
+    "steps_per_sec": 691.4457342474091
+  },
   "warehouse_level_sac_centralized": {
     "num_envs": 128,
     "seconds": 21.472071886062622,
@@ -202,5 +334,11 @@
     "seconds": 20.5355384349823,
     "steps": 2304,
     "steps_per_sec": 112.19574335947944
+  },
+  "warehouse_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 128,
+    "seconds": 20.632011651992798,
+    "steps": 2432,
+    "steps_per_sec": 117.87507883484055
   }
 }
