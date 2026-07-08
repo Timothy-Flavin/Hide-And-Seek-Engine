@@ -258,12 +258,15 @@ def assign_greedy(experiments, devices, runtime):
 # runs / wasted hours in the first sweep). Shared by both schedulers.
 RUN_IF_MISSING_FN = [
     '# run_if_missing <ckpt-relpath> <desc> -- <command...>',
+    '# The command may start with NAME=VALUE env assignments + a taskset/numactl',
+    '# wrapper (device pinning); run it through `env` so those leading assignments',
+    '# are applied instead of being treated as a command name.',
     'run_if_missing () {',
     '  local ckpt="$1" desc="$2"; shift 2',
     '  [ "${1:-}" = "--" ] && shift',
     '  if [ -f "${ckpt}" ]; then echo "[skip] ${desc} (pct100 exists)"; return 0; fi',
     '  echo "=== [run] ${desc} ==="',
-    '  "$@" || echo "!!! FAILED: ${desc}"',
+    '  env "$@" || echo "!!! FAILED: ${desc}"',
     '}',
     "",
 ]

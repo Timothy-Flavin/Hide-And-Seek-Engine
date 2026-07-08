@@ -16,12 +16,15 @@ elif [ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]; then
 fi
 
 # run_if_missing <ckpt-relpath> <desc> -- <command...>
+# The command may start with NAME=VALUE env assignments + a taskset/numactl
+# wrapper (device pinning); run it through `env` so those leading assignments
+# are applied instead of being treated as a command name.
 run_if_missing () {
   local ckpt="$1" desc="$2"; shift 2
   [ "${1:-}" = "--" ] && shift
   if [ -f "${ckpt}" ]; then echo "[skip] ${desc} (pct100 exists)"; return 0; fi
   echo "=== [run] ${desc} ==="
-  "$@" || echo "!!! FAILED: ${desc}"
+  env "$@" || echo "!!! FAILED: ${desc}"
 }
 
 # --- Device alienware_gpu0 [OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=0 taskset -c 0,1,4,5]: 3 jobs, ~853.3 min ---
