@@ -865,7 +865,7 @@ if __name__ == "__main__":
 
                     offline_loss = offline_td_sum + args.cql_alpha * cql_gap_sum
                     loss = loss + args.cql_coef * offline_loss
-                    cql_losses.append((float(offline_td_sum), float(cql_gap_sum)))
+                    cql_losses.append((float(offline_td_sum.detach()), float(cql_gap_sum.detach())))
 
                 optimizer.zero_grad()
                 loss.backward()
