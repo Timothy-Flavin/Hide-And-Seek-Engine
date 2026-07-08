@@ -17,6 +17,18 @@
     "steps": 20224,
     "steps_per_sec": 1008.6161794913793
   },
+  "island_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.02152419090271,
+    "steps": 19840,
+    "steps_per_sec": 990.9335478572011
+  },
+  "island_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 64,
+    "seconds": 20.101001501083374,
+    "steps": 16000,
+    "steps_per_sec": 795.9802400461318
+  },
   "island_level_ppo_centralized": {
     "num_envs": 128,
     "seconds": 20.523536920547485,
@@ -34,6 +46,18 @@
     "seconds": 22.849010467529297,
     "steps": 114688,
     "steps_per_sec": 5019.385857561884
+  },
+  "island_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 21.5456759929657,
+    "steps": 81920,
+    "steps_per_sec": 3802.1550136902415
+  },
+  "island_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 22.443994760513306,
+    "steps": 65536,
+    "steps_per_sec": 2919.979295098586
   },
   "island_level_sac_centralized": {
     "num_envs": 128,
@@ -53,6 +77,18 @@
     "steps": 6400,
     "steps_per_sec": 316.74780447777164
   },
+  "island_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 21.920060634613037,
+    "steps": 1664,
+    "steps_per_sec": 75.91219877250012
+  },
+  "island_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 20.501153707504272,
+    "steps": 1536,
+    "steps_per_sec": 74.92261274241167
+  },
   "neighborhood_level_dqn_centralized": {
     "num_envs": 64,
     "seconds": 20.18573236465454,
@@ -70,6 +106,18 @@
     "seconds": 20.03624653816223,
     "steps": 25344,
     "steps_per_sec": 1264.9075739674247
+  },
+  "neighborhood_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.03190279006958,
+    "steps": 24320,
+    "steps_per_sec": 1214.063399511711
+  },
+  "neighborhood_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 64,
+    "seconds": 20.058459043502808,
+    "steps": 19200,
+    "steps_per_sec": 957.2021439114051
   },
   "neighborhood_level_ppo_centralized": {
     "num_envs": 64,
@@ -89,6 +137,18 @@
     "steps": 81920,
     "steps_per_sec": 3971.797017294129
   },
+  "neighborhood_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 21.566791772842407,
+    "steps": 73728,
+    "steps_per_sec": 3418.5891335419046
+  },
+  "neighborhood_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 20.366260051727295,
+    "steps": 49152,
+    "steps_per_sec": 2413.403338421545
+  },
   "neighborhood_level_sac_centralized": {
     "num_envs": 64,
     "seconds": 20.966151237487793,
@@ -106,6 +166,18 @@
     "seconds": 20.00677990913391,
     "steps": 7424,
     "steps_per_sec": 371.07420752955056
+  },
+  "neighborhood_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 21.42874002456665,
+    "steps": 1792,
+    "steps_per_sec": 83.62600871285895
+  },
+  "neighborhood_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 22.27758765220642,
+    "steps": 1536,
+    "steps_per_sec": 68.94821934851062
   },
   "test_level_dqn_centralized": {
     "num_envs": 128,
@@ -125,6 +197,18 @@
     "steps": 21504,
     "steps_per_sec": 1069.5011881282862
   },
+  "test_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.01581311225891,
+    "steps": 20864,
+    "steps_per_sec": 1042.3758396915491
+  },
+  "test_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 64,
+    "seconds": 20.03781485557556,
+    "steps": 16768,
+    "steps_per_sec": 836.8177928011083
+  },
   "test_level_ppo_centralized": {
     "num_envs": 128,
     "seconds": 20.16999125480652,
@@ -142,6 +226,18 @@
     "seconds": 21.903987646102905,
     "steps": 114688,
     "steps_per_sec": 5235.9415944249295
+  },
+  "test_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.421127319335938,
+    "steps": 81920,
+    "steps_per_sec": 4011.5317200159307
+  },
+  "test_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 21.07616353034973,
+    "steps": 65536,
+    "steps_per_sec": 3109.484318890769
   },
   "test_level_sac_centralized": {
     "num_envs": 128,
@@ -161,6 +257,18 @@
     "steps": 6016,
     "steps_per_sec": 298.0606628831025
   },
+  "test_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 22.212131023406982,
+    "steps": 1536,
+    "steps_per_sec": 69.15140192453279
+  },
+  "test_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 20.378438234329224,
+    "steps": 1664,
+    "steps_per_sec": 81.65493257460965
+  },
   "warehouse_level_dqn_centralized": {
     "num_envs": 128,
     "seconds": 20.01593780517578,
@@ -178,6 +286,18 @@
     "seconds": 20.056421995162964,
     "steps": 20224,
     "steps_per_sec": 1008.3553290251597
+  },
+  "warehouse_level_dqn_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 20.07643485069275,
+    "steps": 19840,
+    "steps_per_sec": 988.2232651139956
+  },
+  "warehouse_level_dqn_decentralized_ego_radio_pa_cql": {
+    "num_envs": 64,
+    "seconds": 20.09873604774475,
+    "steps": 16000,
+    "steps_per_sec": 796.0699599214516
   },
   "warehouse_level_ppo_centralized": {
     "num_envs": 128,
@@ -197,6 +317,18 @@
     "steps": 114688,
     "steps_per_sec": 5083.7049871743375
   },
+  "warehouse_level_ppo_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 21.578551292419434,
+    "steps": 81920,
+    "steps_per_sec": 3796.36236417681
+  },
+  "warehouse_level_ppo_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 22.124271392822266,
+    "steps": 65536,
+    "steps_per_sec": 2962.1766446628258
+  },
   "warehouse_level_sac_centralized": {
     "num_envs": 128,
     "seconds": 20.25167489051819,
@@ -214,5 +346,17 @@
     "seconds": 20.196683645248413,
     "steps": 8832,
     "steps_per_sec": 437.2995168480478
+  },
+  "warehouse_level_sac_decentralized_ego_radio_pa": {
+    "num_envs": 64,
+    "seconds": 22.272408723831177,
+    "steps": 1792,
+    "steps_per_sec": 80.45829358737406
+  },
+  "warehouse_level_sac_decentralized_ego_radio_pa_bc": {
+    "num_envs": 64,
+    "seconds": 20.90451717376709,
+    "steps": 1536,
+    "steps_per_sec": 73.47694219541765
   }
 }
