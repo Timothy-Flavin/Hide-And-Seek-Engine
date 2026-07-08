@@ -1,0 +1,282 @@
+"""Schedule the ONLINE+OFFLINE (per-agent) sweep across machines.
+
+Sibling of ``run_scheduler.py``. Same machines, pinning, benchmarks and makespan
+assignment -- only the sweep differs: this schedules the apples-to-apples
+comparison run by ``run_offline_online.sh`` with per-agent networks:
+
+    per-agent nets, decentralized_ego_radio, 1M frames, 5 seeds, 4 levels,
+    {ppo, dqn, sac} x {RL baseline, RL + offline term}
+
+where the offline term is ``--human-bc`` (ppo/sac) or ``--human-cql`` (dqn). The
+two arms save to separate variants (``..._pa`` vs ``..._pa_bc`` / ``..._pa_cql``),
+so both run in one sweep without colliding.
+
+Timing correction (see run_scheduler.py's model)
+------------------------------------------------
+``run_scheduler.py`` estimates each job as FRAMES / steady_sps, where steady_sps
+is a 20 s window with the torch.compile warmup skipped, all burn-in zeroed, and
+NO eval / checkpoint I/O / offline term. That is a throughput floor: the first
+5M-frame sweep predicted ~24 h but took ~40 h (~1.67x) because the real wall
+clock also pays, per job, for compile warmup, the step-0 + post-training eval,
+periodic checkpoint writes, episodic logging, and -- over tens of hours -- GPU
+clocks settling below their 20 s boost. Those are not in the benchmark, so we
+fold them in with ``WALLCLOCK_FACTOR`` (multiplicative, calibrated to that 1.67x)
+plus a small fixed ``PER_JOB_OVERHEAD_MIN`` for compile+eval. Re-tune both from
+the observed makespan of this sweep. Because the per-agent + offline job is a
+DIFFERENT code path than the online benchmark, benchmark this experiment's own
+keys (RL/benchmark_offline.sh); until then we fall back to the online-only key
+times ``FALLBACK_SLOWDOWN`` and warn.
+
+Usage (from the repo root):
+    python -m RL.run_scheduler_offline                     # generate schedules
+    python -m RL.run_scheduler_offline --benchmark-plan timpc   # for benchmark_offline.sh
+"""
+import argparse
+import os
+import sys
+
+# Reuse the topology, pinning, benchmark loading and assignment from the online
+# scheduler -- single source of truth for machines/devices.
+from RL.run_scheduler import (
+    REPO_ROOT, TIME_DIR, MACHINES, DEVICE_NAMES, DEFAULT_SPS,
+    device_prefix, device_flags, level_name, num_envs_for, ppo_minibatches_for,
+    load_benchmarks, assign_ilp, assign_greedy,
+)
+
+# --------------------------------------------------------------------------- #
+# Sweep definition -- keep in sync with run_offline_online.sh
+# --------------------------------------------------------------------------- #
+FRAMES = 1_000_000                       # total env frames per job (1M)
+SEEDS = [1, 2, 3, 4, 5]
+LEVELS = [
+    "levels/test_level",
+    "levels/neighborhood_level",
+    "levels/island_level",
+    "levels/warehouse_level",
+]
+ALGS = ["ppo", "dqn", "sac"]
+# One config (decentralized_ego_radio) with per-agent networks; the two arms are
+# the RL baseline and RL + the offline human-data term.
+EGO_SIZE = 32
+PER_AGENT = True
+ARMS = ["rl", "offline"]
+
+BC_COEF = 1.0                            # matches run_offline_online.sh default
+
+# --- Wall-clock correction (see module docstring) ---
+WALLCLOCK_FACTOR = float(os.environ.get("WALLCLOCK_FACTOR", "1.6"))
+PER_JOB_OVERHEAD_MIN = float(os.environ.get("PER_JOB_OVERHEAD_MIN", "2.0"))
+# When this experiment's own benchmark key is missing, fall back to the online
+# shared-net key (decentralized_ego_radio) scaled by this, since per-agent nets
+# (n_agents sequential encoder passes) + the offline term are slower per step.
+FALLBACK_SLOWDOWN = float(os.environ.get("FALLBACK_SLOWDOWN", "1.4"))
+
+
+def variant_for(per_agent: bool, alg: str, arm: str) -> str:
+    """Saved/benchmark variant string, matching the runners' variant tagging:
+    decentralized_ego_radio [+ _pa] [+ _bc/_cql for the offline arm]."""
+    v = "decentralized_ego_radio"
+    if per_agent:
+        v += "_pa"
+    if arm == "offline":
+        v += "_cql" if alg == "dqn" else "_bc"
+    return v
+
+
+EXPERIMENTS = [
+    {"level": lv, "alg": al, "seed": sd, "arm": arm, "per_agent": PER_AGENT}
+    for sd in SEEDS
+    for lv in LEVELS
+    for al in ALGS
+    for arm in ARMS
+]
+
+
+# --------------------------------------------------------------------------- #
+# Benchmarks -> per-job runtime (with the wall-clock correction)
+# --------------------------------------------------------------------------- #
+def steps_per_sec(bench, device, exp):
+    variant = variant_for(exp["per_agent"], exp["alg"], exp["arm"])
+    key = f"{level_name(exp['level'])}_{exp['alg']}_{variant}"
+    entry = bench.get(device, {}).get(key)
+    if entry and entry.get("steps_per_sec", 0) > 0:
+        return entry["steps_per_sec"], False
+    # Fallback: this experiment's key was never benchmarked -- approximate from the
+    # online shared-net key (if present) slowed by FALLBACK_SLOWDOWN.
+    base_key = f"{level_name(exp['level'])}_{exp['alg']}_decentralized_ego_radio"
+    base = bench.get(device, {}).get(base_key)
+    if base and base.get("steps_per_sec", 0) > 0:
+        return base["steps_per_sec"] / FALLBACK_SLOWDOWN, True
+    return DEFAULT_SPS, True
+
+
+def runtime_minutes(bench, device, exp):
+    """Corrected wall-clock estimate: benchmarked steady-state throughput inflated
+    by WALLCLOCK_FACTOR (overheads the 20 s benchmark excludes) plus a small fixed
+    per-job compile+eval cost."""
+    sps, _ = steps_per_sec(bench, device, exp)
+    compute_min = (FRAMES / sps) / 60.0
+    return compute_min * WALLCLOCK_FACTOR + PER_JOB_OVERHEAD_MIN
+
+
+def any_fallback(bench):
+    """True if any (device, exp) had to fall back to a non-exact benchmark key."""
+    for device in DEVICE_NAMES:
+        for exp in EXPERIMENTS:
+            if steps_per_sec(bench, device, exp)[1]:
+                return True
+    return False
+
+
+# --------------------------------------------------------------------------- #
+# Job command -- mirrors run_offline_online.sh's per-alg flags
+# --------------------------------------------------------------------------- #
+def job_command(exp, device):
+    prefix = device_prefix(device)
+    envs = num_envs_for(exp["level"])
+    parts = [
+        "python", "-m", f"RL.cleanrl_{exp['alg']}",
+        "--run-number", str(exp["seed"]),
+        "--total-timesteps", str(FRAMES),
+        "--level", exp["level"],
+        "--num-envs", str(envs),
+        "--no-centralized", "--ego-view", "--ego-size", str(EGO_SIZE), "--use-radio",
+    ]
+    if exp["per_agent"]:
+        parts.append("--per-agent-nets")
+    if exp["alg"] == "ppo":
+        parts += ["--num-minibatches", str(ppo_minibatches_for(exp["level"]))]
+    # DQN's epsilon schedule spans the whole run in BOTH arms (it is an RL knob).
+    if exp["alg"] == "dqn":
+        parts += ["--exploration-timesteps", str(FRAMES)]
+    if exp["arm"] == "offline":
+        if exp["alg"] == "dqn":
+            parts += ["--human-cql"]
+        else:
+            parts += ["--human-bc", "--bc-coef", str(BC_COEF)]
+    flags = device_flags(device)
+    if flags:
+        parts += flags.split()
+    return f"{prefix} {' '.join(parts)}".strip()
+
+
+def job_desc(exp):
+    return (f"{level_name(exp['level'])}/{exp['alg']}/"
+            f"{variant_for(exp['per_agent'], exp['alg'], exp['arm'])} seed {exp['seed']}")
+
+
+# --------------------------------------------------------------------------- #
+# Schedule generation
+# --------------------------------------------------------------------------- #
+def write_machine_schedule(machine, assignment, bench):
+    lines = [
+        "#!/usr/bin/env bash",
+        f"# Auto-generated OFFLINE+ONLINE schedule for {machine} (devices concurrent, no MPS).",
+        "# Regenerate with: python -m RL.run_scheduler_offline",
+        "set -uo pipefail",
+        "",
+        'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        'REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"',
+        'cd "${REPO_ROOT}" || exit 1',
+        'export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"',
+        'VENV="${VENV:-${REPO_ROOT}/.venv}"',
+        'if [ -f "${VENV}/bin/activate" ]; then source "${VENV}/bin/activate";',
+        'elif [ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]; then',
+        '  echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;',
+        'fi',
+        "",
+    ]
+
+    machine_est = 0.0
+    active = 0
+    for device in MACHINES[machine]:
+        jobs = assignment.get(device, [])
+        if not jobs:
+            continue
+        active += 1
+        order = sorted(jobs, key=lambda e: -runtime_minutes(bench, device, e))
+        load = sum(runtime_minutes(bench, device, e) for e in order)
+        machine_est = max(machine_est, load)
+
+        lines.append(f"# --- Device {device} [{device_prefix(device) or 'no pinning'}]: "
+                     f"{len(order)} jobs, ~{load:.1f} min ---")
+        lines.append("(")
+        for n, exp in enumerate(order, 1):
+            lines.append(f'  echo "[{machine}:{device}] {n}/{len(order)}: {job_desc(exp)}"')
+            lines.append(f'  {job_command(exp, device)} \\')
+            lines.append(f'    || echo "[{machine}:{device}] FAILED: {job_desc(exp)}"')
+        lines.append(") &")
+        lines.append("")
+
+    lines.append(f'echo "Launched {active} device(s) on {machine}; waiting..."')
+    lines.append("wait")
+    lines.append(f'echo "All offline+online jobs on {machine} complete."')
+    lines.append("")
+
+    os.makedirs(TIME_DIR, exist_ok=True)
+    path = os.path.join(TIME_DIR, f"run_{machine}_offline_experiments.sh")
+    with open(path, "w", newline="\n") as f:
+        f.write("\n".join(lines))
+    os.chmod(path, 0o755)
+    return path, machine_est
+
+
+def generate_schedules():
+    bench = load_benchmarks()
+    if any_fallback(bench):
+        print("[!] Some per-agent/offline benchmark keys are missing; those jobs are "
+              f"estimated from the online key / {FALLBACK_SLOWDOWN}x. Run "
+              "RL/benchmark_offline.sh on each machine for accurate timing.")
+    runtime = [
+        [runtime_minutes(bench, device, exp) for device in DEVICE_NAMES]
+        for exp in EXPERIMENTS
+    ]
+
+    print(f"Assigning {len(EXPERIMENTS)} jobs across {len(DEVICE_NAMES)} devices "
+          f"on {len(MACHINES)} machines "
+          f"(wallclock_factor={WALLCLOCK_FACTOR}, +{PER_JOB_OVERHEAD_MIN:.0f} min/job).")
+    assignment = assign_ilp(EXPERIMENTS, DEVICE_NAMES, runtime)
+    if assignment is None:
+        print("OR-Tools unavailable or no solution; using greedy assignment.")
+        assignment = assign_greedy(EXPERIMENTS, DEVICE_NAMES, runtime)
+    else:
+        print("Optimal/feasible assignment found via OR-Tools (SCIP).")
+
+    print("-" * 68)
+    overall = 0.0
+    for machine in MACHINES:
+        if not any(assignment[dev] for dev in MACHINES[machine]):
+            continue
+        path, est = write_machine_schedule(machine, assignment, bench)
+        overall = max(overall, est)
+        devs = ", ".join(f"{dev}:{len(assignment[dev])}" for dev in MACHINES[machine])
+        print(f"{machine:<15} ~{est:7.1f} min | {devs}")
+        print(f"{'':<15}   -> {os.path.relpath(path, REPO_ROOT)}")
+    print("-" * 68)
+    print(f"Estimated overall wall-clock makespan: {overall:.1f} min "
+          f"({overall / 60.0:.1f} h)")
+
+
+def cmd_benchmark_plan(machine):
+    """Emit 'device|prefix|flags' lines for benchmark_offline.sh (one per device)."""
+    if machine not in MACHINES:
+        print(f"unknown machine '{machine}'; known: {', '.join(MACHINES)}", file=sys.stderr)
+        sys.exit(2)
+    for device in MACHINES[machine]:
+        print(f"{device}|{device_prefix(device)}|{device_flags(device)}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Generate per-machine offline+online schedules.")
+    ap.add_argument("--benchmark-plan", metavar="MACHINE",
+                    help="print 'device|prefix|flags' lines for MACHINE and exit "
+                         "(used by RL/benchmark_offline.sh)")
+    args = ap.parse_args()
+    if args.benchmark_plan is not None:
+        cmd_benchmark_plan(args.benchmark_plan)
+        return
+    generate_schedules()
+
+
+if __name__ == "__main__":
+    main()

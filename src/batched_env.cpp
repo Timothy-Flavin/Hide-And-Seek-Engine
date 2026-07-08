@@ -1291,6 +1291,21 @@ public:
 
             padded_terminated[e * padded_byte_stride] = all_saved || all_out_of_battery;
             padded_truncated[e * padded_byte_stride] = timeout;
+
+            // Mission-complete terminal bonus: when the episode ends because ALL
+            // entities are saved (not battery death or timeout), credit the still-
+            // undiscovered squares' dense reward, split equally across all agents.
+            // Discovering a square is a dense breadcrumb toward the goal, so
+            // finishing the mission early should NOT forfeit that reward -- a
+            // completed mission is worth the full-map discovery reward plus the
+            // found/saved rewards, no matter how few squares were actually visited.
+            if (all_saved && env_views[e].undiscovered_remaining)
+            {
+                float bonus = (*env_views[e].undiscovered_remaining) * reward_new_tile
+                              / static_cast<float>(n_agents);
+                for (int a = 0; a < n_agents; ++a)
+                    padded_rewards[e * padded_reward_stride + a] += bonus;
+            }
             ++current_frames[e];
 
             if (mode == Mode::DECENTRALIZED || mode == Mode::CENTRALIZED)

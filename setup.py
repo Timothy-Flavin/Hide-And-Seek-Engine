@@ -26,7 +26,7 @@ ext_modules = [
 
 setuptools.setup(
     name="hide_and_seek_engine",
-    version="0.7.0",
+    version="0.8.0",
     author="Timothy Flavin",
     author_email="timothy.c.flavin@gmail.com",
     description="High-performance batched multi-agent environment",

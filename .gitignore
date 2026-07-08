@@ -19,3 +19,8 @@ linuxvenv
 experiments/results_old_loop
 experiments/results_backup_round1
 experiments/results_backup
+experiments/results_pre_final_reward
+time_files/time_files_results
+experiments/results_alienware_comms_5m
+experiments/results_white-machine_comms_5m
+experiments/results_timpc_comms_5m
