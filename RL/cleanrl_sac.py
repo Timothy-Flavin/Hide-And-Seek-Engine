@@ -37,6 +37,7 @@ from RL.checkpoint_utils import (
     save_resume,
     restore_resume,
     restore_rng,
+    maybe_compile,
 )
 from RL.human_data import load_bc_batcher, load_per_agent_bc_batchers, assert_demos_match_env
 from RL.eval_utils import run_and_log_eval
@@ -560,11 +561,11 @@ if __name__ == "__main__":
     use_radio = bool(args.use_radio and not args.centralized)
 
     per_agent = bool(args.per_agent_nets and not args.centralized)
-    actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device))
-    qf1 = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
-    qf2 = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
-    qf1_target = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
-    qf2_target = torch.compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device))
+    actor = maybe_compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device), device)
+    qf1 = maybe_compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device), device)
+    qf2 = maybe_compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device), device)
+    qf1_target = maybe_compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device), device)
+    qf2_target = maybe_compile(SoftQNetwork(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions).to(device), device)
     
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
@@ -580,7 +581,7 @@ if __name__ == "__main__":
     bc_actor = None
     bc_actor_optimizer = None
     if bc_separate:
-        bc_actor = torch.compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device))
+        bc_actor = maybe_compile(Actor(single_spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device), device)
         bc_actor_optimizer = optim.Adam(list(bc_actor.parameters()), lr=args.policy_lr, eps=1e-4)
 
     # Automatic entropy tuning

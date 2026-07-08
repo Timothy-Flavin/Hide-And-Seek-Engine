@@ -35,6 +35,7 @@ from RL.checkpoint_utils import (
     save_resume,
     restore_resume,
     restore_rng,
+    maybe_compile,
 )
 from RL.human_data import load_bc_batcher, load_per_agent_bc_batchers, assert_demos_match_env
 from RL.eval_utils import run_and_log_eval
@@ -433,7 +434,7 @@ if __name__ == "__main__":
     use_radio = bool(args.use_radio and not args.centralized)
 
     per_agent = bool(args.per_agent_nets and not args.centralized)
-    agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device))
+    agent = maybe_compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device), device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # --- Separate BC network (diagnostic; --bc-separate). Trains ONLY on the human
@@ -444,7 +445,7 @@ if __name__ == "__main__":
     bc_agent = None
     bc_optimizer = None
     if bc_separate:
-        bc_agent = torch.compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device))
+        bc_agent = maybe_compile(Agent(spatial_shape, internal_dim, n_agents, num_actions_per_agent, args.centralized, use_radio, n_radio_actions, per_agent).to(device), device)
         bc_optimizer = optim.Adam(bc_agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # Result layout: experiments/results/<level>/ppo/ ; weights checkpointed at

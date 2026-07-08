@@ -32,6 +32,31 @@ def results_dir_for(level: str, alg: str) -> str:
     return d
 
 
+def _triton_supports(device) -> bool:
+    """torch.compile's GPU backend (Triton/inductor) needs CUDA capability
+    >= 7.0. Pascal and older cards (e.g. the GTX 1080 Ti, cap 6.1) are
+    unsupported and crash the inductor backend. Non-CUDA devices compile via
+    the C++ backend and are left alone."""
+    dev = torch.device(device)
+    if dev.type != "cuda":
+        return True
+    major, _ = torch.cuda.get_device_capability(dev)
+    return major >= 7
+
+
+def maybe_compile(module, device):
+    """``torch.compile(module)`` when the target device supports it, otherwise
+    the eager module unchanged. This lets old GPUs (e.g. GTX 1080 Ti, CUDA
+    cap 6.1) fall back to eager instead of crashing with
+    ``RuntimeError: ... too old to be supported by the triton GPU compiler``.
+    Honors ``TORCHDYNAMO_DISABLE`` for CPU smoke tests."""
+    if os.environ.get("TORCHDYNAMO_DISABLE"):
+        return module
+    if not _triton_supports(device):
+        return module
+    return torch.compile(module)
+
+
 def _unwrap(module):
     """Return the underlying nn.Module behind a torch.compile wrapper."""
     return getattr(module, "_orig_mod", module)

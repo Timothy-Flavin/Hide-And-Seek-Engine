@@ -35,6 +35,7 @@ from RL.checkpoint_utils import (
     save_resume,
     restore_resume,
     restore_rng,
+    maybe_compile,
 )
 from RL.human_data import (
     load_bc_batcher, load_transition_batcher, assert_demos_match_env,
@@ -499,12 +500,12 @@ if __name__ == "__main__":
     use_radio = bool(args.use_radio and not args.centralized)
 
     per_agent = bool(args.per_agent_nets and not args.centralized)
-    q_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent).to(device)
+    q_network = maybe_compile(
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent).to(device), device
     )
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
-    target_network = torch.compile(
-        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent).to(device)
+    target_network = maybe_compile(
+        QNetwork(spatial_shape, internal_dim, n_agents, centralized=args.centralized, use_radio=use_radio, n_radio_actions=n_radio_actions, per_agent=per_agent).to(device), device
     )
     target_network.load_state_dict(q_network.state_dict())
 
