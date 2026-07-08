@@ -60,9 +60,14 @@ ALGS = ["ppo", "dqn", "sac"]
 # the RL baseline and RL + the offline human-data term.
 EGO_SIZE = 32
 PER_AGENT = True
+# Arms: "rl" (baseline), "offline" (constant human-BC/CQL term), "anneal" (the
+# human term linearly decayed to 0 -- see --bc-anneal-frames). Default sweep is the
+# original rl+offline; pass --arms anneal to schedule just the annealing arm.
+ARMS_ALL = ["rl", "offline", "anneal"]
 ARMS = ["rl", "offline"]
 
 BC_COEF = 1.0                            # matches run_offline_online.sh default
+BC_ANNEAL_FRAMES = int(os.environ.get("BC_ANNEAL_FRAMES", "250000"))  # anneal arm horizon
 
 # --- Per-machine memory safety (prevent the OOM crashes) ---------------------- #
 # Cap num_envs (GPU rollout VRAM scales with it) and shrink the off-policy replay
@@ -89,23 +94,26 @@ FALLBACK_SLOWDOWN = float(os.environ.get("FALLBACK_SLOWDOWN", "1.4"))
 
 def variant_for(per_agent: bool, alg: str, arm: str) -> str:
     """Saved/benchmark variant string, matching the runners' variant tagging:
-    decentralized_ego_radio [+ _pa] [+ _bc/_cql for the offline arm]."""
+    decentralized_ego_radio [+ _pa] [+ _bc/_cql for offline, + _..._anneal for anneal]."""
     v = "decentralized_ego_radio"
     if per_agent:
         v += "_pa"
-    if arm == "offline":
+    if arm in ("offline", "anneal"):
         v += "_cql" if alg == "dqn" else "_bc"
+    if arm == "anneal":
+        v += "_anneal"
     return v
 
 
-def build_experiments(seeds=None):
+def build_experiments(seeds=None, arms=None):
     seeds = seeds if seeds is not None else SEEDS
+    arms = arms if arms is not None else ARMS
     return [
         {"level": lv, "alg": al, "seed": sd, "arm": arm, "per_agent": PER_AGENT}
         for sd in seeds
         for lv in LEVELS
         for al in ALGS
-        for arm in ARMS
+        for arm in arms
     ]
 
 
@@ -117,7 +125,11 @@ EXPERIMENTS = build_experiments()
 # --------------------------------------------------------------------------- #
 def steps_per_sec(bench, device, exp):
     variant = variant_for(exp["per_agent"], exp["alg"], exp["arm"])
-    key = f"{level_name(exp['level'])}_{exp['alg']}_{variant}"
+    # The anneal arm runs the SAME per-step work as the offline arm (the BC/CQL loss
+    # is still computed every step, just scaled by a decaying coef), so reuse the
+    # offline benchmark timing rather than falling back.
+    bench_variant = variant[:-len("_anneal")] if variant.endswith("_anneal") else variant
+    key = f"{level_name(exp['level'])}_{exp['alg']}_{bench_variant}"
     entry = bench.get(device, {}).get(key)
     if entry and entry.get("steps_per_sec", 0) > 0:
         return entry["steps_per_sec"], False
@@ -179,11 +191,13 @@ def job_command(exp, device):
     # Shrink the off-policy replay buffer on RAM-tight machines (pinned host RAM).
     if exp["alg"] in REPLAY_ALGS and profile.get("buffer_size"):
         parts += ["--buffer-size", str(profile["buffer_size"])]
-    if exp["arm"] == "offline":
+    if exp["arm"] in ("offline", "anneal"):
         if exp["alg"] == "dqn":
             parts += ["--human-cql"]
         else:
             parts += ["--human-bc", "--bc-coef", str(BC_COEF)]
+    if exp["arm"] == "anneal":
+        parts += ["--bc-anneal-frames", str(BC_ANNEAL_FRAMES)]
     flags = device_flags(device)
     if flags:
         parts += flags.split()
@@ -198,11 +212,11 @@ def job_desc(exp):
 # --------------------------------------------------------------------------- #
 # Schedule generation
 # --------------------------------------------------------------------------- #
-def write_machine_schedule(machine, assignment, bench):
+def write_machine_schedule(machine, assignment, bench, label="offline", regen_cmd="python -m RL.run_scheduler_offline"):
     lines = [
         "#!/usr/bin/env bash",
-        f"# Auto-generated OFFLINE+ONLINE schedule for {machine} (devices concurrent, no MPS).",
-        "# Regenerate with: python -m RL.run_scheduler_offline",
+        f"# Auto-generated {label.upper()} schedule for {machine} (devices concurrent, no MPS).",
+        f"# Regenerate with: {regen_cmd}",
         "set -uo pipefail",
         "",
         'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
@@ -247,27 +261,33 @@ def write_machine_schedule(machine, assignment, bench):
 
     lines.append(f'echo "Launched {active} device(s) on {machine}; waiting..."')
     lines.append("wait")
-    lines.append(f'echo "All offline+online jobs on {machine} complete."')
+    lines.append(f'echo "All {label} jobs on {machine} complete."')
     lines.append("")
 
     os.makedirs(TIME_DIR, exist_ok=True)
-    path = os.path.join(TIME_DIR, f"run_{machine}_offline_experiments.sh")
+    path = os.path.join(TIME_DIR, f"run_{machine}_{label}_experiments.sh")
     with open(path, "w", newline="\n") as f:
         f.write("\n".join(lines))
     os.chmod(path, 0o755)
     return path, machine_est
 
 
-def generate_schedules(machines=None, seeds=None):
+def generate_schedules(machines=None, seeds=None, arms=None, label=None):
     """Generate schedules. ``machines`` restricts BOTH which devices jobs may be
     assigned to AND which schedules are written (default: all machines). ``seeds``
-    restricts which seeds are swept (default: all five)."""
+    restricts which seeds are swept (default: all five). ``arms`` restricts which
+    arms are scheduled (default rl+offline); ``label`` names the output scripts
+    (``run_<machine>_<label>_experiments.sh``), defaulting to the sole arm's name
+    when a single arm is selected, else 'offline'."""
     machines = machines or list(MACHINES)
     unknown = [m for m in machines if m not in MACHINES]
     if unknown:
         raise SystemExit(f"unknown machine(s) {unknown}; known: {', '.join(MACHINES)}")
     devices = [d for m in machines for d in MACHINES[m]]
-    experiments = build_experiments(seeds)
+    experiments = build_experiments(seeds, arms)
+    if label is None:
+        label = arms[0] if arms and len(arms) == 1 else "offline"
+    regen = "python -m RL.run_scheduler_offline" + (f" --arms {' '.join(arms)}" if arms else "")
 
     bench = load_benchmarks()
     if any_fallback(bench, experiments, devices):
@@ -294,7 +314,7 @@ def generate_schedules(machines=None, seeds=None):
     for machine in machines:
         if not any(assignment[dev] for dev in MACHINES[machine]):
             continue
-        path, est = write_machine_schedule(machine, assignment, bench)
+        path, est = write_machine_schedule(machine, assignment, bench, label=label, regen_cmd=regen)
         overall = max(overall, est)
         devs = ", ".join(f"{dev}:{len(assignment[dev])}" for dev in MACHINES[machine])
         print(f"{machine:<15} ~{est:7.1f} min | {devs}")
@@ -337,6 +357,10 @@ def main():
                          f"(default: all). Known: {', '.join(MACHINES)}")
     ap.add_argument("--seeds", nargs="+", type=int, metavar="N",
                     help="restrict the sweep to these seeds (default: 1 2 3 4 5)")
+    ap.add_argument("--arms", nargs="+", metavar="ARM", choices=ARMS_ALL,
+                    help=f"restrict to these arms (default: rl offline). Choices: {', '.join(ARMS_ALL)}. "
+                         "e.g. --arms anneal schedules only the BC-annealing runs into "
+                         "run_<machine>_anneal_experiments.sh")
     args = ap.parse_args()
     if args.benchmark_plan is not None:
         cmd_benchmark_plan(args.benchmark_plan)
@@ -344,7 +368,7 @@ def main():
     if args.mem_plan is not None:
         cmd_mem_plan(args.mem_plan)
         return
-    generate_schedules(machines=args.machines, seeds=args.seeds)
+    generate_schedules(machines=args.machines, seeds=args.seeds, arms=args.arms)
 
 
 if __name__ == "__main__":

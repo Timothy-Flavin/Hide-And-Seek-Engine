@@ -36,6 +36,7 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
     maybe_compile,
+    annealed_coef,
 )
 from RL.human_data import load_bc_batcher, load_per_agent_bc_batchers, assert_demos_match_env
 from RL.eval_utils import run_and_log_eval
@@ -126,6 +127,10 @@ class Args:
     """add a behavior-cloning loss from recorded human data (decentralized only)"""
     bc_coef: float = 1.0
     """weight on the BC cross-entropy term"""
+    bc_anneal_frames: int = 0
+    """if >0, linearly anneal bc_coef -> 0 over this many frames (BC as a warmup);
+    results save under a distinct '_bc_anneal' variant so they don't collide with
+    the constant-bc_coef ('_bc') runs"""
     bc_batch_size: int = 256
     """minibatch size for the BC term"""
     per_agent_nets: bool = False
@@ -455,6 +460,8 @@ if __name__ == "__main__":
     # is NOT tagged: its saved/evaluated policy is pure RL (the BC term only trains
     # the throwaway net), so it belongs with the plain RL models.
     _obj = "_bc" if (args.human_bc and not args.centralized and not bc_separate) else ""
+    if _obj and args.bc_anneal_frames > 0:
+        _obj += "_anneal"  # annealed-BC runs save under a distinct name for comparison
     variant = variant_name(args.centralized, args.ego_view, use_radio) + ("_pa" if per_agent else "") + _obj
     results_dir = results_dir_for(args.level, "ppo")
     run_prefix = f"ppo_{variant}_run_{args.run_number}"
@@ -771,13 +778,15 @@ if __name__ == "__main__":
                         # to broadcast from demos (not RL alone).
                         if bc_radio_logits is not None and bc_radio is not None:
                             bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
+                    bc_coef_eff = annealed_coef(args.bc_coef, cumulative_offset + global_step,
+                                                args.bc_anneal_frames)
                     if bc_separate:
                         bc_optimizer.zero_grad()
-                        (args.bc_coef * bc_loss).backward()
+                        (bc_coef_eff * bc_loss).backward()
                         nn.utils.clip_grad_norm_(bc_agent.parameters(), args.max_grad_norm)
                         bc_optimizer.step()
                     else:
-                        loss = loss + args.bc_coef * bc_loss
+                        loss = loss + bc_coef_eff * bc_loss
 
                 optimizer.zero_grad()
                 loss.backward()

@@ -36,6 +36,7 @@ from RL.checkpoint_utils import (
     restore_resume,
     restore_rng,
     maybe_compile,
+    annealed_coef,
 )
 from RL.human_data import (
     load_bc_batcher, load_transition_batcher, assert_demos_match_env,
@@ -102,6 +103,11 @@ class Args:
     """weight on the conservative (logsumexp - taken) penalty within the offline term"""
     bc_coef: float = 0.2
     """weight on the BC cross-entropy term"""
+    bc_anneal_frames: int = 0
+    """if >0, linearly anneal the human-imitation weight -> 0 over this many frames
+    (the offline objective becomes a warmup): cql_coef under --human-cql, bc_coef
+    under --human-bc. Results save under a distinct '_anneal' variant so they don't
+    collide with the constant-coefficient ('_cql'/'_bc') runs"""
     bc_batch_size: int = 256
     """minibatch size for the BC (or offline-Q/CQL) term"""
     per_agent_nets: bool = False
@@ -520,6 +526,8 @@ if __name__ == "__main__":
     _obj = ""
     if not args.centralized:
         _obj = "_cql" if args.human_cql else ("_bc" if args.human_bc else "")
+    if _obj and args.bc_anneal_frames > 0:
+        _obj += "_anneal"  # annealed-offline runs save under a distinct name for comparison
     variant = variant_name(args.centralized, args.ego_view, use_radio) + ("_pa" if per_agent else "") + _obj
     results_dir = results_dir_for(args.level, "dqn")
     run_prefix = f"dqn_{variant}_run_{args.run_number}"
@@ -826,7 +834,9 @@ if __name__ == "__main__":
                         # to broadcast from demos (not RL alone).
                         if bc_radio_logits is not None and bc_radio is not None:
                             bc_loss = bc_loss + F.cross_entropy(bc_radio_logits, bc_radio)
-                    loss = loss + args.bc_coef * bc_loss
+                    bc_coef_eff = annealed_coef(args.bc_coef, cumulative_offset + global_step,
+                                                args.bc_anneal_frames)
+                    loss = loss + bc_coef_eff * bc_loss
 
                 if cql_batcher is not None:
                     # Offline-Q + conservative-Q on human transitions. Single-agent
@@ -865,7 +875,9 @@ if __name__ == "__main__":
                         cql_gap_sum = cql_gap_sum + cql_gap.mean()
 
                     offline_loss = offline_td_sum + args.cql_alpha * cql_gap_sum
-                    loss = loss + args.cql_coef * offline_loss
+                    cql_coef_eff = annealed_coef(args.cql_coef, cumulative_offset + global_step,
+                                                 args.bc_anneal_frames)
+                    loss = loss + cql_coef_eff * offline_loss
                     cql_losses.append((float(offline_td_sum.detach()), float(cql_gap_sum.detach())))
 
                 optimizer.zero_grad()

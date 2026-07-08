@@ -114,6 +114,17 @@ def module_state(**modules):
     return {name: _unwrap(m).state_dict() for name, m in modules.items()}
 
 
+def annealed_coef(coef_init: float, frames_done: int, anneal_frames: int) -> float:
+    """Linearly anneal ``coef_init`` -> 0 over ``anneal_frames`` frames, reaching 0
+    at ``anneal_frames`` and staying there. ``anneal_frames <= 0`` disables the
+    schedule (returns ``coef_init`` unchanged). Used to decay the human-imitation
+    weight (PPO/SAC ``bc_coef``, DQN ``cql_coef``) so BC acts as a warmup that lets
+    online RL take over and surpass the demonstrator instead of anchoring to it."""
+    if anneal_frames and anneal_frames > 0:
+        return float(coef_init) * max(0.0, 1.0 - frames_done / float(anneal_frames))
+    return float(coef_init)
+
+
 # --------------------------------------------------------------------------- #
 # Resumable training checkpoints (for the human-BC 100k-frame chunk loop)
 # --------------------------------------------------------------------------- #
