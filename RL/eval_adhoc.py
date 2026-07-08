@@ -76,9 +76,15 @@ def build_pa_net(alg, spatial_shape, internal_dim, n_agents, n_radio_actions):
 
 
 def variant_for(alg, condition):
-    """Checkpoint variant string for (alg, condition)."""
+    """Checkpoint variant string for (alg, condition).
+
+    nobc   -> {alg}_decentralized_ego_radio_pa            (pure RL)
+    bc     -> {alg}_..._pa_{bc|cql}                        (constant human term)
+    anneal -> {alg}_..._pa_{bc|cql}_anneal                (annealed human term)"""
     if condition == "nobc":
         return f"{alg}_{BASE_VARIANT}"
+    if condition == "anneal":
+        return f"{alg}_{BASE_VARIANT}_{BC_SUFFIX[alg]}_anneal"
     return f"{alg}_{BASE_VARIANT}_{BC_SUFFIX[alg]}"
 
 
@@ -189,7 +195,7 @@ def eval_level(alg, condition, level, *, seeds, num_envs, episodes, device,
 
 
 def run(alg, condition, *, levels, seeds, num_envs, episodes, device,
-        results_root, max_ep_steps, limit, skip_existing):
+        results_root, max_ep_steps, limit, skip_existing, resume=False):
     os.makedirs(OUT_DIR, exist_ok=True)
     out_npz = os.path.join(OUT_DIR, f"{alg}_{condition}.npz")
     out_json = os.path.join(OUT_DIR, f"{alg}_{condition}.json")
@@ -206,8 +212,27 @@ def run(alg, condition, *, levels, seeds, num_envs, episodes, device,
         "axis_meaning": "matrix[s0, s1, s2] = team score with role a using seed s_a+1",
         "levels": {},
     }
+    # Resume: preload any already-saved arrays/meta so a level that is already
+    # fully computed (every composition finite) is kept and skipped below.
+    done_levels = set()
+    if resume and os.path.exists(out_npz):
+        z = np.load(out_npz)
+        arrays.update({k: z[k] for k in z.files})
+        if os.path.exists(out_json):
+            prev = json.load(open(out_json))
+            meta["levels"].update(prev.get("levels", {}))
+        for level in levels:
+            mk = f"{level}__mean"
+            if mk in arrays and np.isfinite(arrays[mk]).all():
+                done_levels.add(level)
+        if done_levels:
+            print(f"[resume] keeping complete level(s): {', '.join(sorted(done_levels))}")
+
     total_frames = 0
     for level in levels:
+        if level in done_levels:
+            total_frames += int(meta["levels"].get(level, {}).get("frames", 0) or 0)
+            continue
         res, frames = eval_level(
             alg, condition, level, seeds=seeds, num_envs=num_envs,
             episodes=episodes, device=device, results_root=results_root,
@@ -244,7 +269,7 @@ def main():
     ap.add_argument("--alg", default="all",
                     help="sac|dqn|ppo|all (default all)")
     ap.add_argument("--conditions", nargs="+", default=["bc", "nobc"],
-                    choices=["bc", "nobc"])
+                    choices=["bc", "nobc", "anneal"])
     ap.add_argument("--levels", nargs="+", default=ALL_LEVELS)
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--num-envs", type=int, default=32)
@@ -257,6 +282,9 @@ def main():
                     help="cap compositions per level (smoke tests)")
     ap.add_argument("--skip-existing", action="store_true",
                     help="skip an (alg,condition) whose .npz already exists")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse an existing .npz and skip levels already fully computed "
+                         "(picks up an interrupted run without redoing finished levels)")
     args = ap.parse_args()
 
     algs = ALL_ALGS if args.alg == "all" else [args.alg]
@@ -270,7 +298,7 @@ def main():
                 run(alg, condition, levels=args.levels, seeds=args.seeds,
                     num_envs=args.num_envs, episodes=args.episodes, device=device,
                     results_root=args.results_root, max_ep_steps=args.max_ep_steps,
-                    limit=args.limit, skip_existing=args.skip_existing)
+                    limit=args.limit, skip_existing=args.skip_existing, resume=args.resume)
 
 
 if __name__ == "__main__":
