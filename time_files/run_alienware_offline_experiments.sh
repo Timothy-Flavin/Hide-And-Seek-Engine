@@ -13,6 +13,8 @@ elif [ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]; then
   echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;
 fi
 
+trap 'trap - INT TERM; echo; echo "[interrupted] killing all jobs on this machine..."; kill 0' INT TERM
+
 # run_if_missing <ckpt-relpath> <desc> -- <command...>
 # The command may start with NAME=VALUE env assignments + a taskset/numactl
 # wrapper (device pinning); run it through `env` so those leading assignments

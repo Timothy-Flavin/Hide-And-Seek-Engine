@@ -41,7 +41,7 @@ from RL.run_scheduler import (
     REPO_ROOT, TIME_DIR, MACHINES, DEVICE_NAMES, DEVICE_MACHINE, DEFAULT_SPS,
     device_prefix, device_flags, level_name, num_envs_for, ppo_minibatches_for,
     load_benchmarks, assign_ilp, assign_greedy,
-    RUN_IF_MISSING_FN, checkpoint_relpath,
+    RUN_IF_MISSING_FN, TRAP_KILL_ALL, checkpoint_relpath,
 )
 
 # --------------------------------------------------------------------------- #
@@ -215,7 +215,7 @@ def write_machine_schedule(machine, assignment, bench):
         '  echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;',
         'fi',
         "",
-    ] + RUN_IF_MISSING_FN
+    ] + TRAP_KILL_ALL + RUN_IF_MISSING_FN
 
     prof = MEM_PROFILE.get(machine)
     if prof:

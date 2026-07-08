@@ -3,6 +3,7 @@
 # Auto-generated; half 2 of 28 total missing jobs (~597 min est). Run on timpc.
 # Idempotent: each job is skipped if its pct100 checkpoint already exists.
 set -uo pipefail
+trap 'trap - INT TERM; echo; echo "[interrupted] killing all jobs on this machine..."; kill 0' INT TERM
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}" || exit 1
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"

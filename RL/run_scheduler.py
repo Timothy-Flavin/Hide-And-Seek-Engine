@@ -256,6 +256,16 @@ def assign_greedy(experiments, devices, runtime):
 # (pct100) weight checkpoint already exists, so a re-invoked schedule resumes
 # where it left off instead of redoing finished work (the cause of the duplicate
 # runs / wasted hours in the first sweep). Shared by both schedulers.
+# Ctrl-C / SIGTERM tears down EVERY job on the machine (all device subshells and
+# their python children), not just the one in the foreground. Without this, an
+# interrupt breaks the script's `wait` but leaves the backgrounded training
+# processes running (orphaned). `kill 0` signals the whole process group; the trap
+# is first disabled to avoid re-entering when that signal hits the script itself.
+TRAP_KILL_ALL = [
+    "trap 'trap - INT TERM; echo; echo \"[interrupted] killing all jobs on this machine...\"; kill 0' INT TERM",
+    "",
+]
+
 RUN_IF_MISSING_FN = [
     '# run_if_missing <ckpt-relpath> <desc> -- <command...>',
     '# The command may start with NAME=VALUE env assignments + a taskset/numactl',
@@ -318,7 +328,7 @@ def write_machine_schedule(machine, assignment, bench):
         '  echo "WARNING: no venv at ${VENV} and none active; using $(command -v python)" >&2;',
         'fi',
         "",
-    ] + RUN_IF_MISSING_FN
+    ] + TRAP_KILL_ALL + RUN_IF_MISSING_FN
 
     machine_est = 0.0
     active = 0
