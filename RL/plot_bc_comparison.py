@@ -134,8 +134,9 @@ def plot_grid(out_dir):
             else:
                 ax.text(0.5, 0.5, "no data", ha="center", va="center",
                         transform=ax.transAxes, color="gray")
-    fig.suptitle("Offline training: human-BC vs no-BC (per-agent nets, mean +/- SE over seeds)",
-                 fontsize=14, fontweight="bold")
+    fig.suptitle("Offline training: no-BC (dashed) vs BC-const (solid) vs BC-anneal (dotted)  "
+                 "[per-agent nets, mean +/- SE over seeds]",
+                 fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     out = os.path.join(out_dir, "bc_comparison_grid.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")

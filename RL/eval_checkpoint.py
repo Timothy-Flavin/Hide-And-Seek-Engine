@@ -87,6 +87,26 @@ def _make_act_fn(alg, net, use_radio, num_envs, n_agents):
     return act
 
 
+def epsilon_move(act, epsilon, num_envs, n_agents):
+    """Wrap an act_fn with epsilon-greedy on the MOVE action only. A deterministic
+    argmax policy (DQN's eval) can get stuck -- looping or wedged against a wall --
+    which distorts occupancy maps and ad-hoc team scores; a small epsilon injects
+    random moves so behavior reflects real coverage. Radio actions are untouched.
+    ``epsilon <= 0`` returns ``act`` unchanged."""
+    if epsilon <= 0:
+        return act
+    n_actions = len(ACTION_MAP)
+
+    def wrapped(spatial, internal):
+        move_np, radio_np = act(spatial, internal)
+        explore = np.random.random((num_envs, n_agents)) < epsilon
+        if explore.any():
+            ridx = np.random.randint(0, n_actions, size=(num_envs, n_agents))
+            move_np[explore] = ACTION_MAP[ridx[explore]]
+        return move_np, radio_np
+    return wrapped
+
+
 def _load_state(level, alg, run, use_radio):
     """Return (state_dict, cumulative_step, prefix) for the current checkpoint, or
     (None, None, prefix). Prefers the rolling resume checkpoint (which carries the
