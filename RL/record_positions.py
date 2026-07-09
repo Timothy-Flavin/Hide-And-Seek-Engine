@@ -30,12 +30,10 @@ import numpy as np
 import torch
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
-from RL.eval_checkpoint import _make_act_fn, ACTION_MAP
+from RL.eval_checkpoint import _make_act_fn, epsilon_move
 from RL.eval_adhoc import (
     build_pa_net, load_policy_state, assemble_team, checkpoint_path, variant_for,
 )
-
-NUM_MOVE_ACTIONS = len(ACTION_MAP)  # 5: stay, up, down, left, right
 
 ALL_REGIMES = ["nobc", "bc", "anneal"]
 ALL_LEVELS = ["test_level", "island_level", "neighborhood_level", "warehouse_level"]
@@ -63,24 +61,6 @@ def base_map_and_names(env, level):
     with open(os.path.join("levels", level, "agents.json")) as f:
         names = list(json.load(f).keys())
     return base, names
-
-
-def epsilon_move(act, epsilon, num_envs, n_agents):
-    """Wrap an act_fn with epsilon-greedy on the MOVE action only. DQN's eval is a
-    deterministic argmax and can get stuck (looping / wedged in a corner); a small
-    epsilon injects random moves so the occupancy map reflects real coverage. Radio
-    and the other algos are left untouched."""
-    if epsilon <= 0:
-        return act
-
-    def wrapped(spatial, internal):
-        move_np, radio_np = act(spatial, internal)
-        explore = np.random.random((num_envs, n_agents)) < epsilon
-        if explore.any():
-            rand_idx = np.random.randint(0, NUM_MOVE_ACTIONS, size=(num_envs, n_agents))
-            move_np[explore] = ACTION_MAP[rand_idx[explore]]
-        return move_np, radio_np
-    return wrapped
 
 
 def _bin_positions(hist, ys, xs, batt, H, W):

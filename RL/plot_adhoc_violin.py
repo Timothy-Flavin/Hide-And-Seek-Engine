@@ -16,6 +16,7 @@ Colours: dataviz categorical slots 1-3, validated CVD-safe
 
     python -m RL.plot_adhoc_violin
 """
+import json
 import os
 import numpy as np
 import matplotlib
@@ -33,6 +34,23 @@ CONDITIONS = [
     ("bc", "BC-const", "#1baf7a"),
     ("anneal", "BC-anneal", "#eda100"),
 ]
+
+
+def _eval_note():
+    """Describe the eval action-selection, reading the DQN epsilon from any DQN
+    matrix's metadata so the note matches how the matrices were actually produced."""
+    eps = 0.0
+    for cond in ("nobc", "bc", "anneal"):
+        p = os.path.join(ADHOC_DIR, f"dqn_{cond}.json")
+        if os.path.exists(p):
+            try:
+                eps = float(json.load(open(p)).get("dqn_epsilon", 0.0))
+            except (ValueError, OSError):
+                eps = 0.0
+            break
+    if eps > 0:
+        return f"DQN eval: {eps:.0%} ε-greedy · PPO/SAC deterministic (stochastic policies)"
+    return "deterministic eval (DQN argmax · PPO/SAC sampled)"
 
 
 def team_scores(alg, condition, level):
@@ -113,7 +131,8 @@ def main():
     fig.legend(handles=legend, loc="upper center", ncol=3, fontsize=10,
                frameon=False, bbox_to_anchor=(0.5, 0.975))
     fig.suptitle("Ad-hoc teamplay: team-score distribution over 125 seed-mixed "
-                 "compositions per (level, algo)", fontsize=13, fontweight="bold", y=1.0)
+                 f"compositions per (level, algo)\n{_eval_note()}",
+                 fontsize=13, fontweight="bold", y=1.0)
     fig.tight_layout(rect=(0, 0, 1, 0.955))
     out = os.path.join("offline_results", "adhoc_violin_grid.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")

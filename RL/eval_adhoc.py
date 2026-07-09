@@ -36,7 +36,7 @@ import torch
 
 from hide_and_seek_engine.env_wrapper import SARBatchedGridEnv
 from RL.eval_utils import evaluate_policy
-from RL.eval_checkpoint import _make_act_fn, POLICY_KEY
+from RL.eval_checkpoint import _make_act_fn, POLICY_KEY, epsilon_move
 from RL.checkpoint_utils import strip_compile_prefix
 
 ALL_LEVELS = ["test_level", "island_level", "neighborhood_level", "warehouse_level"]
@@ -139,7 +139,7 @@ def make_env(level, num_envs, device, results_root_levels="levels"):
 
 
 def eval_level(alg, condition, level, *, seeds, num_envs, episodes, device,
-               results_root, max_ep_steps, limit=None):
+               results_root, max_ep_steps, limit=None, dqn_epsilon=0.0):
     """Evaluate all seed^n_agents compositions for one (alg, condition, level).
 
     Returns (result_dict, frames_simulated) or (None, 0) if checkpoints missing."""
@@ -161,7 +161,10 @@ def eval_level(alg, condition, level, *, seeds, num_envs, episodes, device,
     # One eager net for the level; we swap weights per composition (no recompile).
     net = build_pa_net(alg, spatial_shape, internal_dim, n_agents, n_agents).to(device)
     net.eval()
-    act = _make_act_fn(alg, net, True, num_envs, n_agents)
+    # DQN's eval is a deterministic argmax that can wedge/loop; a small epsilon
+    # de-sticks it. PPO/SAC are stochastic categorical policies -> left as-is.
+    eps = dqn_epsilon if alg == "dqn" else 0.0
+    act = epsilon_move(_make_act_fn(alg, net, True, num_envs, n_agents), eps, num_envs, n_agents)
 
     shape = (seeds,) * n_agents
     mean = np.full(shape, np.nan, dtype=np.float64)
@@ -195,7 +198,7 @@ def eval_level(alg, condition, level, *, seeds, num_envs, episodes, device,
 
 
 def run(alg, condition, *, levels, seeds, num_envs, episodes, device,
-        results_root, max_ep_steps, limit, skip_existing, resume=False):
+        results_root, max_ep_steps, limit, skip_existing, resume=False, dqn_epsilon=0.0):
     os.makedirs(OUT_DIR, exist_ok=True)
     out_npz = os.path.join(OUT_DIR, f"{alg}_{condition}.npz")
     out_json = os.path.join(OUT_DIR, f"{alg}_{condition}.json")
@@ -209,6 +212,7 @@ def run(alg, condition, *, levels, seeds, num_envs, episodes, device,
         "alg": alg, "condition": condition, "variant": variant_for(alg, condition),
         "seeds": seeds, "num_envs": num_envs, "episodes": episodes,
         "max_ep_steps": max_ep_steps, "device": str(device),
+        "dqn_epsilon": (dqn_epsilon if alg == "dqn" else 0.0),
         "axis_meaning": "matrix[s0, s1, s2] = team score with role a using seed s_a+1",
         "levels": {},
     }
@@ -236,7 +240,7 @@ def run(alg, condition, *, levels, seeds, num_envs, episodes, device,
         res, frames = eval_level(
             alg, condition, level, seeds=seeds, num_envs=num_envs,
             episodes=episodes, device=device, results_root=results_root,
-            max_ep_steps=max_ep_steps, limit=limit)
+            max_ep_steps=max_ep_steps, limit=limit, dqn_epsilon=dqn_epsilon)
         if res is None:
             continue
         arrays[f"{level}__mean"] = res["mean"]
@@ -285,6 +289,10 @@ def main():
     ap.add_argument("--resume", action="store_true",
                     help="reuse an existing .npz and skip levels already fully computed "
                          "(picks up an interrupted run without redoing finished levels)")
+    ap.add_argument("--dqn-epsilon", type=float, default=0.0,
+                    help="epsilon-greedy move exploration applied to DQN only (its eval "
+                         "is a deterministic argmax that can get stuck); e.g. 0.05. "
+                         "PPO/SAC are stochastic and unaffected")
     args = ap.parse_args()
 
     algs = ALL_ALGS if args.alg == "all" else [args.alg]
@@ -298,7 +306,8 @@ def main():
                 run(alg, condition, levels=args.levels, seeds=args.seeds,
                     num_envs=args.num_envs, episodes=args.episodes, device=device,
                     results_root=args.results_root, max_ep_steps=args.max_ep_steps,
-                    limit=args.limit, skip_existing=args.skip_existing, resume=args.resume)
+                    limit=args.limit, skip_existing=args.skip_existing, resume=args.resume,
+                    dqn_epsilon=args.dqn_epsilon)
 
 
 if __name__ == "__main__":
